@@ -13,7 +13,8 @@ const Hero = () => (
         height={1080}
         className="h-full w-full object-cover"
       />
-      <div className="absolute inset-0 bg-gradient-to-r from-primary/95 via-primary/85 to-primary/40" />
+      <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/95 to-primary/80" />
+      <div className="absolute inset-0 bg-primary/40" />
     </div>
 
     <div className="container relative grid min-h-[640px] items-center py-24 md:py-32">
