@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button";
 import logo from "@/assets/peticiona-logo.png";
 
 const links = [
-  { href: "#quem-somos", label: "Quem somos" },
+  { href: "#como-funciona", label: "Como funciona" },
   { href: "#planos", label: "Planos" },
+  { href: "#contato", label: "Contato" },
 ];
 
 const Navbar = () => (
