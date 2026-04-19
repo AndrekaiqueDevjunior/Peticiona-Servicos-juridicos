@@ -1,12 +1,36 @@
 import { FileText, Gavel, ScrollText, FileSignature, BookOpenCheck, Briefcase } from "lucide-react";
 
 const items = [
-  { icon: ScrollText, title: "Petições Iniciais", desc: "Elaboração técnica de petições cíveis, trabalhistas e de família." },
-  { icon: Gavel, title: "Recursos", desc: "Apelações, agravos e embargos com rigor doutrinário." },
-  { icon: FileText, title: "Pareceres Jurídicos", desc: "Análises fundamentadas para tomada de decisão estratégica." },
-  { icon: FileSignature, title: "Contratos", desc: "Redação e revisão de contratos empresariais e particulares." },
-  { icon: BookOpenCheck, title: "Pesquisa de Jurisprudência", desc: "Levantamentos atualizados nos tribunais superiores." },
-  { icon: Briefcase, title: "Consultoria Empresarial", desc: "Compliance, societário e adequações regulatórias." },
+  {
+    icon: ScrollText,
+    title: "Petições Iniciais",
+    desc: "Petição inicial comum, mandado de segurança e cumprimento de sentença.",
+  },
+  {
+    icon: FileSignature,
+    title: "Defesas",
+    desc: "Contestação, embargos à execução e impugnação ao cumprimento de sentença.",
+  },
+  {
+    icon: Gavel,
+    title: "Recursos",
+    desc: "Apelação, agravos, embargos de declaração, recursos ordinário, especial e extraordinário.",
+  },
+  {
+    icon: FileText,
+    title: "Manifestações Gerais",
+    desc: "Contrarrazões, petições intermediárias, manifestações, alegações e razões finais.",
+  },
+  {
+    icon: Briefcase,
+    title: "Administrativo / Extrajudicial",
+    desc: "Notificação extrajudicial, defesa e recurso administrativo, requerimentos.",
+  },
+  {
+    icon: BookOpenCheck,
+    title: "Sob medida para o seu caso",
+    desc: "Não encontrou sua peça? Fale com a equipe e atendemos demandas específicas.",
+  },
 ];
 
 const Services = () => (
