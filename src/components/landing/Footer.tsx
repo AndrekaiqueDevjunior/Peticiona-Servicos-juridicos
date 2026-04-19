@@ -1,5 +1,6 @@
 import { Instagram } from "lucide-react";
 import logo from "@/assets/peticiona-logo.png";
+import ContactForm from "./ContactForm";
 
 // TikTok icon (lucide doesn't include it)
 const TikTokIcon = ({ className }: { className?: string }) => (
