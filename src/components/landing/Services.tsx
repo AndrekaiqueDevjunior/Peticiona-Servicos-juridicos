@@ -2,9 +2,9 @@ import { FileText, Gavel, ScrollText, FileSignature, BookOpenCheck, Briefcase } 
 
 const items = [
   { icon: ScrollText, title: "Petições Iniciais", desc: "Elaboração técnica de petições cíveis, trabalhistas e de família." },
+  { icon: Gavel, title: "Recursos", desc: "Apelações, agravos e embargos com rigor doutrinário." },
   { icon: FileText, title: "Pareceres Jurídicos", desc: "Análises fundamentadas para tomada de decisão estratégica." },
   { icon: FileSignature, title: "Contratos", desc: "Redação e revisão de contratos empresariais e particulares." },
-  { icon: Gavel, title: "Recursos", desc: "Apelações, agravos e embargos com rigor doutrinário." },
   { icon: BookOpenCheck, title: "Pesquisa de Jurisprudência", desc: "Levantamentos atualizados nos tribunais superiores." },
   { icon: Briefcase, title: "Consultoria Empresarial", desc: "Compliance, societário e adequações regulatórias." },
 ];
@@ -13,11 +13,14 @@ const Services = () => (
   <section id="servicos" className="py-24 md:py-32">
     <div className="container">
       <div className="mx-auto max-w-2xl text-center">
-        <p className="text-[11px] uppercase tracking-[0.24em] text-accent">Catálogo</p>
-        <h2 className="mt-3 font-display text-4xl md:text-5xl">Serviços jurídicos sob medida</h2>
+        <p className="text-[11px] uppercase tracking-[0.24em] text-accent">Serviços</p>
+        <h2 className="mt-3 font-display text-4xl md:text-5xl">
+          Quais demandas do seu escritório você quer otimizar hoje?
+        </h2>
         <div className="divider-gold mx-auto mt-6 w-24" />
         <p className="mt-6 text-muted-foreground">
-          Todo trabalho é executado por advogados credenciados, com revisão dupla e prazo definido em contrato.
+          Delegue a produção das suas peças jurídicas e foque no atendimento, na estratégia
+          e na expansão do seu negócio.
         </p>
       </div>
 

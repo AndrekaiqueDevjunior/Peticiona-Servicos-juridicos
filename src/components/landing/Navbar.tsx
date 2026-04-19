@@ -3,10 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Scale } from "lucide-react";
 
 const links = [
-  { href: "#servicos", label: "Serviços" },
+  { href: "#quem-somos", label: "Quem somos" },
   { href: "#planos", label: "Planos" },
-  { href: "#depoimentos", label: "Depoimentos" },
-  { href: "#faq", label: "FAQ" },
 ];
 
 const Navbar = () => (
@@ -30,10 +28,10 @@ const Navbar = () => (
       </nav>
       <div className="flex items-center gap-2">
         <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-          <Link to="/auth">Entrar</Link>
+          <Link to="/auth">Área do cliente</Link>
         </Button>
-        <Button asChild size="sm" className="bg-primary text-primary-foreground hover:bg-primary-glow">
-          <Link to="/auth?mode=signup">Começar agora</Link>
+        <Button asChild size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
+          <Link to="/auth?mode=signup">Adquirir</Link>
         </Button>
       </div>
     </div>
