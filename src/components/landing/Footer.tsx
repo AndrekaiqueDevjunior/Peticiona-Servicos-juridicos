@@ -1,5 +1,6 @@
 import { Instagram } from "lucide-react";
 import logo from "@/assets/peticiona-logo.png";
+import ContactForm from "./ContactForm";
 
 // TikTok icon (lucide doesn't include it)
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -59,6 +60,7 @@ const Footer = () => (
             <li>contato@peticiona.adv.br</li>
             <li>Atendimento Seg–Sex · 9h–18h</li>
           </ul>
+          <ContactForm />
         </div>
       </div>
       <div className="divider-gold mt-12" />
