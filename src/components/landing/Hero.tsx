@@ -21,7 +21,7 @@ const Hero = () => (
       <div className="max-w-2xl animate-fade-up">
         <div className="mb-6 inline-flex items-center gap-2 border border-accent/40 bg-primary/40 px-3 py-1 text-[11px] uppercase tracking-[0.22em] backdrop-blur text-secondary">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Produção jurídica sob demanda
+          Petições jurídicas sob demanda
         </div>
         <h1 className="font-display text-[2rem] leading-[1.1] sm:text-5xl md:text-6xl text-primary">
           Seu escritório pode produzir mais
