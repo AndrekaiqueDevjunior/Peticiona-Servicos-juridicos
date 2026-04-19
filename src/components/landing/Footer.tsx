@@ -60,6 +60,7 @@ const Footer = () => (
             <li>contato@peticiona.adv.br</li>
             <li>Atendimento Seg–Sex · 9h–18h</li>
           </ul>
+          <ContactForm />
         </div>
       </div>
       <div className="divider-gold mt-12" />
