@@ -15,6 +15,17 @@ const Hero = () => (
       />
       <div className="absolute inset-0 bg-gradient-to-r from-primary via-primary/95 to-primary/80" />
       <div className="absolute inset-0 bg-primary/40" />
+      {/* Subtle texture pattern */}
+      <div
+        className="absolute inset-0 opacity-[0.07] mix-blend-overlay"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, hsl(var(--accent)) 1px, transparent 0)",
+          backgroundSize: "28px 28px",
+        }}
+      />
+      {/* Soft fade-out toward the next section */}
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-background" />
     </div>
 
     <div className="container relative grid min-h-[640px] items-center py-24 md:py-32">
@@ -43,6 +54,9 @@ const Hero = () => (
         </div>
       </div>
     </div>
+
+    {/* Decorative gold divider linking to next section */}
+    <div className="relative h-px w-full bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
   </section>
 );
 
