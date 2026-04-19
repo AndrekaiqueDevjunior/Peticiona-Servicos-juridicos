@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Scale } from "lucide-react";
+import logo from "@/assets/peticiona-logo.png";
 
 const links = [
   { href: "#quem-somos", label: "Quem somos" },
@@ -10,12 +10,10 @@ const links = [
 const Navbar = () => (
   <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/85 backdrop-blur-md">
     <div className="container flex h-16 items-center justify-between">
-      <Link to="/" className="flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary text-primary-foreground">
-          <Scale className="h-4 w-4 text-accent" />
-        </span>
+      <Link to="/" className="flex items-center gap-2.5" aria-label="Peticiona — início">
+        <img src={logo} alt="Peticiona Serviços Jurídicos" className="h-9 w-9 object-contain" />
         <div className="leading-none">
-          <p className="font-display text-lg font-semibold tracking-tight">Peticiona</p>
+          <p className="font-display text-lg font-semibold tracking-tight text-primary">PETICIONA</p>
           <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Serviços Jurídicos</p>
         </div>
       </Link>

@@ -1,4 +1,5 @@
-import { Scale, Instagram } from "lucide-react";
+import { Instagram } from "lucide-react";
+import logo from "@/assets/peticiona-logo.png";
 
 // TikTok icon (lucide doesn't include it)
 const TikTokIcon = ({ className }: { className?: string }) => (
@@ -13,11 +14,11 @@ const Footer = () => (
       <div className="grid gap-12 md:grid-cols-3">
         <div>
           <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-sm bg-primary-foreground/10">
-              <Scale className="h-4 w-4 text-accent" />
+            <span className="grid h-10 w-10 place-items-center rounded-sm bg-primary-foreground/10 p-1.5">
+              <img src={logo} alt="Peticiona" className="h-full w-full object-contain" />
             </span>
             <div>
-              <p className="font-display text-lg">Peticiona</p>
+              <p className="font-display text-lg">PETICIONA</p>
               <p className="text-[10px] uppercase tracking-[0.18em] text-primary-foreground/60">Serviços Jurídicos</p>
             </div>
           </div>
