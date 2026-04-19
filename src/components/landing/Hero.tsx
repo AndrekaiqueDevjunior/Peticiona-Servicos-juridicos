@@ -28,7 +28,7 @@ const Hero = () => (
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-background" />
     </div>
 
-    <div className="container relative grid min-h-[640px] items-center py-24 md:py-32">
+    <div className="container relative grid min-h-[520px] items-center pt-10 pb-20 md:pt-14 md:pb-28">
       <div className="max-w-2xl animate-fade-up">
         <div className="mb-6 inline-flex items-center gap-2 border border-accent/40 bg-primary/40 px-3 py-1 text-[11px] uppercase tracking-[0.22em] backdrop-blur text-primary-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />
