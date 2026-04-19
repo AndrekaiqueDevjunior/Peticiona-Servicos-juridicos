@@ -1,93 +1,94 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Public+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Public+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Lex Aurea — Plataforma jurídica institucional
-   Paleta: Navy profundo, Dourado antigo, Marfim
+/* Peticiona — Serviços Jurídicos
+   Paleta: Azul Peticiona (claro + profundo) sobre branco/marfim suave
    Tipografia: Playfair Display (serif editorial) + Public Sans (sans neutra)
 */
 
 @layer base {
   :root {
     /* Surfaces */
-    --background: 38 30% 96%;            /* marfim quente */
-    --foreground: 220 45% 12%;           /* navy tinta */
+    --background: 210 40% 98%;           /* branco azulado suave */
+    --foreground: 218 70% 18%;           /* azul tinta profundo */
 
-    --card: 38 35% 98%;
-    --card-foreground: 220 45% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 218 70% 18%;
 
-    --popover: 38 35% 98%;
-    --popover-foreground: 220 45% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 218 70% 18%;
 
-    /* Brand */
-    --primary: 220 55% 16%;              /* navy institucional */
-    --primary-foreground: 38 35% 96%;
-    --primary-glow: 220 50% 26%;
+    /* Brand — azul profundo do logo */
+    --primary: 218 75% 28%;              /* azul institucional */
+    --primary-foreground: 210 40% 98%;
+    --primary-glow: 215 70% 38%;
 
-    --secondary: 38 25% 90%;             /* linho */
-    --secondary-foreground: 220 45% 12%;
+    --secondary: 210 35% 94%;            /* azul claro neutro */
+    --secondary-foreground: 218 70% 18%;
 
-    --muted: 38 20% 92%;
-    --muted-foreground: 220 15% 38%;
+    --muted: 210 30% 95%;
+    --muted-foreground: 218 20% 42%;
 
-    --accent: 40 55% 48%;                /* dourado antigo */
-    --accent-foreground: 220 45% 12%;
-    --accent-soft: 40 60% 88%;
+    /* Accent — azul claro do logo */
+    --accent: 209 75% 55%;               /* azul vibrante */
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 209 80% 92%;
 
-    --destructive: 0 65% 42%;
-    --destructive-foreground: 38 35% 96%;
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 38 20% 84%;
-    --input: 38 20% 84%;
-    --ring: 220 55% 16%;
+    --border: 210 25% 88%;
+    --input: 210 25% 88%;
+    --ring: 218 75% 28%;
 
     --radius: 0.375rem;
 
     /* Gradients & shadows */
-    --gradient-hero: linear-gradient(135deg, hsl(220 55% 14%) 0%, hsl(220 50% 22%) 60%, hsl(220 45% 28%) 100%);
-    --gradient-gold: linear-gradient(135deg, hsl(40 65% 55%) 0%, hsl(38 55% 42%) 100%);
-    --gradient-fade: linear-gradient(180deg, hsl(38 30% 96% / 0) 0%, hsl(38 30% 96%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(218 75% 22%) 0%, hsl(215 70% 32%) 60%, hsl(209 75% 45%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(209 80% 60%) 0%, hsl(218 75% 38%) 100%);
+    --gradient-fade: linear-gradient(180deg, hsl(210 40% 98% / 0) 0%, hsl(210 40% 98%) 100%);
 
-    --shadow-elegant: 0 20px 60px -20px hsl(220 55% 16% / 0.25);
-    --shadow-card: 0 1px 2px hsl(220 30% 10% / 0.04), 0 8px 24px -12px hsl(220 30% 10% / 0.12);
-    --shadow-gold: 0 10px 30px -10px hsl(40 55% 48% / 0.4);
+    --shadow-elegant: 0 20px 60px -20px hsl(218 75% 28% / 0.28);
+    --shadow-card: 0 1px 2px hsl(218 40% 14% / 0.04), 0 8px 24px -12px hsl(218 40% 14% / 0.12);
+    --shadow-gold: 0 10px 30px -10px hsl(209 75% 55% / 0.45);
 
     --transition-elegant: 400ms cubic-bezier(0.4, 0, 0.2, 1);
 
-    --sidebar-background: 220 50% 14%;
-    --sidebar-foreground: 38 30% 92%;
-    --sidebar-primary: 40 55% 48%;
-    --sidebar-primary-foreground: 220 45% 12%;
-    --sidebar-accent: 220 45% 20%;
-    --sidebar-accent-foreground: 38 30% 92%;
-    --sidebar-border: 220 40% 22%;
-    --sidebar-ring: 40 55% 48%;
+    --sidebar-background: 218 75% 22%;
+    --sidebar-foreground: 210 30% 94%;
+    --sidebar-primary: 209 75% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 218 60% 30%;
+    --sidebar-accent-foreground: 210 30% 94%;
+    --sidebar-border: 218 50% 32%;
+    --sidebar-ring: 209 75% 55%;
   }
 
   .dark {
-    --background: 220 45% 8%;
-    --foreground: 38 30% 94%;
-    --card: 220 45% 11%;
-    --card-foreground: 38 30% 94%;
-    --popover: 220 45% 11%;
-    --popover-foreground: 38 30% 94%;
-    --primary: 40 55% 55%;
-    --primary-foreground: 220 45% 8%;
-    --primary-glow: 40 60% 65%;
-    --secondary: 220 40% 16%;
-    --secondary-foreground: 38 30% 94%;
-    --muted: 220 35% 14%;
-    --muted-foreground: 38 15% 65%;
-    --accent: 40 55% 55%;
-    --accent-foreground: 220 45% 8%;
-    --accent-soft: 220 40% 18%;
-    --destructive: 0 60% 45%;
-    --destructive-foreground: 38 30% 94%;
-    --border: 220 35% 18%;
-    --input: 220 35% 18%;
-    --ring: 40 55% 55%;
+    --background: 218 50% 8%;
+    --foreground: 210 30% 94%;
+    --card: 218 45% 11%;
+    --card-foreground: 210 30% 94%;
+    --popover: 218 45% 11%;
+    --popover-foreground: 210 30% 94%;
+    --primary: 209 75% 60%;
+    --primary-foreground: 218 50% 8%;
+    --primary-glow: 209 80% 70%;
+    --secondary: 218 40% 16%;
+    --secondary-foreground: 210 30% 94%;
+    --muted: 218 35% 14%;
+    --muted-foreground: 210 15% 65%;
+    --accent: 209 75% 60%;
+    --accent-foreground: 218 50% 8%;
+    --accent-soft: 218 40% 18%;
+    --destructive: 0 60% 50%;
+    --destructive-foreground: 210 30% 94%;
+    --border: 218 35% 18%;
+    --input: 218 35% 18%;
+    --ring: 209 75% 60%;
   }
 }
 
