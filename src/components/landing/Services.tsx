@@ -18,7 +18,7 @@ const Services = () => (
           Quais demandas do seu escritório você quer otimizar hoje?
         </h2>
         <div className="divider-gold mx-auto mt-6 w-24" />
-        <p className="mt-6 text-muted-foreground">
+        <p className="mt-6 text-muted-foreground text-base">
           Delegue a produção das suas peças jurídicas e foque no atendimento, na estratégia
           e na expansão do seu negócio.
         </p>
