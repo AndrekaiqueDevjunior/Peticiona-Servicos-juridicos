@@ -22,9 +22,9 @@ const Hero = () => (
           <ShieldCheck className="h-3.5 w-3.5" />
           Produção jurídica sob demanda
         </div>
-        <h1 className="font-display text-4xl leading-[1.08] text-primary-foreground md:text-6xl">
-          Seu escritório pode produzir mais —
-          <span className="block italic text-accent">sem você trabalhar mais.</span>
+        <h1 className="font-display text-[2rem] leading-[1.1] text-primary-foreground sm:text-5xl md:text-6xl">
+          Seu escritório pode produzir mais
+          <span className="block italic text-accent">— sem você trabalhar mais.</span>
         </h1>
         <p className="mt-6 max-w-xl text-lg leading-relaxed text-primary-foreground/80">
           Enquanto você atende e fecha novos clientes, nós cuidamos das suas petições
