@@ -19,15 +19,15 @@ const Hero = () => (
 
     <div className="container relative grid min-h-[640px] items-center py-24 md:py-32">
       <div className="max-w-2xl animate-fade-up">
-        <div className="mb-6 inline-flex items-center gap-2 border border-accent/40 bg-primary/40 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-accent backdrop-blur">
+        <div className="mb-6 inline-flex items-center gap-2 border border-accent/40 bg-primary/40 px-3 py-1 text-[11px] uppercase tracking-[0.22em] backdrop-blur text-secondary">
           <ShieldCheck className="h-3.5 w-3.5" />
           Produção jurídica sob demanda
         </div>
-        <h1 className="font-display text-[2rem] leading-[1.1] text-primary-foreground sm:text-5xl md:text-6xl">
+        <h1 className="font-display text-[2rem] leading-[1.1] sm:text-5xl md:text-6xl text-primary">
           Seu escritório pode produzir mais
           <span className="block italic text-accent">— sem você trabalhar mais.</span>
         </h1>
-        <p className="mt-6 max-w-xl text-lg leading-relaxed text-primary-foreground/80">
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-secondary-foreground">
           Enquanto você atende e fecha novos clientes, nós cuidamos das suas petições
           com precisão e agilidade.
         </p>
@@ -37,7 +37,7 @@ const Hero = () => (
               Adquirir agora <ArrowRight className="ml-1 h-4 w-4" />
             </Link>
           </Button>
-          <Button asChild size="lg" variant="outline" className="border-primary-foreground/30 bg-transparent text-primary-foreground hover:bg-primary-foreground/10 hover:text-primary-foreground">
+          <Button asChild size="lg" variant="outline" className="border-primary-foreground/30 bg-transparent hover:bg-primary-foreground/10 text-secondary-foreground">
             <a href="#planos">Ver planos</a>
           </Button>
         </div>
