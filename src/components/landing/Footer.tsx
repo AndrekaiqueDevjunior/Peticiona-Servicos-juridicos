@@ -17,8 +17,8 @@ const Footer = () => (
               <Scale className="h-4 w-4 text-accent" />
             </span>
             <div>
-              <p className="font-display text-lg">Lex Aurea</p>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-primary-foreground/60">Advocacia Digital</p>
+              <p className="font-display text-lg">Peticiona</p>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-primary-foreground/60">Serviços Jurídicos</p>
             </div>
           </div>
           <p className="mt-6 max-w-md text-sm text-primary-foreground/70">
@@ -55,14 +55,14 @@ const Footer = () => (
         <div id="contato">
           <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Contato</p>
           <ul className="mt-4 space-y-2 text-sm text-primary-foreground/80">
-            <li>contato@lexaurea.com.br</li>
+            <li>contato@peticiona.adv.br</li>
             <li>Atendimento Seg–Sex · 9h–18h</li>
           </ul>
         </div>
       </div>
       <div className="divider-gold mt-12" />
       <div className="mt-8 flex flex-col items-center justify-between gap-4 text-xs text-primary-foreground/60 md:flex-row">
-        <p>© {new Date().getFullYear()} Lex Aurea. Todos os direitos reservados.</p>
+        <p>© {new Date().getFullYear()} Peticiona Serviços Jurídicos. Todos os direitos reservados.</p>
         <p>Conformidade OAB · LGPD</p>
       </div>
     </div>

@@ -15,8 +15,8 @@ const Navbar = () => (
           <Scale className="h-4 w-4 text-accent" />
         </span>
         <div className="leading-none">
-          <p className="font-display text-lg font-semibold tracking-tight">Lex Aurea</p>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Advocacia Digital</p>
+          <p className="font-display text-lg font-semibold tracking-tight">Peticiona</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Serviços Jurídicos</p>
         </div>
       </Link>
       <nav className="hidden items-center gap-8 md:flex">

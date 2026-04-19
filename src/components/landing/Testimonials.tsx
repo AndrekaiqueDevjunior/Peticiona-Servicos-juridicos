@@ -2,7 +2,7 @@ import { Quote } from "lucide-react";
 
 const items = [
   {
-    quote: "A Lex Aurea elevou o padrão do nosso escritório. As entregas chegam sempre no prazo e com qualidade impecável.",
+    quote: "A Peticiona elevou o padrão do nosso escritório. As entregas chegam sempre no prazo e com qualidade impecável.",
     name: "Dra. Helena Vasconcelos",
     role: "Sócia, Vasconcelos & Associados",
   },
