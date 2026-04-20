@@ -2,10 +2,13 @@ import { useRef, useState } from "react";
 import {
   AlertCircle,
   CalendarIcon,
+  Eye,
+  EyeOff,
   FileText,
   Image as ImageIcon,
   Paperclip,
   Plus,
+  Send,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -88,6 +91,19 @@ interface AttachedFile {
   previewUrl?: string;
 }
 
+type CommentAuthorRole = "cliente" | "redator";
+
+interface Comentario {
+  id: string;
+  autorNome: string;
+  autorRole: CommentAuthorRole;
+  texto: string;
+  criadoEm: Date;
+  deletado: boolean;
+  deletadoEm?: Date;
+  deletadoPor?: string;
+}
+
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB por arquivo
 const ACCEPTED_TYPES =
   "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
@@ -119,6 +135,49 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
+  const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
+  const viewerNome = viewerRole === "cliente" ? "Você (Cliente)" : "Equipe (Redator)";
+  const [comentarios, setComentarios] = useState<Comentario[]>([]);
+  const [novoComentario, setNovoComentario] = useState("");
+  const [mostrarDeletados, setMostrarDeletados] = useState(false);
+
+  const addComentario = () => {
+    const texto = novoComentario.trim();
+    if (!texto) return;
+    setComentarios((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        autorNome: viewerNome,
+        autorRole: viewerRole,
+        texto,
+        criadoEm: new Date(),
+        deletado: false,
+      },
+    ]);
+    setNovoComentario("");
+  };
+
+  const deletarComentario = (id: string) => {
+    if (viewerRole !== "redator") return;
+    setComentarios((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, deletado: true, deletadoEm: new Date(), deletadoPor: viewerNome }
+          : c,
+      ),
+    );
+  };
+
+  const comentariosVisiveis = comentarios.filter((c) => {
+    if (c.deletado) {
+      // Cliente nunca vê deletados; redator pode optar por ver no histórico interno.
+      return viewerRole === "redator" && mostrarDeletados;
+    }
+    return true;
+  });
 
   const addParte = () =>
     setPartes((p) => [...p, { id: crypto.randomUUID(), nome: "", tipo: "" }]);
@@ -172,6 +231,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setAdvogadoSubscritor("");
     arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     setArquivos([]);
+    setComentarios([]);
+    setNovoComentario("");
+    setMostrarDeletados(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -559,6 +621,181 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                   </li>
                 </ul>
               )}
+            </div>
+          </section>
+
+          {/* 5. Comentários */}
+          <section className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-base font-semibold text-foreground">
+                5. Comentários
+              </h3>
+              {/* Mock toggle de papel — substituir por contexto de auth real */}
+              <div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setViewerRole("cliente")}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors",
+                    viewerRole === "cliente"
+                      ? "bg-background font-medium text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Ver como Cliente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewerRole("redator")}
+                  className={cn(
+                    "rounded px-2 py-1 transition-colors",
+                    viewerRole === "redator"
+                      ? "bg-background font-medium text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  Ver como Redator
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Cliente e redator podem comentar a qualquer momento — antes,
+              durante e após a entrega da petição. Apenas o redator pode
+              excluir comentários; o histórico completo, inclusive excluídos,
+              fica disponível internamente para a equipe.
+            </p>
+
+            {viewerRole === "redator" && comentarios.some((c) => c.deletado) && (
+              <button
+                type="button"
+                onClick={() => setMostrarDeletados((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                {mostrarDeletados ? (
+                  <>
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Ocultar comentários excluídos
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-3.5 w-3.5" />
+                    Mostrar histórico (inclui excluídos)
+                  </>
+                )}
+              </button>
+            )}
+
+            <div className="space-y-3">
+              {comentariosVisiveis.length === 0 ? (
+                <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+                  Nenhum comentário ainda. Seja o primeiro a comentar.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {comentariosVisiveis.map((c) => {
+                    const isCliente = c.autorRole === "cliente";
+                    return (
+                      <li
+                        key={c.id}
+                        className={cn(
+                          "rounded-md border border-border bg-background p-3",
+                          c.deletado && "opacity-60",
+                        )}
+                      >
+                        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-sm">
+                            <span
+                              className={cn(
+                                "font-semibold",
+                                isCliente
+                                  ? "text-[hsl(142_70%_38%)]"
+                                  : "text-foreground",
+                              )}
+                            >
+                              {c.autorNome}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {format(c.criadoEm, "dd/MM/yyyy 'às' HH:mm", {
+                                locale: ptBR,
+                              })}
+                            </span>
+                            {c.deletado && (
+                              <span className="rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                                Excluído
+                              </span>
+                            )}
+                          </div>
+                          {viewerRole === "redator" && !c.deletado && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => deletarComentario(c.id)}
+                              aria-label="Excluir comentário"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                        <p
+                          className={cn(
+                            "whitespace-pre-wrap text-sm text-foreground",
+                            c.deletado && "line-through",
+                          )}
+                        >
+                          {c.texto}
+                        </p>
+                        {c.deletado && c.deletadoEm && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Excluído por {c.deletadoPor} em{" "}
+                            {format(c.deletadoEm, "dd/MM/yyyy 'às' HH:mm", {
+                              locale: ptBR,
+                            })}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="novo-comentario" className="text-sm">
+                Adicionar comentário como{" "}
+                <span
+                  className={cn(
+                    "font-semibold",
+                    viewerRole === "cliente"
+                      ? "text-[hsl(142_70%_38%)]"
+                      : "text-foreground",
+                  )}
+                >
+                  {viewerNome}
+                </span>
+              </Label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Textarea
+                  id="novo-comentario"
+                  value={novoComentario}
+                  onChange={(e) => setNovoComentario(e.target.value)}
+                  placeholder="Escreva um comentário..."
+                  rows={3}
+                  maxLength={2000}
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  onClick={addComentario}
+                  disabled={!novoComentario.trim()}
+                  className="sm:self-end"
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Enviar
+                </Button>
+              </div>
             </div>
           </section>
 
