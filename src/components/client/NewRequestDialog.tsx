@@ -115,6 +115,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   ]);
   const [resumoCaso, setResumoCaso] = useState("");
   const [detalhes, setDetalhes] = useState("");
+  const [tutelaUrgencia, setTutelaUrgencia] = useState("nao");
+  const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
