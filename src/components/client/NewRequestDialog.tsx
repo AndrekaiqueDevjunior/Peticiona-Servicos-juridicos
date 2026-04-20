@@ -429,6 +429,93 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                 maxLength={5000}
               />
             </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Anexos do processo</Label>
+                <span className="text-xs text-muted-foreground">
+                  PDF, DOCX e imagens · até {formatBytes(MAX_FILE_SIZE)} por arquivo
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleFiles(e.dataTransfer.files);
+                }}
+                className="flex w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-border bg-muted/30 px-4 py-8 text-center transition-colors hover:border-accent hover:bg-accent/5"
+              >
+                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  Clique para anexar ou arraste os arquivos
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Aceita múltiplos arquivos
+                </span>
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_TYPES}
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+
+              {arquivos.length > 0 && (
+                <ul className="space-y-2">
+                  {arquivos.map((a) => {
+                    const isImage = a.file.type.startsWith("image/");
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3 rounded-md border border-border bg-background p-2"
+                      >
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                          {a.previewUrl ? (
+                            <img
+                              src={a.previewUrl}
+                              alt={a.file.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : isImage ? (
+                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {a.file.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(a.file.size)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeArquivo(a.id)}
+                          aria-label={`Remover ${a.file.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                  <li className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                    <Paperclip className="h-3 w-3" />
+                    {arquivos.length}{" "}
+                    {arquivos.length === 1 ? "arquivo anexado" : "arquivos anexados"}
+                  </li>
+                </ul>
+              )}
+            </div>
           </section>
 
           <DialogFooter>
