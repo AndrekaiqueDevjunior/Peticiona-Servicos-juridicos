@@ -419,14 +419,54 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="detalhes">Detalhes do caso e teses</Label>
+              <Label htmlFor="detalhes">
+                Quais tópicos são imprescindíveis em sua petição?
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                As teses levantadas na petição são de inteira responsabilidade
+                do cliente. Assim, devem ser obrigatoriamente pedidas nesse
+                tópico.
+              </p>
               <Textarea
                 id="detalhes"
-                placeholder="Conte os fatos, fundamentos e teses jurídicas que devem constar na petição"
+                placeholder="Liste os tópicos, pedidos e teses que devem constar obrigatoriamente na petição"
                 value={detalhes}
                 onChange={(e) => setDetalhes(e.target.value)}
                 rows={6}
                 maxLength={5000}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Será necessário requerer tutela de urgência?</Label>
+              <RadioGroup
+                value={tutelaUrgencia}
+                onValueChange={setTutelaUrgencia}
+                className="flex gap-6"
+              >
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="sim" id="tu-sim" />
+                  <Label htmlFor="tu-sim" className="font-normal">
+                    Sim
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="nao" id="tu-nao" />
+                  <Label htmlFor="tu-nao" className="font-normal">
+                    Não
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="advogado">Advogado subscritor</Label>
+              <Input
+                id="advogado"
+                placeholder="Nome do(a) advogado(a) que assinará a peça"
+                value={advogadoSubscritor}
+                onChange={(e) => setAdvogadoSubscritor(e.target.value)}
+                maxLength={150}
               />
             </div>
 
