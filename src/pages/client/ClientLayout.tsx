@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { Outlet } from "react-router-dom";
 import { Plus, Bell } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ClientSidebar } from "@/components/client/ClientSidebar";
+import { NewRequestDialog } from "@/components/client/NewRequestDialog";
 
 const ClientLayout = () => {
+  const [openNewRequest, setOpenNewRequest] = useState(false);
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
@@ -23,7 +27,10 @@ const ClientLayout = () => {
               <Button variant="ghost" size="icon" aria-label="Notificações">
                 <Bell className="h-5 w-5" />
               </Button>
-              <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+              <Button
+                onClick={() => setOpenNewRequest(true)}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
                 <Plus className="h-4 w-4" />
                 <span className="hidden sm:inline">Nova solicitação</span>
                 <span className="sm:hidden">Nova</span>
@@ -36,6 +43,8 @@ const ClientLayout = () => {
           </main>
         </div>
       </div>
+
+      <NewRequestDialog open={openNewRequest} onOpenChange={setOpenNewRequest} />
     </SidebarProvider>
   );
 };
