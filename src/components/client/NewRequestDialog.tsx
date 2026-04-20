@@ -1,5 +1,14 @@
-import { useState } from "react";
-import { CalendarIcon, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  AlertCircle,
+  CalendarIcon,
+  FileText,
+  Image as ImageIcon,
+  Paperclip,
+  Plus,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
