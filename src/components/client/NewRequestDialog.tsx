@@ -396,6 +396,15 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
               em sua minuta. Isso é imprescindível para a criação de uma petição
               personalizada. Lembre-se: quanto mais detalhes, melhor!
             </p>
+            <div className="flex gap-3 rounded-md border border-accent/40 bg-accent/10 p-3 text-sm text-foreground">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <p>
+                Os <strong>anexos são muito importantes</strong>, sobretudo para
+                narrar os fatos do caso. Em <strong>processos em segredo de
+                justiça</strong>, é <strong>obrigatória</strong> a juntada do
+                processo completo.
+              </p>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="resumo">Do que se trata o processo?</Label>
