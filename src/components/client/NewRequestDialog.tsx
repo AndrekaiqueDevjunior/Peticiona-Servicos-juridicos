@@ -168,6 +168,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
     setDetalhes("");
+    setTutelaUrgencia("nao");
+    setAdvogadoSubscritor("");
     arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     setArquivos([]);
   };
