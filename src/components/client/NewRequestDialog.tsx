@@ -91,6 +91,19 @@ interface AttachedFile {
   previewUrl?: string;
 }
 
+type CommentAuthorRole = "cliente" | "redator";
+
+interface Comentario {
+  id: string;
+  autorNome: string;
+  autorRole: CommentAuthorRole;
+  texto: string;
+  criadoEm: Date;
+  deletado: boolean;
+  deletadoEm?: Date;
+  deletadoPor?: string;
+}
+
 const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB por arquivo
 const ACCEPTED_TYPES =
   "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
