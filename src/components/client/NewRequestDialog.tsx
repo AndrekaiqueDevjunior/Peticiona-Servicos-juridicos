@@ -115,6 +115,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   ]);
   const [resumoCaso, setResumoCaso] = useState("");
   const [detalhes, setDetalhes] = useState("");
+  const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addParte = () =>
     setPartes((p) => [...p, { id: crypto.randomUUID(), nome: "", tipo: "" }]);
@@ -125,6 +127,36 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const updateParte = (id: string, field: "nome" | "tipo", value: string) =>
     setPartes((p) => p.map((x) => (x.id === id ? { ...x, [field]: value } : x)));
 
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    const novos: AttachedFile[] = [];
+    Array.from(files).forEach((file) => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "Arquivo muito grande",
+          description: `${file.name} excede o limite de ${formatBytes(MAX_FILE_SIZE)}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const isImage = file.type.startsWith("image/");
+      novos.push({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: isImage ? URL.createObjectURL(file) : undefined,
+      });
+    });
+    if (novos.length) setArquivos((prev) => [...prev, ...novos]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeArquivo = (id: string) =>
+    setArquivos((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+
   const reset = () => {
     setAreaDireito("");
     setTipoPeticao("");
@@ -134,6 +166,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
     setDetalhes("");
+    arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+    setArquivos([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
