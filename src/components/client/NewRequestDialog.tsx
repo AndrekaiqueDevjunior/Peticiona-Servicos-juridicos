@@ -1,5 +1,14 @@
-import { useState } from "react";
-import { CalendarIcon, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import {
+  AlertCircle,
+  CalendarIcon,
+  FileText,
+  Image as ImageIcon,
+  Paperclip,
+  Plus,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -73,6 +82,23 @@ interface Parte {
   tipo: string;
 }
 
+interface AttachedFile {
+  id: string;
+  file: File;
+  previewUrl?: string;
+}
+
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB por arquivo
+const ACCEPTED_TYPES =
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+};
+
 interface NewRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -89,6 +115,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   ]);
   const [resumoCaso, setResumoCaso] = useState("");
   const [detalhes, setDetalhes] = useState("");
+  const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addParte = () =>
     setPartes((p) => [...p, { id: crypto.randomUUID(), nome: "", tipo: "" }]);
@@ -99,6 +127,36 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const updateParte = (id: string, field: "nome" | "tipo", value: string) =>
     setPartes((p) => p.map((x) => (x.id === id ? { ...x, [field]: value } : x)));
 
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    const novos: AttachedFile[] = [];
+    Array.from(files).forEach((file) => {
+      if (file.size > MAX_FILE_SIZE) {
+        toast({
+          title: "Arquivo muito grande",
+          description: `${file.name} excede o limite de ${formatBytes(MAX_FILE_SIZE)}.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      const isImage = file.type.startsWith("image/");
+      novos.push({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: isImage ? URL.createObjectURL(file) : undefined,
+      });
+    });
+    if (novos.length) setArquivos((prev) => [...prev, ...novos]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeArquivo = (id: string) =>
+    setArquivos((prev) => {
+      const target = prev.find((a) => a.id === id);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((a) => a.id !== id);
+    });
+
   const reset = () => {
     setAreaDireito("");
     setTipoPeticao("");
@@ -108,6 +166,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
     setDetalhes("");
+    arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
+    setArquivos([]);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -336,6 +396,15 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
               em sua minuta. Isso é imprescindível para a criação de uma petição
               personalizada. Lembre-se: quanto mais detalhes, melhor!
             </p>
+            <div className="flex gap-3 rounded-md border border-accent/40 bg-accent/10 p-3 text-sm text-foreground">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+              <p>
+                Os <strong>anexos são muito importantes</strong>, sobretudo para
+                narrar os fatos do caso. Em <strong>processos em segredo de
+                justiça</strong>, é <strong>obrigatória</strong> a juntada do
+                processo completo.
+              </p>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="resumo">Do que se trata o processo?</Label>
@@ -359,6 +428,93 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                 rows={6}
                 maxLength={5000}
               />
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Anexos do processo</Label>
+                <span className="text-xs text-muted-foreground">
+                  PDF, DOCX e imagens · até {formatBytes(MAX_FILE_SIZE)} por arquivo
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  handleFiles(e.dataTransfer.files);
+                }}
+                className="flex w-full flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-border bg-muted/30 px-4 py-8 text-center transition-colors hover:border-accent hover:bg-accent/5"
+              >
+                <UploadCloud className="h-8 w-8 text-muted-foreground" />
+                <span className="text-sm font-medium text-foreground">
+                  Clique para anexar ou arraste os arquivos
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Aceita múltiplos arquivos
+                </span>
+              </button>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPTED_TYPES}
+                className="hidden"
+                onChange={(e) => handleFiles(e.target.files)}
+              />
+
+              {arquivos.length > 0 && (
+                <ul className="space-y-2">
+                  {arquivos.map((a) => {
+                    const isImage = a.file.type.startsWith("image/");
+                    return (
+                      <li
+                        key={a.id}
+                        className="flex items-center gap-3 rounded-md border border-border bg-background p-2"
+                      >
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                          {a.previewUrl ? (
+                            <img
+                              src={a.previewUrl}
+                              alt={a.file.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : isImage ? (
+                            <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {a.file.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatBytes(a.file.size)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeArquivo(a.id)}
+                          aria-label={`Remover ${a.file.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                  <li className="flex items-center gap-2 pt-1 text-xs text-muted-foreground">
+                    <Paperclip className="h-3 w-3" />
+                    {arquivos.length}{" "}
+                    {arquivos.length === 1 ? "arquivo anexado" : "arquivos anexados"}
+                  </li>
+                </ul>
+              )}
             </div>
           </section>
 
