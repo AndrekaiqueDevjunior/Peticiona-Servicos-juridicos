@@ -136,6 +136,49 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
+  const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
+  const viewerNome = viewerRole === "cliente" ? "Você (Cliente)" : "Equipe (Redator)";
+  const [comentarios, setComentarios] = useState<Comentario[]>([]);
+  const [novoComentario, setNovoComentario] = useState("");
+  const [mostrarDeletados, setMostrarDeletados] = useState(false);
+
+  const addComentario = () => {
+    const texto = novoComentario.trim();
+    if (!texto) return;
+    setComentarios((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        autorNome: viewerNome,
+        autorRole: viewerRole,
+        texto,
+        criadoEm: new Date(),
+        deletado: false,
+      },
+    ]);
+    setNovoComentario("");
+  };
+
+  const deletarComentario = (id: string) => {
+    if (viewerRole !== "redator") return;
+    setComentarios((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, deletado: true, deletadoEm: new Date(), deletadoPor: viewerNome }
+          : c,
+      ),
+    );
+  };
+
+  const comentariosVisiveis = comentarios.filter((c) => {
+    if (c.deletado) {
+      // Cliente nunca vê deletados; redator pode optar por ver no histórico interno.
+      return viewerRole === "redator" && mostrarDeletados;
+    }
+    return true;
+  });
+
   const addParte = () =>
     setPartes((p) => [...p, { id: crypto.randomUUID(), nome: "", tipo: "" }]);
 
