@@ -82,6 +82,23 @@ interface Parte {
   tipo: string;
 }
 
+interface AttachedFile {
+  id: string;
+  file: File;
+  previewUrl?: string;
+}
+
+const MAX_FILE_SIZE = 200 * 1024 * 1024; // 200MB por arquivo
+const ACCEPTED_TYPES =
+  "application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/*";
+
+const formatBytes = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+};
+
 interface NewRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
