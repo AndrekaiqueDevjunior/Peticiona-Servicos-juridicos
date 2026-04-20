@@ -2,10 +2,13 @@ import { useRef, useState } from "react";
 import {
   AlertCircle,
   CalendarIcon,
+  Eye,
+  EyeOff,
   FileText,
   Image as ImageIcon,
   Paperclip,
   Plus,
+  Send,
   Trash2,
   UploadCloud,
 } from "lucide-react";
