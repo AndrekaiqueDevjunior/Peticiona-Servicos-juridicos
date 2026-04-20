@@ -231,6 +231,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setAdvogadoSubscritor("");
     arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     setArquivos([]);
+    setComentarios([]);
+    setNovoComentario("");
+    setMostrarDeletados(false);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
