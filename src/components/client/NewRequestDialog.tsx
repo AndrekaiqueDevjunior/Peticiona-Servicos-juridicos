@@ -50,38 +50,97 @@ import { Calendar } from "@/components/ui/calendar";
 import { toast } from "@/hooks/use-toast";
 
 const AREAS_DIREITO = [
-  "Cível",
-  "Trabalhista",
-  "Penal",
-  "Família",
-  "Tributário",
-  "Previdenciário",
-  "Consumidor",
-  "Empresarial",
-  "Administrativo",
-  "Constitucional",
+  "Direito Civil",
+  "Direito do Consumidor",
+  "Direito Previdenciário",
+  "Direito Trabalhista",
+  "Direito Tributário",
+  "Direito Empresarial",
+  "Direito de Família",
+  "Direito Sucessório",
+  "Direito Imobiliário",
+  "Direito Bancário",
+  "Direito Médico / da Saúde",
+  "Direito Administrativo",
+  "Direito Constitucional",
+  "Direito Penal",
+  "Direito Ambiental",
+  "Direito Eleitoral",
 ];
 
-const TIPOS_PETICAO = [
-  "Petição Inicial",
-  "Contestação",
-  "Réplica",
-  "Recurso",
-  "Embargos",
-  "Agravo",
-  "Manifestação",
-  "Memoriais",
-  "Apelação",
-];
+const TIPOS_PETICAO = {
+  "PETIÇÕES INICIAIS": [
+    "Petição inicial comum",
+    "Mandado de segurança",
+    "Cumprimento de sentença (inicial)",
+  ],
+  "DEFESAS": [
+    "Contestação",
+    "Embargos à execução",
+    "Impugnação ao cumprimento de sentença",
+  ],
+  "RECURSOS": [
+    "Apelação",
+    "Agravo de instrumento",
+    "Agravo interno",
+    "Embargos de declaração",
+    "Recurso ordinário",
+    "Recurso especial",
+    "Recurso extraordinário",
+    "Agravo em recurso especial",
+    "Agravo em recurso extraordinário",
+  ],
+  "MANIFESTAÇÕES GERAIS": [
+    "Contrarrazões",
+    "Petição intermediária",
+    "Manifestação",
+    "Alegações finais",
+    "Razões finais",
+  ],
+  "ADMINISTRATIVO / EXTRAJUDICIAL": [
+    "Notificação extrajudicial",
+    "Defesa administrativa",
+    "Recurso administrativo",
+    "Requerimentos administrativos",
+  ],
+};
 
 const TIPOS_PARTE = [
   "Autor",
   "Réu",
-  "Reclamante",
-  "Reclamado",
+  "Litisconsorte ativo",
+  "Litisconsorte passivo",
+  "Requerente",
+  "Requerido",
+  "Recorrente",
+  "Recorrido",
+  "Embargante",
+  "Embargado",
   "Exequente",
   "Executado",
-  "Terceiro Interessado",
+  "Credor",
+  "Devedor",
+  "Arrematante",
+  "Adjudicante",
+  "Alimentante",
+  "Alimentando",
+  "Inventariante",
+  "Herdeiro",
+  "Curador",
+  "Tutor",
+  "Interditando",
+  "Impetrante",
+  "Impetrado",
+  "Autoridade coatora",
+  "Paciente (Habeas Corpus)",
+  "Querelante",
+  "Querelado",
+  "Acusado / Réu",
+  "Indiciado",
+  "Denunciado",
+  "Vítima / Ofendido",
+  "Autuado",
+  "Impugnante",
 ];
 
 interface Parte {
@@ -410,10 +469,17 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_PETICAO.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
+                  {Object.entries(TIPOS_PETICAO).map(([grupo, tipos]) => (
+                    <div key={grupo}>
+                      <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                        {grupo}
+                      </p>
+                      {tipos.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </div>
                   ))}
                 </SelectContent>
               </Select>
