@@ -329,13 +329,51 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     }
   };
 
+  // Tela de sucesso após finalizar pedido
+  if (success) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-md">
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <div className="rounded-full bg-accent/15 p-3">
+              <CheckCircle2 className="h-10 w-10 text-accent" />
+            </div>
+            <DialogHeader>
+              <DialogTitle className="text-center">
+                Pedido cadastrado com sucesso!
+              </DialogTitle>
+              <DialogDescription className="text-center">
+                Acompanhe o andamento na aba <strong>"Meus pedidos"</strong> e
+                fique atento aos e-mails e mensagens de WhatsApp enviados pela
+                Peticiona!
+              </DialogDescription>
+            </DialogHeader>
+            <Button
+              type="button"
+              className="mt-2 bg-accent text-accent-foreground hover:bg-accent/90"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+                navigate("/area-cliente/pedidos");
+              }}
+            >
+              Ir para Meus pedidos
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova solicitação</DialogTitle>
+          <DialogTitle>Novo pedido</DialogTitle>
           <DialogDescription>
-            Preencha os dados abaixo para criar uma nova solicitação de petição.
+            Preencha os dados abaixo para criar um novo pedido de petição. Se
+            fechar sem finalizar, o pedido fica salvo como rascunho — clique em
+            cancelar para descartá-lo.
           </DialogDescription>
         </DialogHeader>
 
