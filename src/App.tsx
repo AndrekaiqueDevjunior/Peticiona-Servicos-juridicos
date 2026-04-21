@@ -34,14 +34,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
-            <Route
-              path="/area-cliente"
-              element={
-                <ProtectedRoute>
-                  <ClientLayout />
-                </ProtectedRoute>
-              }
-            >
+            <Route path="/area-cliente" element={<ClientLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="pedidos" element={<Orders />} />
               <Route path="saldos" element={<Balance />} />
