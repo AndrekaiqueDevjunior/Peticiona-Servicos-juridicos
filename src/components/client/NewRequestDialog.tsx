@@ -483,7 +483,13 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
             <div className="space-y-2">
               <Label htmlFor="tipo-peticao">Qual o tipo de petição?</Label>
-              <Select value={tipoPeticao} onValueChange={setTipoPeticao}>
+              <Select
+                value={tipoPeticao}
+                onValueChange={(v) => {
+                  setTipoPeticao(v);
+                  setModalidade("padrao");
+                }}
+              >
                 <SelectTrigger id="tipo-peticao">
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
