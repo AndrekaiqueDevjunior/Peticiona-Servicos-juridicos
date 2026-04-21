@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   AlertCircle,
   CalendarIcon,
+  CheckCircle2,
   Eye,
   EyeOff,
   FileText,
@@ -13,6 +15,7 @@ import {
   Send,
   Trash2,
   UploadCloud,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
