@@ -469,10 +469,17 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {TIPOS_PETICAO.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
+                  {Object.entries(TIPOS_PETICAO).map(([grupo, tipos]) => (
+                    <div key={grupo}>
+                      <p className="px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                        {grupo}
+                      </p>
+                      {tipos.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {t}
+                        </SelectItem>
+                      ))}
+                    </div>
                   ))}
                 </SelectContent>
               </Select>
