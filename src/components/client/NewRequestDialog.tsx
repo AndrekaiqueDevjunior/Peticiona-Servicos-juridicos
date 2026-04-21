@@ -319,6 +319,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const reset = () => {
     setAreaDireito("");
     setTipoPeticao("");
+    setModalidade("padrao");
     setDataPublicacao(undefined);
     setNumeroProcesso("");
     setCompetencia("");
