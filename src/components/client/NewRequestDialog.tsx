@@ -144,7 +144,18 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Valor do pedido (mock — em produção pode variar por tipo/área)
+  const valorPedido = 1;
+  const { data: balanceData } = useQuery({
+    queryKey: ["balance"],
+    queryFn: () => api.me.balance(),
+  });
+  const saldoAtual = balanceData?.credits_available ?? 0;
+  const saldoApos = saldoAtual - valorPedido;
+  const semSaldo = saldoAtual < valorPedido;
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
   const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
