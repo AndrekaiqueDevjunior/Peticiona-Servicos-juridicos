@@ -48,7 +48,7 @@ export default function Dashboard() {
     <div className="mx-auto max-w-6xl space-y-8">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          {user ? `Olá, ${user.full_name.split(" ")[0]}` : "Olá, bem-vindo"}
+          {user?.full_name ? `Olá, ${user.full_name.split(" ")[0]}` : "Olá, bem-vindo"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Aqui está um resumo da sua área do cliente.
