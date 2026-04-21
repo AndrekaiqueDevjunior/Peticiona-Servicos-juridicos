@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   AlertCircle,
   CalendarIcon,
+  CheckCircle2,
   Eye,
   EyeOff,
   FileText,
@@ -13,6 +15,7 @@ import {
   Send,
   Trash2,
   UploadCloud,
+  Wallet,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -124,10 +127,13 @@ interface NewRequestDialogProps {
 
 export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [areaDireito, setAreaDireito] = useState("");
   const [tipoPeticao, setTipoPeticao] = useState("");
   const [dataPublicacao, setDataPublicacao] = useState<Date | undefined>();
   const [numeroProcesso, setNumeroProcesso] = useState("");
+  const [competencia, setCompetencia] = useState("");
+  const [comarca, setComarca] = useState("");
   const [justicaGratuita, setJusticaGratuita] = useState("nao");
   const [partes, setPartes] = useState<Parte[]>([
     { id: crypto.randomUUID(), nome: "", tipo: "" },
@@ -138,7 +144,18 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Valor do pedido (mock — em produção pode variar por tipo/área)
+  const valorPedido = 1;
+  const { data: balanceData } = useQuery({
+    queryKey: ["balance"],
+    queryFn: () => api.me.balance(),
+  });
+  const saldoAtual = balanceData?.credits_available ?? 0;
+  const saldoApos = saldoAtual - valorPedido;
+  const semSaldo = saldoAtual < valorPedido;
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
   const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
@@ -227,6 +244,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setTipoPeticao("");
     setDataPublicacao(undefined);
     setNumeroProcesso("");
+    setCompetencia("");
+    setComarca("");
     setJusticaGratuita("nao");
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
@@ -238,6 +257,18 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setComentarios([]);
     setNovoComentario("");
     setMostrarDeletados(false);
+    setSuccess(false);
+  };
+
+  // Cancelar = mantém rascunho (apenas fecha o modal sem reset).
+  const handleCancel = () => {
+    onOpenChange(false);
+  };
+
+  // Após sucesso, fechar o modal limpa tudo.
+  const handleClose = (next: boolean) => {
+    if (!next && success) reset();
+    onOpenChange(next);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -246,6 +277,15 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       toast({
         title: "Campo obrigatório",
         description: "Selecione a área do Direito.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (semSaldo) {
+      toast({
+        title: "Saldo insuficiente",
+        description: "Adicione créditos para finalizar o pedido.",
         variant: "destructive",
       });
       return;
@@ -275,13 +315,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["balance"] });
 
-      toast({
-        title: "Solicitação enviada",
-        description: "Sua nova solicitação foi registrada com sucesso.",
-      });
-      reset();
-      onOpenChange(false);
+      setSuccess(true);
     } catch (err: unknown) {
       toast({
         title: "Erro ao enviar",
@@ -293,13 +329,51 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     }
   };
 
+  // Tela de sucesso após finalizar pedido
+  if (success) {
+    return (
+      <Dialog open={open} onOpenChange={handleClose}>
+        <DialogContent className="max-w-md">
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <div className="rounded-full bg-accent/15 p-3">
+              <CheckCircle2 className="h-10 w-10 text-accent" />
+            </div>
+            <DialogHeader>
+              <DialogTitle className="text-center">
+                Pedido cadastrado com sucesso!
+              </DialogTitle>
+              <DialogDescription className="text-center">
+                Acompanhe o andamento na aba <strong>"Meus pedidos"</strong> e
+                fique atento aos e-mails e mensagens de WhatsApp enviados pela
+                Peticiona!
+              </DialogDescription>
+            </DialogHeader>
+            <Button
+              type="button"
+              className="mt-2 bg-accent text-accent-foreground hover:bg-accent/90"
+              onClick={() => {
+                reset();
+                onOpenChange(false);
+                navigate("/area-cliente/pedidos");
+              }}
+            >
+              Ir para Meus pedidos
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova solicitação</DialogTitle>
+          <DialogTitle>Novo pedido</DialogTitle>
           <DialogDescription>
-            Preencha os dados abaixo para criar uma nova solicitação de petição.
+            Preencha os dados abaixo para criar um novo pedido de petição. Se
+            fechar sem finalizar, o pedido fica salvo como rascunho — clique em
+            cancelar para descartá-lo.
           </DialogDescription>
         </DialogHeader>
 
@@ -393,6 +467,35 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                   value={numeroProcesso}
                   onChange={(e) => setNumeroProcesso(e.target.value)}
                   maxLength={30}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="competencia">Competência</Label>
+                <Input
+                  id="competencia"
+                  placeholder="Ex.: Vara Cível, Juizado Especial..."
+                  value={competencia}
+                  onChange={(e) => setCompetencia(e.target.value)}
+                  maxLength={150}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Indique qual a competência para ajuizamento da ação.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="comarca">
+                  Qual a comarca que será distribuída a ação?
+                </Label>
+                <Input
+                  id="comarca"
+                  placeholder="Cidade/UF"
+                  value={comarca}
+                  onChange={(e) => setComarca(e.target.value)}
+                  maxLength={150}
                 />
               </div>
             </div>
@@ -838,20 +941,71 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
           </section>
 
+          {/* 6. Resumo do pedido */}
+          <section className="space-y-4">
+            <h3 className="text-base font-semibold text-foreground">
+              6. Resumo do pedido
+            </h3>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Valor deste pedido
+                </span>
+                <span className="font-display text-2xl font-semibold text-primary">
+                  R$ {valorPedido.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+
+              {semSaldo ? (
+                <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  Você está sem saldo.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/area-cliente/saldos");
+                    }}
+                    className="font-semibold underline underline-offset-2 hover:opacity-80"
+                  >
+                    Clique aqui para adicionar mais saldo
+                  </button>
+                  .
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Wallet className="h-4 w-4" />
+                      Saldo atual
+                    </span>
+                    <span className="font-medium">
+                      R$ {saldoAtual.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Saldo após o débito
+                    </span>
+                    <span className="font-semibold text-accent">
+                      R$ {saldoApos.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={handleCancel}>
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || semSaldo}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              {submitting ? "Enviando..." : "Enviar solicitação"}
+              {submitting ? "Finalizando..." : "Finalizar pedido"}
             </Button>
           </DialogFooter>
         </form>

@@ -32,8 +32,8 @@ const ClientLayout = () => {
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">Nova solicitação</span>
-                <span className="sm:hidden">Nova</span>
+                <span className="hidden sm:inline">Novo pedido</span>
+                <span className="sm:hidden">Novo</span>
               </Button>
             </div>
           </header>
