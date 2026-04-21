@@ -1162,7 +1162,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </Button>
             <Button
               type="submit"
-              disabled={submitting || semSaldo}
+              disabled={submitting || semSaldo || !tipoReconhecido}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {submitting ? "Finalizando..." : "Finalizar pedido"}
