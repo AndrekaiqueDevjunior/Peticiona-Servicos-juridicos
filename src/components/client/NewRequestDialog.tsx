@@ -257,6 +257,18 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setComentarios([]);
     setNovoComentario("");
     setMostrarDeletados(false);
+    setSuccess(false);
+  };
+
+  // Cancelar = mantém rascunho (apenas fecha o modal sem reset).
+  const handleCancel = () => {
+    onOpenChange(false);
+  };
+
+  // Após sucesso, fechar o modal limpa tudo.
+  const handleClose = (next: boolean) => {
+    if (!next && success) reset();
+    onOpenChange(next);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -265,6 +277,15 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       toast({
         title: "Campo obrigatório",
         description: "Selecione a área do Direito.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (semSaldo) {
+      toast({
+        title: "Saldo insuficiente",
+        description: "Adicione créditos para finalizar o pedido.",
         variant: "destructive",
       });
       return;
@@ -294,13 +315,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["balance"] });
 
-      toast({
-        title: "Solicitação enviada",
-        description: "Sua nova solicitação foi registrada com sucesso.",
-      });
-      reset();
-      onOpenChange(false);
+      setSuccess(true);
     } catch (err: unknown) {
       toast({
         title: "Erro ao enviar",
