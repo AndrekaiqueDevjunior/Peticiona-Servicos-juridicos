@@ -941,20 +941,71 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
           </section>
 
+          {/* 6. Resumo do pedido */}
+          <section className="space-y-4">
+            <h3 className="text-base font-semibold text-foreground">
+              6. Resumo do pedido
+            </h3>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Valor deste pedido
+                </span>
+                <span className="font-display text-2xl font-semibold text-primary">
+                  R$ {valorPedido.toFixed(2).replace(".", ",")}
+                </span>
+              </div>
+
+              {semSaldo ? (
+                <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  Você está sem saldo.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenChange(false);
+                      navigate("/area-cliente/saldos");
+                    }}
+                    className="font-semibold underline underline-offset-2 hover:opacity-80"
+                  >
+                    Clique aqui para adicionar mais saldo
+                  </button>
+                  .
+                </div>
+              ) : (
+                <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-muted-foreground">
+                      <Wallet className="h-4 w-4" />
+                      Saldo atual
+                    </span>
+                    <span className="font-medium">
+                      R$ {saldoAtual.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">
+                      Saldo após o débito
+                    </span>
+                    <span className="font-semibold text-accent">
+                      R$ {saldoApos.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
           <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="ghost" onClick={handleCancel}>
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || semSaldo}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              {submitting ? "Enviando..." : "Enviar solicitação"}
+              {submitting ? "Finalizando..." : "Finalizar pedido"}
             </Button>
           </DialogFooter>
         </form>
