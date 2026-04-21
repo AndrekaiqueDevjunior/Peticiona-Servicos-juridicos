@@ -127,10 +127,13 @@ interface NewRequestDialogProps {
 
 export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [areaDireito, setAreaDireito] = useState("");
   const [tipoPeticao, setTipoPeticao] = useState("");
   const [dataPublicacao, setDataPublicacao] = useState<Date | undefined>();
   const [numeroProcesso, setNumeroProcesso] = useState("");
+  const [competencia, setCompetencia] = useState("");
+  const [comarca, setComarca] = useState("");
   const [justicaGratuita, setJusticaGratuita] = useState("nao");
   const [partes, setPartes] = useState<Parte[]>([
     { id: crypto.randomUUID(), nome: "", tipo: "" },
