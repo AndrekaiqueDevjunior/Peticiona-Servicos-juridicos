@@ -212,15 +212,27 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Valor do pedido (mock — em produção pode variar por tipo/área)
-  const valorPedido = 1;
+  // Modalidade escolhida (padrão x express) — só é usada quando express está disponível
+  const [modalidade, setModalidade] = useState<Modalidade>("padrao");
+
+  // Perfil de precificação do usuário (plano ativo + express comprados)
+  const { data: pricingProfile } = useUserPricingProfile();
+  const perfilSeguro = pricingProfile ?? {
+    plano: null,
+    peticaoExpressDisponivel: false,
+    recursoExpressDisponivel: false,
+  };
+  const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro, modalidade);
+  const valorPedido = pricing.precoFinal;
+  const tipoReconhecido = pricing.precoPadrao !== null;
+
   const { data: balanceData } = useQuery({
     queryKey: ["balance"],
     queryFn: () => api.me.balance(),
   });
   const saldoAtual = balanceData?.credits_available ?? 0;
   const saldoApos = saldoAtual - valorPedido;
-  const semSaldo = saldoAtual < valorPedido;
+  const semSaldo = tipoReconhecido && saldoAtual < valorPedido;
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
   const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
