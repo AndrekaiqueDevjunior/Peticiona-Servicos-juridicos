@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
+  calcularPrecoPedido,
+  formatBRL,
+  useUserPricingProfile,
+  type Modalidade,
+} from "@/lib/pricing";
+import {
   AlertCircle,
   CalendarIcon,
   CheckCircle2,
@@ -206,15 +212,27 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Valor do pedido (mock — em produção pode variar por tipo/área)
-  const valorPedido = 1;
+  // Modalidade escolhida (padrão x express) — só é usada quando express está disponível
+  const [modalidade, setModalidade] = useState<Modalidade>("padrao");
+
+  // Perfil de precificação do usuário (plano ativo + express comprados)
+  const { data: pricingProfile } = useUserPricingProfile();
+  const perfilSeguro = pricingProfile ?? {
+    plano: null,
+    peticaoExpressDisponivel: false,
+    recursoExpressDisponivel: false,
+  };
+  const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro, modalidade);
+  const valorPedido = pricing.precoFinal;
+  const tipoReconhecido = pricing.precoPadrao !== null;
+
   const { data: balanceData } = useQuery({
     queryKey: ["balance"],
     queryFn: () => api.me.balance(),
   });
   const saldoAtual = balanceData?.credits_available ?? 0;
   const saldoApos = saldoAtual - valorPedido;
-  const semSaldo = saldoAtual < valorPedido;
+  const semSaldo = tipoReconhecido && saldoAtual < valorPedido;
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
   const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
@@ -301,6 +319,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const reset = () => {
     setAreaDireito("");
     setTipoPeticao("");
+    setModalidade("padrao");
     setDataPublicacao(undefined);
     setNumeroProcesso("");
     setCompetencia("");
@@ -464,7 +483,13 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
             <div className="space-y-2">
               <Label htmlFor="tipo-peticao">Qual o tipo de petição?</Label>
-              <Select value={tipoPeticao} onValueChange={setTipoPeticao}>
+              <Select
+                value={tipoPeticao}
+                onValueChange={(v) => {
+                  setTipoPeticao(v);
+                  setModalidade("padrao");
+                }}
+              >
                 <SelectTrigger id="tipo-peticao">
                   <SelectValue placeholder="Selecione um tipo" />
                 </SelectTrigger>
@@ -1014,50 +1039,119 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </h3>
 
             <div className="rounded-lg border border-border bg-muted/30 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Valor deste pedido
-                </span>
-                <span className="font-display text-2xl font-semibold text-primary">
-                  R$ {valorPedido.toFixed(2).replace(".", ",")}
-                </span>
-              </div>
-
-              {semSaldo ? (
-                <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                  Você está sem saldo.{" "}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenChange(false);
-                      navigate("/area-cliente/saldos");
-                    }}
-                    className="font-semibold underline underline-offset-2 hover:opacity-80"
-                  >
-                    Clique aqui para adicionar mais saldo
-                  </button>
-                  .
-                </div>
+              {!tipoPeticao || !tipoReconhecido ? (
+                <p className="text-sm text-muted-foreground">
+                  Selecione o tipo de petição para ver o serviço e o valor
+                  aplicado.
+                </p>
               ) : (
-                <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-muted-foreground">
-                      <Wallet className="h-4 w-4" />
-                      Saldo atual
+                <>
+                  {/* Escolha de modalidade quando Express está disponível */}
+                  {pricing.precoExpress !== null && (
+                    <div className="mb-4 space-y-2">
+                      <Label className="text-sm">Modalidade de entrega</Label>
+                      <RadioGroup
+                        value={modalidade}
+                        onValueChange={(v) => setModalidade(v as Modalidade)}
+                        className="grid gap-2 sm:grid-cols-2"
+                      >
+                        <label
+                          htmlFor="mod-padrao"
+                          className={cn(
+                            "flex cursor-pointer items-start gap-2 rounded-md border p-3 text-sm",
+                            modalidade === "padrao"
+                              ? "border-primary bg-primary/5"
+                              : "border-border",
+                          )}
+                        >
+                          <RadioGroupItem id="mod-padrao" value="padrao" className="mt-0.5" />
+                          <div>
+                            <div className="font-medium">{pricing.labelPadrao}</div>
+                            <div className="text-muted-foreground">
+                              {formatBRL(pricing.precoPadrao ?? 0)}
+                            </div>
+                          </div>
+                        </label>
+                        <label
+                          htmlFor="mod-express"
+                          className={cn(
+                            "flex cursor-pointer items-start gap-2 rounded-md border p-3 text-sm",
+                            modalidade === "express"
+                              ? "border-primary bg-primary/5"
+                              : "border-border",
+                          )}
+                        >
+                          <RadioGroupItem id="mod-express" value="express" className="mt-0.5" />
+                          <div>
+                            <div className="font-medium">{pricing.labelExpress}</div>
+                            <div className="text-muted-foreground">
+                              {formatBRL(pricing.precoExpress)}
+                            </div>
+                          </div>
+                        </label>
+                      </RadioGroup>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5 border-b border-border pb-3">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Serviço</span>
+                      <span className="font-medium text-foreground">
+                        {tipoPeticao}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Modalidade</span>
+                      <span className="font-medium text-foreground">
+                        {pricing.labelFinal}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      Valor deste pedido
                     </span>
-                    <span className="font-medium">
-                      R$ {saldoAtual.toFixed(2).replace(".", ",")}
+                    <span className="font-display text-2xl font-semibold text-primary">
+                      {formatBRL(valorPedido)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">
-                      Saldo após o débito
-                    </span>
-                    <span className="font-semibold text-accent">
-                      R$ {saldoApos.toFixed(2).replace(".", ",")}
-                    </span>
-                  </div>
-                </div>
+
+                  {semSaldo ? (
+                    <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                      Você está sem saldo.{" "}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onOpenChange(false);
+                          navigate("/area-cliente/saldos");
+                        }}
+                        className="font-semibold underline underline-offset-2 hover:opacity-80"
+                      >
+                        Clique aqui para adicionar mais saldo
+                      </button>
+                      .
+                    </div>
+                  ) : (
+                    <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <Wallet className="h-4 w-4" />
+                          Saldo atual
+                        </span>
+                        <span className="font-medium">{formatBRL(saldoAtual)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">
+                          Saldo após o débito
+                        </span>
+                        <span className="font-semibold text-accent">
+                          {formatBRL(saldoApos)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </section>
@@ -1068,7 +1162,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </Button>
             <Button
               type="submit"
-              disabled={submitting || semSaldo}
+              disabled={submitting || semSaldo || !tipoReconhecido}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {submitting ? "Finalizando..." : "Finalizar pedido"}
