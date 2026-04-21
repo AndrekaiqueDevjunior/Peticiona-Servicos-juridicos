@@ -471,6 +471,35 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
               </div>
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="competencia">Competência</Label>
+                <Input
+                  id="competencia"
+                  placeholder="Ex.: Vara Cível, Juizado Especial..."
+                  value={competencia}
+                  onChange={(e) => setCompetencia(e.target.value)}
+                  maxLength={150}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Indique qual a competência para ajuizamento da ação.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="comarca">
+                  Qual a comarca que será distribuída a ação?
+                </Label>
+                <Input
+                  id="comarca"
+                  placeholder="Cidade/UF"
+                  value={comarca}
+                  onChange={(e) => setComarca(e.target.value)}
+                  maxLength={150}
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Será necessário requerer justiça gratuita?</Label>
               <RadioGroup
