@@ -1,22 +1,22 @@
+import { useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-
-const orders = [
-  { id: "#1042", title: "Contestação trabalhista", status: "Em análise", date: "20/04/2026", category: "Defesas" },
-  { id: "#1041", title: "Apelação cível", status: "Concluído", date: "19/04/2026", category: "Recursos" },
-  { id: "#1038", title: "Petição inicial — Mandado de segurança", status: "Aguardando dados", date: "18/04/2026", category: "Petições iniciais" },
-  { id: "#1035", title: "Embargos de declaração", status: "Concluído", date: "15/04/2026", category: "Recursos" },
-  { id: "#1030", title: "Notificação extrajudicial", status: "Concluído", date: "10/04/2026", category: "Administrativo" },
-];
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/lib/api";
 
 const statusColor: Record<string, string> = {
-  "Em análise": "bg-accent-soft text-primary",
-  "Concluído": "bg-secondary text-foreground",
-  "Aguardando dados": "bg-destructive/10 text-destructive",
+  pendente: "bg-accent-soft text-primary",
+  em_andamento: "bg-accent-soft text-primary",
+  concluido: "bg-secondary text-foreground",
 };
 
-const Orders = () => {
+export default function Orders() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["petitions"],
+    queryFn: () => api.petitions.list(),
+  });
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="flex items-end justify-between gap-4">
@@ -28,9 +28,6 @@ const Orders = () => {
             Acompanhe todas as suas solicitações jurídicas.
           </p>
         </div>
-        <Button variant="outline" size="sm">
-          Filtrar
-        </Button>
       </div>
 
       <Card>
@@ -38,35 +35,50 @@ const Orders = () => {
           <CardTitle className="font-display text-xl">Histórico</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <ul className="divide-y divide-border">
-            {orders.map((o) => (
-              <li
-                key={o.id}
-                className="flex flex-col gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="rounded-md bg-secondary p-2">
-                    <FileText className="h-4 w-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">{o.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {o.id} · {o.category} · {o.date}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-medium ${statusColor[o.status]}`}
+          {isLoading ? (
+            <div className="space-y-3 p-6">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : !data?.petitions.length ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Nenhuma solicitação ainda. Use o botão "Nova solicitação" para começar.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {data.petitions.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-col gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  {o.status}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-md bg-secondary p-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {p.tipo_peticao ? `${p.tipo_peticao} — ${p.area_direito}` : p.area_direito}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.reference}
+                        {p.numero_processo ? ` · ${p.numero_processo}` : ""}
+                        {" · "}
+                        {p.created_at}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-medium ${statusColor[p.status] ?? "bg-secondary text-foreground"}`}
+                  >
+                    {p.status_label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>
   );
-};
-
-export default Orders;
+}

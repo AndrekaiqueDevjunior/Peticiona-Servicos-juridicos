@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import {
   AlertCircle,
   CalendarIcon,
@@ -121,6 +123,7 @@ interface NewRequestDialogProps {
 }
 
 export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) => {
+  const queryClient = useQueryClient();
   const [areaDireito, setAreaDireito] = useState("");
   const [tipoPeticao, setTipoPeticao] = useState("");
   const [dataPublicacao, setDataPublicacao] = useState<Date | undefined>();
@@ -134,6 +137,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [tutelaUrgencia, setTutelaUrgencia] = useState("nao");
   const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
@@ -236,7 +240,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setMostrarDeletados(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!areaDireito) {
       toast({
@@ -246,12 +250,47 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       });
       return;
     }
-    toast({
-      title: "Solicitação enviada",
-      description: "Sua nova solicitação foi registrada com sucesso.",
-    });
-    reset();
-    onOpenChange(false);
+
+    setSubmitting(true);
+    try {
+      let documentIds: number[] = [];
+      if (arquivos.length > 0) {
+        const uploadRes = await api.documents.upload(arquivos.map((a) => a.file));
+        documentIds = uploadRes.documents.map((d) => d.id);
+      }
+
+      await api.petitions.create({
+        area_direito: areaDireito,
+        tipo_peticao: tipoPeticao,
+        numero_processo: numeroProcesso,
+        data_publicacao: dataPublicacao ? format(dataPublicacao, "yyyy-MM-dd") : "",
+        justica_gratuita: justicaGratuita === "sim",
+        tutela_urgencia: tutelaUrgencia === "sim",
+        advogado_subscritor: advogadoSubscritor,
+        resumo_caso: resumoCaso,
+        detalhes,
+        partes: partes.map((p) => ({ nome: p.nome, tipo: p.tipo })),
+        document_ids: documentIds,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["petitions"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+
+      toast({
+        title: "Solicitação enviada",
+        description: "Sua nova solicitação foi registrada com sucesso.",
+      });
+      reset();
+      onOpenChange(false);
+    } catch (err: unknown) {
+      toast({
+        title: "Erro ao enviar",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -809,9 +848,10 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </Button>
             <Button
               type="submit"
+              disabled={submitting}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
-              Enviar solicitação
+              {submitting ? "Enviando..." : "Enviar solicitação"}
             </Button>
           </DialogFooter>
         </form>

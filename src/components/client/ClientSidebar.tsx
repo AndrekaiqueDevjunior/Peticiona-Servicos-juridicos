@@ -1,5 +1,6 @@
 import { Home, FileText, Wallet, UserCircle, LogOut } from "lucide-react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/auth";
 import {
   Sidebar,
   SidebarContent,
@@ -26,6 +27,8 @@ export function ClientSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const isActive = (url: string, end?: boolean) =>
     end ? location.pathname === url : location.pathname.startsWith(url);
@@ -78,11 +81,15 @@ export function ClientSidebar() {
       <SidebarFooter className="border-t border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Sair">
-              <NavLink to="/">
-                <LogOut className="h-4 w-4" />
-                <span>Sair</span>
-              </NavLink>
+            <SidebarMenuButton
+              tooltip="Sair"
+              onClick={() => {
+                logout();
+                navigate("/");
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              <span>Sair</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

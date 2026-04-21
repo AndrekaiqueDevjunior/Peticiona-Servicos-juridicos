@@ -1,9 +1,42 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
+import { api } from "@/lib/api";
 
-const Account = () => {
+export default function Account() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: user } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.me.get(),
+  });
+
+  const [fullName, setFullName] = useState("");
+  const [oabNumber, setOabNumber] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      setFullName(user.full_name);
+      setOabNumber(user.oab_number ?? "");
+    }
+  }, [user]);
+
+  const mutation = useMutation({
+    mutationFn: () => api.me.update({ full_name: fullName, oab_number: oabNumber }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["me"] });
+      toast({ title: "Dados atualizados com sucesso." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
@@ -22,31 +55,39 @@ const Account = () => {
         <CardContent>
           <form
             className="grid gap-4 sm:grid-cols-2"
-            onSubmit={(e) => e.preventDefault()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              mutation.mutate();
+            }}
           >
             <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="name">Nome completo</Label>
-              <Input id="name" defaultValue="João da Silva" />
+              <Input
+                id="name"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" defaultValue="joao@exemplo.com" />
+              <Input id="email" type="email" value={user?.email ?? ""} disabled />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="phone">WhatsApp</Label>
-              <Input id="phone" defaultValue="(11) 99999-9999" />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="doc">CPF / CNPJ</Label>
-              <Input id="doc" defaultValue="000.000.000-00" />
-            </div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="oab">OAB (opcional)</Label>
-              <Input id="oab" placeholder="UF 000000" />
+              <Input
+                id="oab"
+                placeholder="UF 000000"
+                value={oabNumber}
+                onChange={(e) => setOabNumber(e.target.value)}
+              />
             </div>
             <div className="sm:col-span-2 flex justify-end">
-              <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
-                Salvar alterações
+              <Button
+                type="submit"
+                disabled={mutation.isPending}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {mutation.isPending ? "Salvando..." : "Salvar alterações"}
               </Button>
             </div>
           </form>
@@ -61,14 +102,14 @@ const Account = () => {
           <div>
             <p className="font-medium text-foreground">Senha</p>
             <p className="text-sm text-muted-foreground">
-              Última alteração há 30 dias.
+              Altere sua senha de acesso.
             </p>
           </div>
-          <Button variant="outline">Alterar senha</Button>
+          <Button variant="outline" disabled>
+            Em breve
+          </Button>
         </CardContent>
       </Card>
     </div>
   );
-};
-
-export default Account;
+}
