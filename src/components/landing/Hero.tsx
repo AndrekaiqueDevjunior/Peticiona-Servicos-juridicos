@@ -28,8 +28,8 @@ const Hero = () => (
       <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-b from-transparent to-background" />
     </div>
 
-    <div className="container relative grid min-h-[520px] items-center pt-10 pb-20 md:pt-14 md:pb-28">
-      <div className="max-w-2xl animate-fade-up">
+    <div className="container relative grid min-h-[520px] items-center justify-center pt-10 pb-20 md:pt-14 md:pb-28">
+      <div className="max-w-2xl animate-fade-up text-center">
         <div className="mb-6 inline-flex items-center gap-2 border border-accent/40 bg-primary/40 px-3 py-1 text-[11px] uppercase tracking-[0.22em] backdrop-blur text-primary-foreground">
           <ShieldCheck className="h-3.5 w-3.5" />
           Petições jurídicas para advogados
@@ -38,11 +38,11 @@ const Hero = () => (
           Seu escritório pode produzir mais
           <span className="block italic text-accent">— sem você trabalhar mais.</span>
         </h1>
-        <p className="mt-6 max-w-xl text-base leading-relaxed text-secondary-foreground">
+        <p className="mt-6 max-w-xl text-base leading-relaxed text-secondary-foreground mx-auto">
           Enquanto você atende e fecha novos clientes, nós cuidamos das suas petições
           com precisão e agilidade.
         </p>
-        <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-10 flex flex-col gap-3 sm:flex-row justify-center">
           <Button asChild size="lg" className="bg-accent text-accent-foreground shadow-gold hover:bg-accent/90">
             <Link to="/auth?mode=signup">
               Adquirir agora <ArrowRight className="ml-1 h-4 w-4" />
