@@ -244,6 +244,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setTipoPeticao("");
     setDataPublicacao(undefined);
     setNumeroProcesso("");
+    setCompetencia("");
+    setComarca("");
     setJusticaGratuita("nao");
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
