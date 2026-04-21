@@ -43,7 +43,7 @@ export default function Orders() {
             </div>
           ) : !data?.petitions.length ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
-              Nenhuma solicitação ainda. Use o botão "Nova solicitação" para começar.
+              Nenhum pedido ainda. Use o botão "Novo pedido" para começar.
             </p>
           ) : (
             <ul className="divide-y divide-border">
