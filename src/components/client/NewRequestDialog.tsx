@@ -3,6 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
+  calcularPrecoPedido,
+  formatBRL,
+  useUserPricingProfile,
+  type Modalidade,
+} from "@/lib/pricing";
+import {
   AlertCircle,
   CalendarIcon,
   CheckCircle2,
