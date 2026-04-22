@@ -424,6 +424,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         })),
         modalidadeLabel: pricing.labelFinal,
         valor: valorPedido,
+        prazoEntregaClienteISO: prazoCalc?.entregaClienteISO,
+        prazoEntregaInternoISO: prazoCalc?.entregaInternaISO,
       });
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
@@ -1140,6 +1142,22 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                         {pricing.labelFinal}
                       </span>
                     </div>
+                    {prazoCalc && (
+                      <>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Prazo</span>
+                          <span className="font-medium text-foreground">
+                            {prazoCalc.descricao}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Entrega prevista</span>
+                          <span className="font-medium text-foreground">
+                            {format(new Date(prazoCalc.entregaClienteISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between">
