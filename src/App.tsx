@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
+import Signup from "./pages/Signup.tsx";
 import ClientLayout from "./pages/client/ClientLayout.tsx";
 import Dashboard from "./pages/client/Dashboard.tsx";
 import Orders from "./pages/client/Orders.tsx";
@@ -38,6 +39,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/cadastro" element={<Signup />} />
             <Route path="/area-cliente" element={<ClientLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="pedidos" element={<Orders />} />
