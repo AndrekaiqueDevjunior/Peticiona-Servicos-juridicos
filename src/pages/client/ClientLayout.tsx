@@ -5,9 +5,13 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ClientSidebar } from "@/components/client/ClientSidebar";
 import { NewRequestDialog } from "@/components/client/NewRequestDialog";
+import { TermsAcceptanceDialog } from "@/components/client/TermsAcceptanceDialog";
+import { useTermsAcceptance, TERMS_VERSION } from "@/lib/terms";
 
 const ClientLayout = () => {
   const [openNewRequest, setOpenNewRequest] = useState(false);
+  const acceptance = useTermsAcceptance();
+  const needsTerms = !acceptance || acceptance.version !== TERMS_VERSION;
 
   return (
     <SidebarProvider>
@@ -45,6 +49,7 @@ const ClientLayout = () => {
       </div>
 
       <NewRequestDialog open={openNewRequest} onOpenChange={setOpenNewRequest} />
+      <TermsAcceptanceDialog open={needsTerms} />
     </SidebarProvider>
   );
 };
