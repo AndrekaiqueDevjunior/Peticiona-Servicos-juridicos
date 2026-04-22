@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Briefcase, Lock, Mail, User } from "lucide-react";
+import { ArrowLeft, Briefcase, IdCard, Lock, Mail, Phone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { profileSignupSchema, setProfileOnSignup } from "@/lib/clientProfile";
 import logo from "@/assets/peticiona-logo.png";
 
 const Auth = () => {
@@ -23,8 +24,10 @@ const Auth = () => {
 
   const [form, setForm] = useState({
     full_name: "",
-    email: "",
+    cpf: "",
     oab_number: "",
+    phone: "",
+    email: "",
     password: "",
     confirm_password: "",
   });
@@ -41,12 +44,34 @@ const Auth = () => {
           toast({ title: "Senhas não conferem", variant: "destructive" });
           return;
         }
+        const validated = profileSignupSchema.safeParse({
+          fullName: form.full_name,
+          cpf: form.cpf,
+          oab: form.oab_number,
+          phone: form.phone,
+          email: form.email,
+        });
+        if (!validated.success) {
+          toast({
+            title: "Verifique os campos",
+            description: validated.error.issues[0]?.message ?? "Dados inválidos.",
+            variant: "destructive",
+          });
+          return;
+        }
         await register({
           full_name: form.full_name,
           email: form.email,
           oab_number: form.oab_number,
           password: form.password,
           confirm_password: form.confirm_password,
+        });
+        setProfileOnSignup({
+          fullName: validated.data.fullName,
+          cpf: validated.data.cpf,
+          oab: validated.data.oab,
+          phone: validated.data.phone,
+          email: validated.data.email,
         });
       } else {
         await login(form.email, form.password);
@@ -109,7 +134,7 @@ const Auth = () => {
               <form className="grid gap-4" onSubmit={handleSubmit}>
                 {isSignup && (
                   <div className="grid gap-2">
-                    <Label htmlFor="name">Nome completo</Label>
+                    <Label htmlFor="name">Nome completo *</Label>
                     <div className="relative">
                       <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
@@ -118,6 +143,44 @@ const Auth = () => {
                         className="pl-9"
                         value={form.full_name}
                         onChange={set("full_name")}
+                        maxLength={120}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isSignup && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="cpf">CPF *</Label>
+                    <div className="relative">
+                      <IdCard className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="cpf"
+                        placeholder="000.000.000-00"
+                        className="pl-9"
+                        value={form.cpf}
+                        onChange={set("cpf")}
+                        maxLength={14}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {isSignup && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="phone">Telefone / WhatsApp *</Label>
+                    <div className="relative">
+                      <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="phone"
+                        inputMode="tel"
+                        placeholder="(11) 91234-5678"
+                        className="pl-9"
+                        value={form.phone}
+                        onChange={set("phone")}
+                        maxLength={20}
                         required
                       />
                     </div>
@@ -125,7 +188,7 @@ const Auth = () => {
                 )}
 
                 <div className="grid gap-2">
-                  <Label htmlFor="email">E-mail</Label>
+                  <Label htmlFor="email">E-mail{isSignup && " *"}</Label>
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
@@ -135,6 +198,7 @@ const Auth = () => {
                       className="pl-9"
                       value={form.email}
                       onChange={set("email")}
+                      maxLength={255}
                       required
                     />
                   </div>
@@ -142,15 +206,17 @@ const Auth = () => {
 
                 {isSignup && (
                   <div className="grid gap-2">
-                    <Label htmlFor="oab">OAB (opcional)</Label>
+                    <Label htmlFor="oab">OAB / UF *</Label>
                     <div className="relative">
                       <Briefcase className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="oab"
-                        placeholder="UF 000000"
+                        placeholder="SP 123456"
                         className="pl-9"
                         value={form.oab_number}
                         onChange={set("oab_number")}
+                        maxLength={20}
+                        required
                       />
                     </div>
                   </div>
