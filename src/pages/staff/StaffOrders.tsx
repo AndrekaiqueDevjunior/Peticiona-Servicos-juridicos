@@ -311,6 +311,14 @@ function StaffPedidoDialog({ pedido, onClose }: { pedido: Pedido | null; onClose
           <ReadonlySection title="Serviço">
             <ReadonlyField label="Modalidade" value={pedido.modalidadeLabel} />
             <ReadonlyField label="Valor" value={formatBRL(pedido.valor)} />
+            <ReadonlyField
+              label="Entrega cliente"
+              value={formatDateTime(pedido.prazoEntregaClienteISO)}
+            />
+            <ReadonlyField
+              label="Entrega interna"
+              value={formatDateTime(pedido.prazoEntregaInternoISO)}
+            />
           </ReadonlySection>
 
           <ReadonlySection title="1. Dados da solicitação">
