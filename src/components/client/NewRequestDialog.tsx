@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
   calcularPrecoPedido,
@@ -8,6 +8,7 @@ import {
   useUserPricingProfile,
   type Modalidade,
 } from "@/lib/pricing";
+import { useBalance, getSaldoTotal, debitarPedido } from "@/lib/balance";
 import {
   AlertCircle,
   CalendarIcon,
@@ -226,11 +227,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const valorPedido = pricing.precoFinal;
   const tipoReconhecido = pricing.precoPadrao !== null;
 
-  const { data: balanceData } = useQuery({
-    queryKey: ["balance"],
-    queryFn: () => api.me.balance(),
-  });
-  const saldoAtual = balanceData?.credits_available ?? 0;
+  const balance = useBalance();
+  const saldoAtual = getSaldoTotal(balance);
   const saldoApos = saldoAtual - valorPedido;
   const semSaldo = tipoReconhecido && saldoAtual < valorPedido;
 
@@ -391,9 +389,11 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         document_ids: documentIds,
       });
 
+      // Débito automático em R$ — prioriza saldo do plano, depois avulso.
+      debitarPedido(valorPedido, `${tipoPeticao} — ${pricing.labelFinal}`);
+
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["balance"] });
 
       setSuccess(true);
     } catch (err: unknown) {

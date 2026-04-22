@@ -3,8 +3,6 @@
 // compras de Petição/Recurso Express). Hoje retornamos um mock — basta
 // substituir o hook quando o backend existir.
 
-import { useQuery } from "@tanstack/react-query";
-
 export type PlanoAtivo = "essencial" | "profissional" | "estrategico" | null;
 
 export interface UserPricingProfile {
@@ -151,18 +149,19 @@ export const calcularPrecoPedido = (
   };
 };
 
-// ---- Hook (mock) -----------------------------------------------------------
-// Substituir o queryFn quando o backend expuser /me/pricing-profile.
+// ---- Hook ------------------------------------------------------------------
+// Lê do store local de saldo (mock). Substituir pelo backend quando existir
+// /me/pricing-profile.
+import { useBalance } from "@/lib/balance";
+
 export const useUserPricingProfile = () => {
-  return useQuery<UserPricingProfile>({
-    queryKey: ["user-pricing-profile"],
-    queryFn: async () => ({
-      plano: null,
-      peticaoExpressDisponivel: false,
-      recursoExpressDisponivel: false,
-    }),
-    staleTime: Infinity,
-  });
+  const balance = useBalance();
+  const profile: UserPricingProfile = {
+    plano: balance.planoAtivo,
+    peticaoExpressDisponivel: balance.peticaoExpressDisponivel,
+    recursoExpressDisponivel: balance.recursoExpressDisponivel,
+  };
+  return { data: profile } as { data: UserPricingProfile };
 };
 
 export const formatBRL = (v: number) =>
