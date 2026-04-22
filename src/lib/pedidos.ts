@@ -53,14 +53,28 @@ export interface PedidoComentario {
   autorNome: string;
   texto: string;
   dataISO: string;
+  interno?: boolean; // comentários internos visíveis somente para a equipe
+}
+
+export interface PedidoEntregaFinal {
+  id: string;
+  nome: string;
+  tamanho: number;
+  tipo: string;
+  dataISO: string;
+  enviadoPor: string;
 }
 
 export interface Pedido {
   id: string;
+  numero: number; // numeração sequencial começando em 1234
   reference: string;
   criadoEmISO: string;
+  prazoEntregaClienteISO: string; // prazo final acordado com o cliente
+  prazoEntregaInternoISO: string; // 2 dias antes do prazo do cliente
   status: PedidoStatus;
   statusAtualizadoEmISO: string;
+  finalizadoEmISO?: string; // quando virou "concluido"
 
   // Dados do formulário (somente leitura)
   areaDireito: string;
@@ -84,6 +98,7 @@ export interface Pedido {
   // Pós-criação
   comentarios: PedidoComentario[];
   anexosCliente: PedidoAnexoCliente[];
+  entregasFinais: PedidoEntregaFinal[];
 }
 
 interface PedidosState {
@@ -137,34 +152,64 @@ const newId = () =>
     ? crypto.randomUUID()
     : Math.random().toString(36).slice(2);
 
-const nextReference = (): string => {
+const NUMERO_INICIAL = 1234;
+
+const proximoNumero = (): number => {
+  const max = state.pedidos.reduce((m, p) => Math.max(m, p.numero ?? 0), 0);
+  return Math.max(NUMERO_INICIAL, max + 1);
+};
+
+const nextReference = (numero: number): string => {
   const ano = new Date().getFullYear();
-  const seq = state.pedidos.length + 1;
-  return `PT-${ano}-${String(seq).padStart(4, "0")}`;
+  return `PT-${ano}-${String(numero).padStart(4, "0")}`;
+};
+
+// Prazo padrão de entrega ao cliente: 5 dias corridos a partir da criação.
+// Prazo interno: 2 dias corridos antes do prazo do cliente.
+const DIAS_PRAZO_CLIENTE = 5;
+const DIAS_ANTECEDENCIA_INTERNA = 2;
+
+const addDias = (base: Date, dias: number) => {
+  const d = new Date(base);
+  d.setDate(d.getDate() + dias);
+  return d;
 };
 
 export type CriarPedidoInput = Omit<
   Pedido,
   | "id"
+  | "numero"
   | "reference"
   | "criadoEmISO"
+  | "prazoEntregaClienteISO"
+  | "prazoEntregaInternoISO"
   | "status"
   | "statusAtualizadoEmISO"
+  | "finalizadoEmISO"
   | "comentarios"
   | "anexosCliente"
+  | "entregasFinais"
 >;
 
 export const criarPedido = (input: CriarPedidoInput): Pedido => {
-  const agora = new Date().toISOString();
+  const agora = new Date();
+  const agoraISO = agora.toISOString();
+  const numero = proximoNumero();
+  const prazoCliente = addDias(agora, DIAS_PRAZO_CLIENTE);
+  const prazoInterno = addDias(prazoCliente, -DIAS_ANTECEDENCIA_INTERNA);
   const novo: Pedido = {
     ...input,
     id: newId(),
-    reference: nextReference(),
-    criadoEmISO: agora,
+    numero,
+    reference: nextReference(numero),
+    criadoEmISO: agoraISO,
+    prazoEntregaClienteISO: prazoCliente.toISOString(),
+    prazoEntregaInternoISO: prazoInterno.toISOString(),
     status: "em_analise",
-    statusAtualizadoEmISO: agora,
+    statusAtualizadoEmISO: agoraISO,
     comentarios: [],
     anexosCliente: [],
+    entregasFinais: [],
   };
   setState((s) => ({ ...s, pedidos: [novo, ...s.pedidos] }));
   return novo;
@@ -175,6 +220,7 @@ export const adicionarComentario = (
   texto: string,
   autor: "cliente" | "equipe" = "cliente",
   autorNome = autor === "cliente" ? "Você" : "Equipe Peticiona",
+  interno = false,
 ) => {
   setState((s) => ({
     ...s,
@@ -190,6 +236,7 @@ export const adicionarComentario = (
                 autorNome,
                 texto,
                 dataISO: new Date().toISOString(),
+                interno,
               },
             ],
           }
@@ -217,14 +264,44 @@ export const adicionarAnexosCliente = (pedidoId: string, files: File[]) => {
   }));
 };
 
-// Apenas para fins de demonstração / testes manuais — equipe interna.
-export const atualizarStatus = (pedidoId: string, status: PedidoStatus) => {
+export const adicionarEntregaFinal = (
+  pedidoId: string,
+  files: File[],
+  enviadoPor = "Equipe Peticiona",
+) => {
+  if (!files.length) return;
+  const novas: PedidoEntregaFinal[] = files.map((f) => ({
+    id: newId(),
+    nome: f.name,
+    tamanho: f.size,
+    tipo: f.type,
+    dataISO: new Date().toISOString(),
+    enviadoPor,
+  }));
   setState((s) => ({
     ...s,
     pedidos: s.pedidos.map((p) =>
       p.id === pedidoId
-        ? { ...p, status, statusAtualizadoEmISO: new Date().toISOString() }
+        ? { ...p, entregasFinais: [...p.entregasFinais, ...novas] }
         : p,
     ),
   }));
 };
+
+export const atualizarStatus = (pedidoId: string, status: PedidoStatus) => {
+  setState((s) => ({
+    ...s,
+    pedidos: s.pedidos.map((p) => {
+      if (p.id !== pedidoId) return p;
+      const agora = new Date().toISOString();
+      return {
+        ...p,
+        status,
+        statusAtualizadoEmISO: agora,
+        finalizadoEmISO:
+          status === "concluido" ? p.finalizadoEmISO ?? agora : p.finalizadoEmISO,
+      };
+    }),
+  }));
+};
+

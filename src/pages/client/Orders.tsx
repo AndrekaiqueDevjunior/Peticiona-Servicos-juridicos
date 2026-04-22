@@ -366,11 +366,13 @@ function PedidoDetailsDialog({ pedido, onClose }: DetailsProps) {
       };
 
   const timeline: TimelineItem[] = [
-    ...pedido.comentarios.map((c) => ({
-      kind: "comentario" as const,
-      dataISO: c.dataISO,
-      data: c,
-    })),
+    ...pedido.comentarios
+      .filter((c) => !c.interno)
+      .map((c) => ({
+        kind: "comentario" as const,
+        dataISO: c.dataISO,
+        data: c,
+      })),
     ...pedido.anexosCliente.map((a) => ({
       kind: "anexo" as const,
       dataISO: a.dataISO,

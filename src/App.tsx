@@ -12,6 +12,10 @@ import Dashboard from "./pages/client/Dashboard.tsx";
 import Orders from "./pages/client/Orders.tsx";
 import Balance from "./pages/client/Balance.tsx";
 import Account from "./pages/client/Account.tsx";
+import StaffLayout from "./pages/staff/StaffLayout.tsx";
+import StaffProfile from "./pages/staff/Profile.tsx";
+import StaffOrders from "./pages/staff/StaffOrders.tsx";
+import StaffFinancial from "./pages/staff/Financial.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -39,6 +43,12 @@ const App = () => (
               <Route path="pedidos" element={<Orders />} />
               <Route path="saldos" element={<Balance />} />
               <Route path="conta" element={<Account />} />
+            </Route>
+            <Route path="/area-interna" element={<StaffLayout />}>
+              <Route index element={<Navigate to="/area-interna/perfil" replace />} />
+              <Route path="perfil" element={<StaffProfile />} />
+              <Route path="pedidos" element={<StaffOrders />} />
+              <Route path="financeiro" element={<StaffFinancial />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
