@@ -10,6 +10,7 @@ import {
 } from "@/lib/pricing";
 import { useBalance, getSaldoTotal, debitarPedido } from "@/lib/balance";
 import { criarPedido } from "@/lib/pedidos";
+import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import {
   AlertCircle,
   CalendarIcon,
@@ -227,6 +228,14 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro, modalidade);
   const valorPedido = pricing.precoFinal;
   const tipoReconhecido = pricing.precoPadrao !== null;
+
+  // Cálculo do prazo de entrega (depende da modalidade efetiva).
+  const modalidadePrazo = modalidadeParaPrazo({
+    modalidadeEscolhida: pricing.modalidadeEscolhida,
+    grupo: pricing.grupo,
+    plano: perfilSeguro.plano,
+  });
+  const prazoCalc = modalidadePrazo ? calcularPrazo(modalidadePrazo) : null;
 
   const balance = useBalance();
   const saldoAtual = getSaldoTotal(balance);
