@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { useRole, dashboardPathForRole, type UserRole } from "@/lib/roles";
+import { useRole, setRole, dashboardPathForRole, type UserRole } from "@/lib/roles";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
@@ -45,7 +46,18 @@ function RoleRoute({
   children: React.ReactNode;
 }) {
   const role = useRole();
-  if (role !== allow) return <Navigate to={dashboardPathForRole(role)} replace />;
+  const [params] = useSearchParams();
+  const as = params.get("as") as UserRole | null;
+
+  // Atalho dev: ?as=admin|funcionario|cliente troca o role no localStorage.
+  useEffect(() => {
+    if (as && (as === "admin" || as === "funcionario" || as === "cliente") && as !== role) {
+      setRole(as);
+    }
+  }, [as, role]);
+
+  const efetivo = as ?? role;
+  if (efetivo !== allow) return <Navigate to={dashboardPathForRole(efetivo)} replace />;
   return <>{children}</>;
 }
 
