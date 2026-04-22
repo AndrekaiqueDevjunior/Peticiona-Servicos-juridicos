@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
+import { useRole, dashboardPathForRole, type UserRole } from "@/lib/roles";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
@@ -17,6 +18,13 @@ import StaffLayout from "./pages/staff/StaffLayout.tsx";
 import StaffProfile from "./pages/staff/Profile.tsx";
 import StaffOrders from "./pages/staff/StaffOrders.tsx";
 import StaffFinancial from "./pages/staff/Financial.tsx";
+import AdminLayout from "./pages/admin/AdminLayout.tsx";
+import AdminProfile from "./pages/admin/AdminProfile.tsx";
+import AdminOrders from "./pages/admin/AdminOrders.tsx";
+import AdminClients from "./pages/admin/AdminClients.tsx";
+import AdminStaff from "./pages/admin/AdminStaff.tsx";
+import AdminFinancial from "./pages/admin/AdminFinancial.tsx";
+import AdminPlans from "./pages/admin/AdminPlans.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -26,6 +34,18 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/auth" replace />;
+  return <>{children}</>;
+}
+
+function RoleRoute({
+  allow,
+  children,
+}: {
+  allow: UserRole;
+  children: React.ReactNode;
+}) {
+  const role = useRole();
+  if (role !== allow) return <Navigate to={dashboardPathForRole(role)} replace />;
   return <>{children}</>;
 }
 
@@ -51,6 +71,22 @@ const App = () => (
               <Route path="perfil" element={<StaffProfile />} />
               <Route path="pedidos" element={<StaffOrders />} />
               <Route path="financeiro" element={<StaffFinancial />} />
+            </Route>
+            <Route
+              path="/admin"
+              element={
+                <RoleRoute allow="admin">
+                  <AdminLayout />
+                </RoleRoute>
+              }
+            >
+              <Route index element={<Navigate to="/admin/perfil" replace />} />
+              <Route path="perfil" element={<AdminProfile />} />
+              <Route path="pedidos" element={<AdminOrders />} />
+              <Route path="clientes" element={<AdminClients />} />
+              <Route path="funcionarios" element={<AdminStaff />} />
+              <Route path="financeiro" element={<AdminFinancial />} />
+              <Route path="planos" element={<AdminPlans />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
