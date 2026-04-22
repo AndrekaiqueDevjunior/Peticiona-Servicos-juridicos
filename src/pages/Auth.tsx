@@ -66,7 +66,13 @@ const Auth = () => {
           password: form.password,
           confirm_password: form.confirm_password,
         });
-        setProfileOnSignup(validated.data);
+        setProfileOnSignup({
+          fullName: validated.data.fullName,
+          cpf: validated.data.cpf,
+          oab: validated.data.oab,
+          phone: validated.data.phone,
+          email: validated.data.email,
+        });
       } else {
         await login(form.email, form.password);
       }
