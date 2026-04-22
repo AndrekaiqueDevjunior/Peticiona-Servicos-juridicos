@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Briefcase, Lock, Mail, User } from "lucide-react";
+import { ArrowLeft, Briefcase, IdCard, Lock, Mail, Phone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { profileSignupSchema, setProfileOnSignup } from "@/lib/clientProfile";
 import logo from "@/assets/peticiona-logo.png";
 
 const Auth = () => {
@@ -23,8 +24,10 @@ const Auth = () => {
 
   const [form, setForm] = useState({
     full_name: "",
-    email: "",
+    cpf: "",
     oab_number: "",
+    phone: "",
+    email: "",
     password: "",
     confirm_password: "",
   });
@@ -41,6 +44,21 @@ const Auth = () => {
           toast({ title: "Senhas não conferem", variant: "destructive" });
           return;
         }
+        const validated = profileSignupSchema.safeParse({
+          fullName: form.full_name,
+          cpf: form.cpf,
+          oab: form.oab_number,
+          phone: form.phone,
+          email: form.email,
+        });
+        if (!validated.success) {
+          toast({
+            title: "Verifique os campos",
+            description: validated.error.issues[0]?.message ?? "Dados inválidos.",
+            variant: "destructive",
+          });
+          return;
+        }
         await register({
           full_name: form.full_name,
           email: form.email,
@@ -48,6 +66,7 @@ const Auth = () => {
           password: form.password,
           confirm_password: form.confirm_password,
         });
+        setProfileOnSignup(validated.data);
       } else {
         await login(form.email, form.password);
       }

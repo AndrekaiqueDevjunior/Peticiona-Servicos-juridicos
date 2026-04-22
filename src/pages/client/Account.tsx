@@ -51,7 +51,7 @@ export default function Account() {
       return;
     }
     setErrors({});
-    updateEditableProfile(result.data);
+    updateEditableProfile({ phone: result.data.phone, email: result.data.email });
     toast({ title: "Dados atualizados com sucesso." });
   };
 
