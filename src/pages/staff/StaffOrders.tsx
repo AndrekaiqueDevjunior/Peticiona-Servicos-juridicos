@@ -102,16 +102,40 @@ export default function StaffOrders() {
           ) : (
             <ul className="divide-y divide-border">
               {ordenados.map((p) => {
+                const prazoInternoDate = parseISO(p.prazoEntregaInternoISO);
+                const horasRestantes =
+                  (prazoInternoDate.getTime() - Date.now()) / (1000 * 60 * 60);
                 const diasRestantes = differenceInCalendarDays(
-                  parseISO(p.prazoEntregaInternoISO),
+                  prazoInternoDate,
                   new Date(),
                 );
-                const atrasado = diasRestantes < 0 && p.status !== "concluido";
-                const urgente = diasRestantes >= 0 && diasRestantes <= 1 && p.status !== "concluido";
+                const concluido = p.status === "concluido";
+                const atrasado = horasRestantes < 0 && !concluido;
+                // Vencendo em menos de 12h — destaque vermelho.
+                const critico = !concluido && horasRestantes >= 0 && horasRestantes < 12;
+                const urgente =
+                  !concluido && horasRestantes >= 12 && diasRestantes <= 1;
+
+                let cor = "text-muted-foreground";
+                if (atrasado || critico) cor = "text-destructive font-semibold";
+                else if (urgente) cor = "text-accent";
+
+                let sufixo: string;
+                if (atrasado) {
+                  sufixo = ` · atrasado ${Math.abs(Math.floor(horasRestantes))}h`;
+                } else if (critico) {
+                  sufixo = ` · vence em ${Math.max(1, Math.floor(horasRestantes))}h`;
+                } else {
+                  sufixo = ` · em ${diasRestantes}d`;
+                }
+
                 return (
                   <li
                     key={p.id}
-                    className="flex flex-col gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
+                    className={cn(
+                      "flex flex-col gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between",
+                      (atrasado || critico) && "bg-destructive/5",
+                    )}
                   >
                     <div className="flex items-start gap-3">
                       <div className="rounded-md bg-secondary p-2">
@@ -122,25 +146,14 @@ export default function StaffOrders() {
                           Nº {p.numero} · {tipoCompleto(p)}
                         </p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          Cliente: prazo {format(parseISO(p.prazoEntregaClienteISO), "dd/MM/yyyy", { locale: ptBR })}
+                          Cliente: prazo {format(parseISO(p.prazoEntregaClienteISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                           {p.numeroProcesso ? ` · Proc. ${p.numeroProcesso}` : ""}
                         </p>
-                        <p
-                          className={cn(
-                            "mt-1 inline-flex items-center gap-1 text-xs font-medium",
-                            atrasado
-                              ? "text-destructive"
-                              : urgente
-                              ? "text-accent"
-                              : "text-muted-foreground",
-                          )}
-                        >
+                        <p className={cn("mt-1 inline-flex items-center gap-1 text-xs", cor)}>
                           <CalendarClock className="h-3.5 w-3.5" />
                           Entrega interna:{" "}
-                          {format(parseISO(p.prazoEntregaInternoISO), "dd/MM/yyyy", { locale: ptBR })}
-                          {atrasado
-                            ? ` · atrasado ${Math.abs(diasRestantes)}d`
-                            : ` · em ${diasRestantes}d`}
+                          {format(prazoInternoDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                          {!concluido && sufixo}
                         </p>
                       </div>
                     </div>

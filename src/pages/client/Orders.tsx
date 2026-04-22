@@ -408,6 +408,10 @@ function PedidoDetailsDialog({ pedido, onClose }: DetailsProps) {
           <ReadonlySection title="Serviço">
             <ReadonlyField label="Modalidade" value={pedido.modalidadeLabel} />
             <ReadonlyField label="Valor" value={formatBRL(pedido.valor)} />
+            <ReadonlyField
+              label="Entrega prevista"
+              value={formatDateTime(pedido.prazoEntregaClienteISO)}
+            />
           </ReadonlySection>
 
           {/* 1. Solicitação */}
