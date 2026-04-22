@@ -153,6 +153,8 @@ export default function StaffFinancial() {
                       <TableHead>Tipo de serviço</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Criado em</TableHead>
+                      <TableHead>Prazo cliente</TableHead>
+                      <TableHead>Prazo interno</TableHead>
                       <TableHead>Entregue em</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                     </TableRow>
@@ -182,6 +184,12 @@ export default function StaffFinancial() {
                           {format(parseISO(p.criadoEmISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
+                          {format(parseISO(p.prazoEntregaClienteISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {format(parseISO(p.prazoEntregaInternoISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
                           {p.finalizadoEmISO
                             ? format(parseISO(p.finalizadoEmISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
                             : "—"}
@@ -192,7 +200,7 @@ export default function StaffFinancial() {
                       </TableRow>
                     ))}
                     <TableRow className="bg-secondary/40 hover:bg-secondary/40">
-                      <TableCell colSpan={5} className="text-right font-semibold">
+                      <TableCell colSpan={7} className="text-right font-semibold">
                         Subtotal {MESES[m]}/{y}
                       </TableCell>
                       <TableCell className="text-right font-semibold text-primary">

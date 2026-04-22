@@ -189,22 +189,33 @@ export type CriarPedidoInput = Omit<
   | "comentarios"
   | "anexosCliente"
   | "entregasFinais"
->;
+> & {
+  /** Opcional — se passado, sobrescreve o cálculo padrão de 5 dias. */
+  prazoEntregaClienteISO?: string;
+  /** Opcional — calculado como -2 dias do prazo do cliente quando ausente. */
+  prazoEntregaInternoISO?: string;
+};
 
 export const criarPedido = (input: CriarPedidoInput): Pedido => {
   const agora = new Date();
   const agoraISO = agora.toISOString();
   const numero = proximoNumero();
-  const prazoCliente = addDias(agora, DIAS_PRAZO_CLIENTE);
-  const prazoInterno = addDias(prazoCliente, -DIAS_ANTECEDENCIA_INTERNA);
+
+  const prazoClienteISO =
+    input.prazoEntregaClienteISO ??
+    addDias(agora, DIAS_PRAZO_CLIENTE).toISOString();
+  const prazoInternoISO =
+    input.prazoEntregaInternoISO ??
+    addDias(new Date(prazoClienteISO), -DIAS_ANTECEDENCIA_INTERNA).toISOString();
+
   const novo: Pedido = {
     ...input,
     id: newId(),
     numero,
     reference: nextReference(numero),
     criadoEmISO: agoraISO,
-    prazoEntregaClienteISO: prazoCliente.toISOString(),
-    prazoEntregaInternoISO: prazoInterno.toISOString(),
+    prazoEntregaClienteISO: prazoClienteISO,
+    prazoEntregaInternoISO: prazoInternoISO,
     status: "em_analise",
     statusAtualizadoEmISO: agoraISO,
     comentarios: [],
