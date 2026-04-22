@@ -44,6 +44,12 @@ const App = () => (
               <Route path="saldos" element={<Balance />} />
               <Route path="conta" element={<Account />} />
             </Route>
+            <Route path="/area-interna" element={<StaffLayout />}>
+              <Route index element={<Navigate to="/area-interna/perfil" replace />} />
+              <Route path="perfil" element={<StaffProfile />} />
+              <Route path="pedidos" element={<StaffOrders />} />
+              <Route path="financeiro" element={<StaffFinancial />} />
+            </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
