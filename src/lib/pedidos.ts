@@ -53,14 +53,28 @@ export interface PedidoComentario {
   autorNome: string;
   texto: string;
   dataISO: string;
+  interno?: boolean; // comentários internos visíveis somente para a equipe
+}
+
+export interface PedidoEntregaFinal {
+  id: string;
+  nome: string;
+  tamanho: number;
+  tipo: string;
+  dataISO: string;
+  enviadoPor: string;
 }
 
 export interface Pedido {
   id: string;
+  numero: number; // numeração sequencial começando em 1234
   reference: string;
   criadoEmISO: string;
+  prazoEntregaClienteISO: string; // prazo final acordado com o cliente
+  prazoEntregaInternoISO: string; // 2 dias antes do prazo do cliente
   status: PedidoStatus;
   statusAtualizadoEmISO: string;
+  finalizadoEmISO?: string; // quando virou "concluido"
 
   // Dados do formulário (somente leitura)
   areaDireito: string;
