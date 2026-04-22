@@ -9,6 +9,7 @@ import {
   type Modalidade,
 } from "@/lib/pricing";
 import { useBalance, getSaldoTotal, debitarPedido } from "@/lib/balance";
+import { criarPedido } from "@/lib/pedidos";
 import {
   AlertCircle,
   CalendarIcon,
@@ -391,6 +392,30 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
       // Débito automático em R$ — prioriza saldo do plano, depois avulso.
       debitarPedido(valorPedido, `${tipoPeticao} — ${pricing.labelFinal}`);
+
+      // Persiste o pedido completo no store local para a aba "Meus pedidos".
+      criarPedido({
+        areaDireito,
+        tipoPeticao,
+        numeroProcesso,
+        dataPublicacao: dataPublicacao ? format(dataPublicacao, "yyyy-MM-dd") : "",
+        competencia,
+        comarca,
+        justicaGratuita: justicaGratuita === "sim",
+        tutelaUrgencia: tutelaUrgencia === "sim",
+        advogadoSubscritor,
+        resumoCaso,
+        detalhes,
+        partes: partes.map((p) => ({ nome: p.nome, tipo: p.tipo })),
+        anexosOriginais: arquivos.map((a) => ({
+          id: a.id,
+          nome: a.file.name,
+          tamanho: a.file.size,
+          tipo: a.file.type,
+        })),
+        modalidadeLabel: pricing.labelFinal,
+        valor: valorPedido,
+      });
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
