@@ -389,9 +389,11 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         document_ids: documentIds,
       });
 
+      // Débito automático em R$ — prioriza saldo do plano, depois avulso.
+      debitarPedido(valorPedido, `${tipoPeticao} — ${pricing.labelFinal}`);
+
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-      queryClient.invalidateQueries({ queryKey: ["balance"] });
 
       setSuccess(true);
     } catch (err: unknown) {
