@@ -9,6 +9,7 @@ import {
   type Modalidade,
 } from "@/lib/pricing";
 import { useBalance, getSaldoTotal, debitarPedido } from "@/lib/balance";
+import { criarPedido } from "@/lib/pedidos";
 import {
   AlertCircle,
   CalendarIcon,
