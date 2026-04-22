@@ -98,6 +98,7 @@ export interface Pedido {
   // Pós-criação
   comentarios: PedidoComentario[];
   anexosCliente: PedidoAnexoCliente[];
+  entregasFinais: PedidoEntregaFinal[];
 }
 
 interface PedidosState {
