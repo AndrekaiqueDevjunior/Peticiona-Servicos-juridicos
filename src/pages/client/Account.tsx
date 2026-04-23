@@ -58,7 +58,11 @@ export default function Account() {
   // Dados imutáveis — fallback para o backend quando o perfil local não tem.
   const fullName = profile.fullName || user?.full_name || "";
   const cpf = profile.cpf || "";
-  const oab = profile.oab || user?.oab_number || "";
+  const oab = profile.oab
+    ? profile.oabUf
+      ? `${profile.oab}/${profile.oabUf}`
+      : profile.oab
+    : user?.oab_number || "";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
