@@ -10,7 +10,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+.cache
 *.local
+.env
+.venv/
+.codex
+reference/
+**/__pycache__/
+*.pyc
+*.sqlite3
 
 # Editor directories and files
 .vscode/*

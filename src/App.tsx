@@ -72,13 +72,13 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/cadastro" element={<Signup />} />
-            <Route path="/area-cliente" element={<ClientLayout />}>
+            <Route path="/area-cliente" element={<ProtectedRoute><ClientLayout /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
               <Route path="pedidos" element={<Orders />} />
               <Route path="saldos" element={<Balance />} />
               <Route path="conta" element={<Account />} />
             </Route>
-            <Route path="/area-interna" element={<StaffLayout />}>
+            <Route path="/area-interna" element={<ProtectedRoute><StaffLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="/area-interna/perfil" replace />} />
               <Route path="perfil" element={<StaffProfile />} />
               <Route path="pedidos" element={<StaffOrders />} />

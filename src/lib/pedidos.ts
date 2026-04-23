@@ -299,6 +299,12 @@ export const adicionarEntregaFinal = (
   }));
 };
 
+/** Reseta o store para o estado inicial. Uso exclusivo em testes. */
+export const _resetForTest = () => {
+  state = { pedidos: [] };
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+};
+
 export const atualizarStatus = (pedidoId: string, status: PedidoStatus) => {
   setState((s) => ({
     ...s,

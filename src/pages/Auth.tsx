@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
+import { getRole, dashboardPathForRole } from "@/lib/roles";
 import logo from "@/assets/peticiona-logo.png";
 
 const Auth = () => {
@@ -22,7 +23,7 @@ const Auth = () => {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/area-cliente");
+      navigate(dashboardPathForRole(getRole()));
     } catch (err: unknown) {
       toast({
         title: "Erro",

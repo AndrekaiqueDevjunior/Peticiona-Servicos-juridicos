@@ -10,7 +10,10 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:frontend": "vitest run",
+    "test:backend": "bash ./scripts/run-backend-tests.sh",
+    "preflight:prod": "bash ./scripts/preflight-production.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

@@ -195,6 +195,12 @@ export const debitarPedido = (
   return { ok: true };
 };
 
+/** Reseta o store para o estado inicial. Uso exclusivo em testes. */
+export const _resetForTest = () => {
+  state = { ...initialState };
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* noop */ }
+};
+
 export const PLANOS_INFO = [
   {
     id: "essencial" as const,
