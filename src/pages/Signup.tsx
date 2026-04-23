@@ -4,9 +4,20 @@ import { ArrowLeft, Briefcase, IdCard, Lock, Mail, Phone, User } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { profileSignupSchema, setProfileOnSignup } from "@/lib/clientProfile";
+import {
+  BRAZILIAN_UF_OPTIONS,
+  profileSignupSchema,
+  setProfileOnSignup,
+} from "@/lib/clientProfile";
 import { isValidCPF, maskCPF, maskOAB, maskPhone } from "@/lib/masks";
 import logo from "@/assets/peticiona-logo.png";
 
@@ -16,6 +27,7 @@ interface FormState {
   email: string;
   cpf: string;
   oab: string;
+  oab_uf: string;
   password: string;
   confirm_password: string;
 }
@@ -26,6 +38,7 @@ const initial: FormState = {
   email: "",
   cpf: "",
   oab: "",
+  oab_uf: "",
   password: "",
   confirm_password: "",
 };
@@ -51,6 +64,7 @@ const Signup = () => {
       fullName: form.full_name,
       cpf: form.cpf,
       oab: form.oab,
+      oabUf: form.oab_uf,
       phone: form.phone,
       email: form.email,
     });
@@ -60,6 +74,7 @@ const Signup = () => {
           fullName: "full_name",
           cpf: "cpf",
           oab: "oab",
+          oabUf: "oab_uf",
           phone: "phone",
           email: "email",
         };
@@ -89,7 +104,7 @@ const Signup = () => {
       await register({
         full_name: form.full_name,
         email: form.email,
-        oab_number: form.oab,
+        oab_number: `${form.oab}/${form.oab_uf}`,
         password: form.password,
         confirm_password: form.confirm_password,
       });
@@ -97,6 +112,7 @@ const Signup = () => {
         fullName: form.full_name,
         cpf: form.cpf,
         oab: form.oab,
+        oabUf: form.oab_uf,
         phone: form.phone,
         email: form.email,
       });
@@ -226,19 +242,41 @@ const Signup = () => {
                   </div>
 
                   <div className="grid gap-1.5">
-                    <Label htmlFor="oab">OAB/UF *</Label>
-                    <div className="relative">
-                      <Briefcase className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        id="oab"
-                        placeholder="123456/SP"
-                        className={fieldClass("oab")}
-                        value={form.oab}
-                        onChange={(e) => update("oab", maskOAB(e.target.value))}
-                        maxLength={10}
-                      />
+                    <Label>OAB / UF *</Label>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_112px]">
+                      <div className="relative">
+                        <Briefcase className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          id="oab"
+                          inputMode="numeric"
+                          placeholder="Número da OAB"
+                          className={fieldClass("oab")}
+                          value={form.oab}
+                          onChange={(e) => update("oab", maskOAB(e.target.value))}
+                          maxLength={10}
+                        />
+                      </div>
+
+                      <Select value={form.oab_uf} onValueChange={(value) => update("oab_uf", value)}>
+                        <SelectTrigger
+                          id="oab_uf"
+                          className={errors.oab_uf ? "border-destructive focus:ring-destructive" : undefined}
+                          aria-invalid={!!errors.oab_uf}
+                        >
+                          <SelectValue placeholder="UF" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BRAZILIAN_UF_OPTIONS.map((uf) => (
+                            <SelectItem key={uf} value={uf}>
+                              {uf}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    {errors.oab && <p className="text-xs text-destructive">{errors.oab}</p>}
+                    {(errors.oab || errors.oab_uf) && (
+                      <p className="text-xs text-destructive">{errors.oab || errors.oab_uf}</p>
+                    )}
                   </div>
                 </div>
 
