@@ -9,6 +9,7 @@ export interface RegisterPayload {
   full_name: string;
   email: string;
   oab_number: string;
+  oab_uf?: string;
   password: string;
   confirm_password: string;
 }
