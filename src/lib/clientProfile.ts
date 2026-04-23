@@ -10,6 +10,7 @@ export interface ClientProfile {
   fullName: string;
   cpf: string;
   oab: string;
+  oabUf: string;
   phone: string;
   email: string;
 }
@@ -20,6 +21,7 @@ const empty: ClientProfile = {
   fullName: "",
   cpf: "",
   oab: "",
+  oabUf: "",
   phone: "",
   email: "",
 };
@@ -76,8 +78,12 @@ export const updateEditableProfile = (data: Pick<ClientProfile, "phone" | "email
 
 // CPF — apenas formato (11 dígitos com máscara opcional).
 const cpfRegex = /^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/;
-// OAB — UF + número (ex: "SP 123456" ou "SP123456").
-const oabRegex = /^[A-Z]{2}\s?\d{3,6}$/i;
+const brazilianStates = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+  "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+] as const;
+
+const oabDigitsRegex = /^\d{1,10}$/;
 // Telefone BR — 10 ou 11 dígitos com máscara opcional.
 const phoneRegex = /^\(?\d{2}\)?\s?\d{4,5}-?\d{4}$/;
 
@@ -111,8 +117,11 @@ export const profileSignupSchema = z.object({
     .string()
     .trim()
     .min(1, { message: "OAB é obrigatória" })
-    .regex(oabRegex, { message: "OAB inválida. Ex: SP 123456" })
-    .max(20),
+    .regex(oabDigitsRegex, { message: "OAB inválida. Informe apenas números." })
+    .max(10),
+  oabUf: z.enum(brazilianStates, { message: "Selecione a UF da OAB" }),
   phone: profileEditableSchema.shape.phone,
   email: profileEditableSchema.shape.email,
 });
+
+export const BRAZILIAN_UF_OPTIONS = [...brazilianStates];
