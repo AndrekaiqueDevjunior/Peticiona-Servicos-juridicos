@@ -20,14 +20,9 @@ export const maskPhone = (value: string) => {
     .replace(/(\d{5})(\d{1,4})$/, "$1-$2");
 };
 
-/** OAB no formato "123456/SP" (número + UF). */
+/** Número da OAB: apenas dígitos. */
 export const maskOAB = (value: string) => {
-  const raw = value.toUpperCase().replace(/[^0-9A-Z]/g, "");
-  const digits = raw.replace(/[^0-9]/g, "").slice(0, 6);
-  const letters = raw.replace(/[^A-Z]/g, "").slice(0, 2);
-  if (!digits) return "";
-  if (!letters) return digits;
-  return `${digits}/${letters}`;
+  return value.replace(/\D/g, "").slice(0, 10);
 };
 
 /** Valida CPF pelos dígitos verificadores. */
