@@ -1,5 +1,7 @@
 import { createElement, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { type AuthUser, type RegisterPayload } from "./api";
+import { ADMIN_FUNCIONARIOS } from "./adminMocks";
+import { isStaffActive } from "./staffStatus";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -44,6 +46,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, _password: string) => {
+    const blockedStaff = ADMIN_FUNCIONARIOS.find(
+      (f) => f.email.toLowerCase() === email.toLowerCase() && !isStaffActive(f.id),
+    );
+    if (blockedStaff) {
+      throw new Error("Acesso bloqueado. Entre em contato com o administrador.");
+    }
     const stored = loadStoredUser();
     const next: AuthUser =
       stored && stored.email.toLowerCase() === email.toLowerCase()
