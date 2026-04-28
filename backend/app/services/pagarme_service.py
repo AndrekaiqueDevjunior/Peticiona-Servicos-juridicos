@@ -35,6 +35,27 @@ class PagarmeClient:
 
         return self._request("GET", f"/orders/{pagarme_order_id}")
 
+    def smoke_test(self) -> dict:
+        """Verify Pagar.me connectivity without creating charges.
+
+        Calls GET /orders?page=1&size=1 to confirm the secret key is valid.
+        Returns {"ok": true} on success or {"ok": false, "error": "..."} on failure.
+        In dry-run mode returns {"ok": true, "dry_run": true} immediately.
+        """
+        if current_app.config.get("PAGARME_DRY_RUN"):
+            return {"ok": True, "dry_run": True, "provider": "pagarme"}
+
+        if not self.secret_key:
+            return {"ok": False, "dry_run": False, "error": "PAGARME_SECRET_KEY não configurada."}
+
+        try:
+            self._request("GET", "/orders?page=1&size=1")
+            return {"ok": True, "dry_run": False, "provider": "pagarme"}
+        except PaymentGatewayError as exc:
+            return {"ok": False, "dry_run": False, "error": str(exc)}
+        except Exception:  # noqa: BLE001
+            return {"ok": False, "dry_run": False, "error": "Erro inesperado ao conectar à Pagar.me."}
+
     def _request(
         self,
         method: str,
@@ -110,6 +131,23 @@ def _json_or_text(raw: str) -> dict | list | str:
         return json.loads(raw)
     except json.JSONDecodeError:
         return raw
+
+
+def require_webhook_token(provided: str | None) -> None:
+    """Validate the static bearer token that guards webhook endpoints.
+
+    No-op when PAGARME_WEBHOOK_TOKEN is not configured so that existing
+    deployments are not broken by the change.  In production the token MUST
+    be set — the preflight script checks for this.
+
+    Uses hmac.compare_digest to prevent timing-based token enumeration.
+    """
+    expected = current_app.config.get("PAGARME_WEBHOOK_TOKEN", "")
+    if not expected:
+        return
+    token = (provided or "").strip()
+    if not token or not hmac.compare_digest(expected, token):
+        raise AuthError("Webhook não autorizado.")
 
 
 def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> None:

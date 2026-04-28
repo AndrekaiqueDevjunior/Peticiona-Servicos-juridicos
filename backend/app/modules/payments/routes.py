@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
-from app.core.errors import AuthError
+from app.core.errors import PermissionDenied
 from app.core.rate_limit import limit_requests
 from app.permissions import auth_required, current_actor
 from app.services.credit_payment_service import (
@@ -10,7 +10,7 @@ from app.services.credit_payment_service import (
     get_credit_payment_config,
     process_pagarme_webhook,
 )
-from app.services.pagarme_service import verify_webhook_signature
+from app.services.pagarme_service import PagarmeClient, require_webhook_token, verify_webhook_signature
 
 payments_bp = Blueprint("payments", __name__, url_prefix="/api/payments")
 
@@ -37,9 +37,22 @@ def credit_orders():
 @payments_bp.post("/pagarme/webhook")
 def pagarme_webhook():
     raw_body = request.get_data(cache=True)
-    _require_webhook_token()
+    auth = request.headers.get("Authorization", "")
+    bearer = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
+    header_token = request.headers.get("X-Webhook-Token", "").strip()
+    require_webhook_token(bearer or header_token or None)
     verify_webhook_signature(raw_body, request.headers.get("X-Hub-Signature"))
     return jsonify(process_pagarme_webhook(request.get_json(silent=True) or {}))
+
+
+@payments_bp.get("/smoke")
+@auth_required
+def smoke():
+    """Verify Pagar.me connectivity. Restricted to admin and staff roles."""
+    user = current_actor()
+    if user.role not in {"admin", "staff"}:
+        raise PermissionDenied("Acesso restrito a administradores.")
+    return jsonify(PagarmeClient().smoke_test())
 
 
 def _client_ip() -> str | None:
@@ -47,14 +60,3 @@ def _client_ip() -> str | None:
     if forwarded_for:
         return forwarded_for.split(",")[0].strip() or None
     return request.remote_addr
-
-
-def _require_webhook_token() -> None:
-    expected = current_app.config.get("PAGARME_WEBHOOK_TOKEN")
-    if not expected:
-        return
-    auth = request.headers.get("Authorization", "")
-    bearer = auth.removeprefix("Bearer ").strip() if auth.startswith("Bearer ") else ""
-    header_token = request.headers.get("X-Webhook-Token", "").strip()
-    if expected not in {bearer, header_token}:
-        raise AuthError("Webhook não autorizado.")
