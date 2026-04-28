@@ -39,10 +39,11 @@ def _add_user_columns() -> None:
 
 def _add_service_order_columns() -> None:
     order_columns = _column_names("service_orders")
+    ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
     statements = {
         "staff_user_id": "ALTER TABLE service_orders ADD COLUMN staff_user_id INTEGER",
-        "deadline_at": "ALTER TABLE service_orders ADD COLUMN deadline_at DATETIME",
-        "completed_at": "ALTER TABLE service_orders ADD COLUMN completed_at DATETIME",
+        "deadline_at": f"ALTER TABLE service_orders ADD COLUMN deadline_at {ts}",
+        "completed_at": f"ALTER TABLE service_orders ADD COLUMN completed_at {ts}",
         "split_plataforma": "ALTER TABLE service_orders ADD COLUMN split_plataforma INTEGER NOT NULL DEFAULT 100",
         "split_funcionario": "ALTER TABLE service_orders ADD COLUMN split_funcionario INTEGER NOT NULL DEFAULT 0",
     }
