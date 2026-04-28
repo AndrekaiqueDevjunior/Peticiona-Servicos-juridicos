@@ -11,8 +11,8 @@ const benefits = [
 const plans = [
   {
     name: "Essencial",
-    price: "540",
-    perService: "180",
+    price: "480",
+    perService: "160",
     services: 3,
     tagline: "Para começar com previsibilidade",
     features: [
@@ -25,8 +25,8 @@ const plans = [
   },
   {
     name: "Profissional",
-    price: "800",
-    perService: "160",
+    price: "750",
+    perService: "150",
     services: 5,
     tagline: "Para escritórios em crescimento",
     featured: true,
@@ -41,8 +41,8 @@ const plans = [
   },
   {
     name: "Estratégico",
-    price: "3.000",
-    perService: "150",
+    price: "2.800",
+    perService: "140",
     services: 20,
     tagline: "Para alta demanda e escala",
     features: [
