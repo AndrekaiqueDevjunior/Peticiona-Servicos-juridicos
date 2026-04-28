@@ -51,6 +51,253 @@ vi.mock("@/lib/api", () => ({
       }),
       balance: vi.fn().mockResolvedValue({ credits_available: 3 }),
     },
+    clientArea: {
+      orders: vi.fn().mockResolvedValue({ orders: [] }),
+      createOrder: vi.fn(),
+    },
+    staff: {
+      profile: vi.fn().mockResolvedValue({
+        id: 7,
+        full_name: "Ana Beatriz Souza",
+        email: "ana.souza@peticiona.app.br",
+        cpf: "123.456.789-00",
+        phone: "(11) 98765-4321",
+        role: "staff",
+        role_title: "Advogada Sênior",
+        employee_code: "PT-EQ-0042",
+        oab_number: "SP 345.678",
+        zip_code: "01310-100",
+        street: "Av. Paulista",
+        street_number: "1000",
+        address_complement: "Sala 1201",
+        neighborhood: "Bela Vista",
+        city: "São Paulo",
+        state: "SP",
+        is_active: true,
+        created_at: "2026-01-10T10:00:00Z",
+      }),
+      updateProfile: vi.fn(),
+      orders: vi.fn().mockResolvedValue({ orders: [] }),
+      updateOrder: vi.fn(),
+      financial: vi.fn().mockResolvedValue({
+        summary: {
+          total_orders: 0,
+          completed_orders: 0,
+          estimated_payout_cents: 0,
+          estimated_payout_brl: "R$ 0,00",
+        },
+        orders: [],
+      }),
+    },
+    admin: {
+      profile: vi.fn().mockResolvedValue({
+        id: 99,
+        full_name: "Roberto Almeida Pinheiro",
+        email: "admin@peticiona.app.br",
+        oab_number: "SP 998877",
+        role: "admin",
+        is_active: true,
+        created_at: "2026-01-10T10:00:00Z",
+        created_at_label: "10/01/2026",
+      }),
+      updateProfile: vi.fn(),
+      orders: vi.fn().mockResolvedValue({
+        orders: [
+          {
+            id: 1,
+            numero: "ADM-001",
+            cliente: "Marina Costa Almeida",
+            tipo_servico: "Petição inicial",
+            status: "concluido",
+            status_label: "Concluído",
+            funcionario: "Ana Beatriz",
+            prazo_cliente: "10/05/2026",
+            valor: 16000,
+            valor_brl: "R$ 160,00",
+            criado_em: "01/04/2026 10:00",
+            finalizado_em: "03/04/2026 10:00",
+            split_plataforma: 40,
+            split_funcionario: 60,
+          },
+          {
+            id: 2,
+            numero: "ADM-002",
+            cliente: "Rafael Mendonça",
+            tipo_servico: "Contestação",
+            status: "pendente",
+            status_label: "Em análise",
+            funcionario: null,
+            prazo_cliente: "11/05/2026",
+            valor: 15000,
+            valor_brl: "R$ 150,00",
+            criado_em: "02/04/2026 10:00",
+            finalizado_em: "—",
+            split_plataforma: 100,
+            split_funcionario: 0,
+          },
+          {
+            id: 3,
+            numero: "ADM-003",
+            cliente: "Paula Nogueira",
+            tipo_servico: "Recurso",
+            status: "em_andamento",
+            status_label: "Aguardando dados",
+            funcionario: "Bruno Lima",
+            prazo_cliente: "12/05/2026",
+            valor: 23000,
+            valor_brl: "R$ 230,00",
+            criado_em: "03/04/2026 10:00",
+            finalizado_em: "—",
+            split_plataforma: 40,
+            split_funcionario: 60,
+          },
+          {
+            id: 4,
+            numero: "ADM-004",
+            cliente: "Caio Torres",
+            tipo_servico: "Defesa administrativa",
+            status: "concluido",
+            status_label: "Concluído",
+            funcionario: "Ana Beatriz",
+            prazo_cliente: "13/05/2026",
+            valor: 20000,
+            valor_brl: "R$ 200,00",
+            criado_em: "04/04/2026 10:00",
+            finalizado_em: "05/04/2026 10:00",
+            split_plataforma: 40,
+            split_funcionario: 60,
+          },
+        ],
+      }),
+      clients: vi.fn().mockResolvedValue({
+        clients: [
+          {
+            id: 1,
+            nome: "Rafael Mendonça",
+            oab: "SP 123456",
+            email: "rafael@test.com",
+            telefone: "(11) 99999-0001",
+            plano: "Plano Essencial",
+            cadastrado_em: "01/01/2026",
+            ativo: true,
+          },
+          {
+            id: 2,
+            nome: "Marina Costa Almeida",
+            oab: "RJ 222333",
+            email: "marina@test.com",
+            telefone: "(21) 99999-0002",
+            plano: "Plano Profissional",
+            cadastrado_em: "02/01/2026",
+            ativo: true,
+          },
+          {
+            id: 3,
+            nome: "Paula Nogueira",
+            oab: "MG 444555",
+            email: "paula@test.com",
+            telefone: "(31) 99999-0003",
+            plano: "Plano Estratégico",
+            cadastrado_em: "03/01/2026",
+            ativo: true,
+          },
+          {
+            id: 4,
+            nome: "Caio Torres",
+            oab: "PR 666777",
+            email: "caio@test.com",
+            telefone: "(41) 99999-0004",
+            plano: "Sem plano",
+            cadastrado_em: "04/01/2026",
+            ativo: false,
+          },
+        ],
+      }),
+      staff: vi.fn().mockResolvedValue({
+        staff: [
+          {
+            id: 1,
+            nome: "Ana Beatriz",
+            email: "ana@test.com",
+            telefone: "(11) 98888-0001",
+            pedidos_ativos: 2,
+            pedidos_concluidos: 8,
+            ativo: true,
+          },
+          {
+            id: 2,
+            nome: "Bruno Lima",
+            email: "bruno@test.com",
+            telefone: "(11) 98888-0002",
+            pedidos_ativos: 1,
+            pedidos_concluidos: 4,
+            ativo: true,
+          },
+          {
+            id: 3,
+            nome: "Juliana Ribeiro",
+            email: "juliana@test.com",
+            telefone: "(11) 98888-0003",
+            pedidos_ativos: 0,
+            pedidos_concluidos: 6,
+            ativo: false,
+          },
+        ],
+      }),
+      financial: vi.fn().mockResolvedValue({
+        stats: {
+          receita_mes: 74000,
+          receita_mes_brl: "R$ 740,00",
+          concluidos: 2,
+          abertos: 2,
+        },
+        orders: [],
+      }),
+      plans: vi.fn().mockResolvedValue({
+        plans: [
+          {
+            id: 1,
+            code: "essencial",
+            name: "Plano Essencial",
+            monthly_price_cents: 9900,
+            monthly_price_brl: "R$ 99,00",
+            monthly_credits_cents: 54000,
+            monthly_credits_brl: "R$ 540,00",
+            petition_limit_monthly: 3,
+          },
+          {
+            id: 2,
+            code: "profissional",
+            name: "Plano Profissional",
+            monthly_price_cents: 19900,
+            monthly_price_brl: "R$ 199,00",
+            monthly_credits_cents: 110000,
+            monthly_credits_brl: "R$ 1.100,00",
+            petition_limit_monthly: 8,
+          },
+          {
+            id: 3,
+            code: "estrategico",
+            name: "Plano Estratégico",
+            monthly_price_cents: 34900,
+            monthly_price_brl: "R$ 349,00",
+            monthly_credits_cents: 220000,
+            monthly_credits_brl: "R$ 2.200,00",
+            petition_limit_monthly: null,
+          },
+        ],
+        single_services: [
+          {
+            id: 1,
+            code: "peticao-inicial",
+            section: "Petições",
+            title: "Petição inicial",
+            unit_price: 18900,
+            unit_price_brl: "R$ 189,00",
+          },
+        ],
+      }),
+    },
   },
 }));
 
@@ -58,6 +305,7 @@ vi.mock("@/lib/api", () => ({
 // Imports pós-mock
 // ---------------------------------------------------------------------------
 import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
 import { _resetForTest as resetPedidos } from "@/lib/pedidos";
 import { _resetForTest as resetBalance, assinarPlano } from "@/lib/balance";
 
@@ -387,38 +635,41 @@ describe("/area-cliente/pedidos — Pedidos cliente (READ + UPDATE)", () => {
     expect(screen.getByRole("heading", { name: /meus pedidos/i })).toBeInTheDocument();
   });
 
-  it("exibe mensagem quando não há pedidos", () => {
+  it("exibe mensagem quando não há pedidos", async () => {
     renderWithOutlet(ClientLayout, Orders, "/area-cliente", "pedidos", "/area-cliente/pedidos");
-    expect(screen.getByText(/nenhum pedido ainda/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nenhum pedido ainda/i)).toBeInTheDocument();
   });
 
-  it("filtros de status estão presentes", () => {
+  it("exibe card de histórico conectado ao backend", () => {
     renderWithOutlet(ClientLayout, Orders, "/area-cliente", "pedidos", "/area-cliente/pedidos");
-    expect(screen.getByText(/filtros/i)).toBeInTheDocument();
+    expect(screen.getByText(/histórico/i)).toBeInTheDocument();
   });
 
-  it("cria pedido no store e exibe na lista (READ após CREATE)", async () => {
-    const { criarPedido } = await import("@/lib/pedidos");
-    criarPedido({
-      areaDireito: "Cível",
-      tipoPeticao: "Contestação",
-      numeroProcesso: "0001-55.2025",
-      dataPublicacao: "",
-      competencia: "Estadual",
-      comarca: "SP",
-      justicaGratuita: false,
-      tutelaUrgencia: false,
-      advogadoSubscritor: "Dr. Teste",
-      resumoCaso: "Caso teste",
-      detalhes: "Detalhes",
-      partes: [],
-      anexosOriginais: [],
-      modalidadeLabel: "Avulso",
-      valor: 180,
+  it("exibe pedidos retornados pela API real do cliente", async () => {
+    vi.mocked(api.clientArea.orders).mockResolvedValueOnce({
+      orders: [
+        {
+          id: 101,
+          reference: "ORD-000101",
+          status: "pendente",
+          status_label: "Pendente",
+          total_amount: 18000,
+          total_brl: "R$ 180,00",
+          client_name: "Usuário Teste",
+          user_id: 1,
+          staff_name: null,
+          staff_user_id: null,
+          service_type: "Contestação",
+          created_at: "2026-04-01T10:00:00Z",
+          deadline_at: null,
+          completed_at: null,
+          items: [],
+        },
+      ],
     });
     renderWithOutlet(ClientLayout, Orders, "/area-cliente", "pedidos", "/area-cliente/pedidos");
     await waitFor(() => {
-      expect(screen.getByText(/cível/i)).toBeInTheDocument();
+      expect(screen.getByText(/contestação/i)).toBeInTheDocument();
     });
   });
 });
@@ -495,20 +746,19 @@ describe("/area-interna/perfil — Perfil funcionário (READ + UPDATE)", () => {
     expect(screen.getByRole("heading", { name: /meu perfil/i })).toBeInTheDocument();
   });
 
-  it("campos imutáveis exibem dados do mock (nome, CPF)", () => {
+  it("campos imutáveis exibem dados do backend mockado (CPF)", async () => {
     renderWithOutlet(StaffLayout, StaffProfile, "/area-interna", "perfil", "/area-interna/perfil");
-    expect(screen.getByDisplayValue("Ana Beatriz Souza")).toBeDisabled();
-    expect(screen.getByDisplayValue("123.456.789-00")).toBeDisabled();
+    expect(await screen.findByDisplayValue("123.456.789-00")).toBeDisabled();
   });
 
-  it("campo e-mail é editável (UPDATE)", () => {
+  it("campo e-mail é editável (UPDATE)", async () => {
     renderWithOutlet(StaffLayout, StaffProfile, "/area-interna", "perfil", "/area-interna/perfil");
-    expect(screen.getByDisplayValue("ana.souza@peticiona.app.br")).not.toBeDisabled();
+    expect(await screen.findByDisplayValue("ana.souza@peticiona.app.br")).not.toBeDisabled();
   });
 
-  it("botão 'Salvar alterações' está presente", () => {
+  it("botão 'Salvar alterações' está presente", async () => {
     renderWithOutlet(StaffLayout, StaffProfile, "/area-interna", "perfil", "/area-interna/perfil");
-    expect(screen.getByRole("button", { name: /salvar alterações/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /salvar alterações/i })).toBeInTheDocument();
   });
 });
 
@@ -529,7 +779,7 @@ describe("/area-interna/pedidos — Bandeja de pedidos (READ + UPDATE)", () => {
     expect(screen.getByRole("heading", { name: /bandeja de pedidos/i })).toBeInTheDocument();
   });
 
-  it("exibe mensagem quando bandeja está vazia", () => {
+  it("exibe mensagem quando bandeja está vazia", async () => {
     renderWithOutlet(
       StaffLayout,
       StaffOrders,
@@ -537,7 +787,7 @@ describe("/area-interna/pedidos — Bandeja de pedidos (READ + UPDATE)", () => {
       "pedidos",
       "/area-interna/pedidos",
     );
-    expect(screen.getByText(/nenhum pedido na bandeja/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nenhum pedido na bandeja/i)).toBeInTheDocument();
   });
 });
 
@@ -558,7 +808,7 @@ describe("/area-interna/financeiro — Financeiro funcionário (READ)", () => {
     expect(screen.getByRole("heading", { name: /^financeiro$/i })).toBeInTheDocument();
   });
 
-  it("exibe mensagem quando não há pedidos para o filtro", () => {
+  it("exibe mensagem quando não há pedidos para o funcionário", async () => {
     renderWithOutlet(
       StaffLayout,
       StaffFinancial,
@@ -566,7 +816,7 @@ describe("/area-interna/financeiro — Financeiro funcionário (READ)", () => {
       "financeiro",
       "/area-interna/financeiro",
     );
-    expect(screen.getByText(/nenhum pedido encontrado/i)).toBeInTheDocument();
+    expect(await screen.findByText(/nenhum pedido encontrado/i)).toBeInTheDocument();
   });
 });
 
@@ -584,14 +834,14 @@ describe("/admin/perfil — Perfil admin (READ + UPDATE)", () => {
     expect(screen.getByRole("heading", { name: /meu perfil/i })).toBeInTheDocument();
   });
 
-  it("campos imutáveis do admin estão desabilitados", () => {
+  it("campos imutáveis do admin estão desabilitados", async () => {
     renderWithOutlet(AdminLayout, AdminProfile, "/admin", "perfil", "/admin/perfil");
-    expect(screen.getByDisplayValue("Roberto Almeida Pinheiro")).toBeDisabled();
+    expect(await screen.findByDisplayValue("Administrador")).toBeDisabled();
   });
 
-  it("campo e-mail do admin é editável (UPDATE)", () => {
+  it("campo e-mail do admin é editável (UPDATE)", async () => {
     renderWithOutlet(AdminLayout, AdminProfile, "/admin", "perfil", "/admin/perfil");
-    expect(screen.getByDisplayValue("admin@peticiona.app.br")).not.toBeDisabled();
+    expect(await screen.findByDisplayValue("admin@peticiona.app.br")).not.toBeDisabled();
   });
 });
 
@@ -607,22 +857,23 @@ describe("/admin/pedidos — Todos os pedidos (READ)", () => {
     expect(screen.getByRole("heading", { name: /todos os pedidos/i })).toBeInTheDocument();
   });
 
-  it("exibe contador de pedidos (4 pedidos mock)", () => {
+  it("exibe CTA de criação e pedidos carregados do backend", async () => {
     render(
       <Wrapper path="/admin/pedidos">
         <AdminOrders />
       </Wrapper>,
     );
-    expect(screen.getByText(/4 pedidos/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /novo pedido/i })).toBeInTheDocument();
+    expect(await screen.findByText(/nº adm-001/i)).toBeInTheDocument();
   });
 
-  it("exibe cliente Marina Costa Almeida", () => {
+  it("exibe cliente Marina Costa Almeida", async () => {
     render(
       <Wrapper path="/admin/pedidos">
         <AdminOrders />
       </Wrapper>,
     );
-    expect(screen.getByText("Marina Costa Almeida")).toBeInTheDocument();
+    expect(await screen.findByText("Marina Costa Almeida")).toBeInTheDocument();
   });
 });
 
@@ -638,22 +889,22 @@ describe("/admin/clientes — Clientes (READ)", () => {
     expect(screen.getByRole("heading", { name: /^clientes$/i })).toBeInTheDocument();
   });
 
-  it("exibe contagem de 4 clientes", () => {
+  it("exibe contagem de 4 clientes", async () => {
     render(
       <Wrapper path="/admin/clientes">
         <AdminClients />
       </Wrapper>,
     );
-    expect(screen.getByText(/4 clientes cadastrados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/4 clientes cadastrados/i)).toBeInTheDocument();
   });
 
-  it("exibe cliente Rafael Mendonça", () => {
+  it("exibe cliente Rafael Mendonça", async () => {
     render(
       <Wrapper path="/admin/clientes">
         <AdminClients />
       </Wrapper>,
     );
-    expect(screen.getByText("Rafael Mendonça")).toBeInTheDocument();
+    expect(await screen.findByText("Rafael Mendonça")).toBeInTheDocument();
   });
 });
 
@@ -672,64 +923,43 @@ describe("/admin/funcionarios — Funcionários (READ + UPDATE)", () => {
     expect(screen.getByRole("heading", { name: /^funcionários$/i })).toBeInTheDocument();
   });
 
-  it("exibe 3 funcionários cadastrados", () => {
+  it("exibe 3 funcionários cadastrados", async () => {
     render(
       <Wrapper>
         <AdminStaff />
       </Wrapper>,
     );
-    expect(screen.getByText(/3 funcionários cadastrados/i)).toBeInTheDocument();
+    expect(await screen.findByText(/3 funcionários cadastrados/i)).toBeInTheDocument();
   });
 
-  it("f1 (Ana Beatriz) aparece ativo", () => {
+  it("f1 (Ana Beatriz) aparece ativo", async () => {
     render(
       <Wrapper>
         <AdminStaff />
       </Wrapper>,
     );
-    expect(screen.getAllByText(/^ativo$/i).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/^ativo$/i)).length).toBeGreaterThan(0);
   });
 
-  it("f3 (Juliana Ribeiro) aparece bloqueado", () => {
+  it("f3 (Juliana Ribeiro) aparece bloqueado", async () => {
     render(
       <Wrapper>
         <AdminStaff />
       </Wrapper>,
     );
-    expect(screen.getByText("Juliana Ribeiro")).toBeInTheDocument();
+    expect(await screen.findByText("Juliana Ribeiro")).toBeInTheDocument();
     expect(screen.getByText(/^bloqueado$/i)).toBeInTheDocument();
   });
 
-  it("(UPDATE) clique em bloquear abre AlertDialog de confirmação", async () => {
+  it("expõe ações reais de bloqueio e reativação", async () => {
     render(
       <Wrapper>
         <AdminStaff />
       </Wrapper>,
     );
-    const lockButtons = screen.getAllByLabelText(/bloquear acesso/i);
-    fireEvent.click(lockButtons[0]);
-    await waitFor(() =>
-      expect(screen.getByText(/bloquear acesso do funcionário/i)).toBeInTheDocument(),
-    );
-  });
-
-  it("(UPDATE) confirmar bloqueio persiste no localStorage", async () => {
-    render(
-      <Wrapper>
-        <AdminStaff />
-      </Wrapper>,
-    );
-    const lockButtons = screen.getAllByLabelText(/bloquear acesso/i);
-    fireEvent.click(lockButtons[0]);
-    await waitFor(() => screen.getByRole("button", { name: /^bloquear$/i }));
-    fireEvent.click(screen.getByRole("button", { name: /^bloquear$/i }));
-    await waitFor(() => {
-      const stored = JSON.parse(
-        localStorage.getItem("peticiona:staff:status:v1") ?? "{}",
-      );
-      const hasBlocked = Object.values(stored).some((v) => v === false);
-      expect(hasBlocked).toBe(true);
-    });
+    const lockButtons = await screen.findAllByLabelText(/bloquear funcionário/i);
+    lockButtons.forEach((button) => expect(button).toBeEnabled());
+    expect(screen.getByLabelText(/reativar funcionário/i)).toBeEnabled();
   });
 });
 
@@ -754,14 +984,14 @@ describe("/admin/financeiro — Financeiro admin (READ)", () => {
     expect(screen.getByText(/pedidos concluídos/i)).toBeInTheDocument();
   });
 
-  it("exibe valor de receita total (R$ 740,00 = soma dos 4 mocks)", () => {
+  it("exibe valor de receita total (R$ 740,00 = soma dos 4 mocks)", async () => {
     render(
       <Wrapper>
         <AdminFinancial />
       </Wrapper>,
     );
-    // 160 + 150 + 230 + 200 = 740 — pode aparecer mais de uma vez (stat + tabela)
-    const matches = screen.getAllByText(/740/);
+    // 160 + 150 + 230 + 200 = 740; pode aparecer mais de uma vez (stat + tabela)
+    const matches = await screen.findAllByText(/740/);
     expect(matches.length).toBeGreaterThan(0);
   });
 });
@@ -778,24 +1008,24 @@ describe("/admin/planos — Planos e preços (READ)", () => {
     expect(screen.getByRole("heading", { name: /planos e preços/i })).toBeInTheDocument();
   });
 
-  it("exibe os três planos mensais", () => {
+  it("exibe os três planos mensais", async () => {
     render(
       <Wrapper>
         <AdminPlans />
       </Wrapper>,
     );
-    expect(screen.getByText(/plano essencial/i)).toBeInTheDocument();
+    expect(await screen.findByText(/plano essencial/i)).toBeInTheDocument();
     expect(screen.getByText(/plano profissional/i)).toBeInTheDocument();
     expect(screen.getByText(/plano estratégico/i)).toBeInTheDocument();
   });
 
-  it("todos os inputs de valor estão desabilitados (somente leitura)", () => {
+  it("todos os inputs de valor estão desabilitados (somente leitura)", async () => {
     render(
       <Wrapper>
         <AdminPlans />
       </Wrapper>,
     );
-    const inputs = screen.getAllByRole("textbox");
+    const inputs = await screen.findAllByRole("textbox");
     inputs.forEach((input) => expect(input).toBeDisabled());
   });
 });

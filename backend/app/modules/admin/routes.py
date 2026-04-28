@@ -9,6 +9,7 @@ from app.services.admin_service import (
     create_admin_plan,
     create_admin_staff,
     create_financial_entry,
+    create_financial_refund,
     delete_admin_client,
     delete_admin_order,
     delete_admin_plan,
@@ -70,16 +71,26 @@ def order_detail(order_id: int):
 
 
 @admin_bp.put("/orders/<int:order_id>")
+@admin_bp.patch("/orders/<int:order_id>")
 @roles_required("admin")
 def update_order(order_id: int):
     actor = current_actor()
     return jsonify(update_admin_order(actor, order_id, request.get_json(silent=True) or {}))
 
 
+@admin_bp.patch("/orders/<int:order_id>/status")
+@roles_required("admin")
+def update_order_status(order_id: int):
+    actor = current_actor()
+    payload = request.get_json(silent=True) or {}
+    return jsonify(update_admin_order(actor, order_id, {"status": payload.get("status")}))
+
+
 @admin_bp.delete("/orders/<int:order_id>")
 @roles_required("admin")
 def delete_order(order_id: int):
-    return jsonify(delete_admin_order(current_actor(), order_id))
+    delete_admin_order(current_actor(), order_id)
+    return "", 204
 
 
 @admin_bp.get("/clients")
@@ -102,6 +113,7 @@ def client_detail(client_id: int):
 
 
 @admin_bp.put("/clients/<int:client_id>")
+@admin_bp.patch("/clients/<int:client_id>")
 @roles_required("admin")
 def update_client(client_id: int):
     actor = current_actor()
@@ -111,7 +123,8 @@ def update_client(client_id: int):
 @admin_bp.delete("/clients/<int:client_id>")
 @roles_required("admin")
 def delete_client(client_id: int):
-    return jsonify(delete_admin_client(current_actor(), client_id))
+    delete_admin_client(current_actor(), client_id)
+    return "", 204
 
 
 @admin_bp.get("/staff")
@@ -134,6 +147,7 @@ def staff_detail(staff_id: int):
 
 
 @admin_bp.put("/staff/<int:staff_id>")
+@admin_bp.patch("/staff/<int:staff_id>")
 @roles_required("admin")
 def update_staff(staff_id: int):
     actor = current_actor()
@@ -143,7 +157,8 @@ def update_staff(staff_id: int):
 @admin_bp.delete("/staff/<int:staff_id>")
 @roles_required("admin")
 def delete_staff(staff_id: int):
-    return jsonify(delete_admin_staff(current_actor(), staff_id))
+    delete_admin_staff(current_actor(), staff_id)
+    return "", 204
 
 
 @admin_bp.get("/financial")
@@ -156,6 +171,19 @@ def financial():
 @roles_required("admin")
 def financial_entries():
     return jsonify(list_financial_entries(current_actor()))
+
+
+@admin_bp.get("/financial/transactions")
+@roles_required("admin")
+def financial_transactions():
+    return jsonify(list_financial_entries(current_actor()))
+
+
+@admin_bp.post("/financial/refund")
+@roles_required("admin")
+def create_refund():
+    actor = current_actor()
+    return jsonify(create_financial_refund(actor, request.get_json(silent=True) or {})), 201
 
 
 @admin_bp.post("/financial/entries")
@@ -172,6 +200,7 @@ def financial_entry_detail(entry_id: int):
 
 
 @admin_bp.put("/financial/entries/<int:entry_id>")
+@admin_bp.patch("/financial/entries/<int:entry_id>")
 @roles_required("admin")
 def update_entry(entry_id: int):
     actor = current_actor()
@@ -204,6 +233,7 @@ def plan_detail(plan_id: int):
 
 
 @admin_bp.put("/plans/<int:plan_id>")
+@admin_bp.patch("/plans/<int:plan_id>")
 @roles_required("admin")
 def update_plan(plan_id: int):
     actor = current_actor()
@@ -213,4 +243,5 @@ def update_plan(plan_id: int):
 @admin_bp.delete("/plans/<int:plan_id>")
 @roles_required("admin")
 def delete_plan(plan_id: int):
-    return jsonify(delete_admin_plan(current_actor(), plan_id))
+    delete_admin_plan(current_actor(), plan_id)
+    return "", 204

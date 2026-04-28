@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request
 
 from app.core.rate_limit import limit_requests
+from app.permissions import auth_required
 from app.services.email_service import send_email
 
 notifications_bp = Blueprint("notifications", __name__, url_prefix="/api")
@@ -12,6 +13,7 @@ _VALID_EVENTS = {"pedido_criado", "comentario_publicado"}
 
 
 @notifications_bp.post("/notify-email")
+@auth_required
 @limit_requests("notify-email")
 def notify_email():
     """Receive an order-related email notification from the frontend and

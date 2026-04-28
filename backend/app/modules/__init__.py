@@ -14,6 +14,7 @@ from app.modules.notifications.routes import notifications_bp
 from app.modules.payments.routes import payments_bp
 from app.modules.petitions.routes import petitions_bp
 from app.modules.split_payment.routes import split_payment_bp
+from app.modules.staff.routes import staff_bp
 from app.modules.webhooks.routes import webhooks_bp
 
 
@@ -24,6 +25,7 @@ def register_blueprints(app: Flask) -> None:
         client_area_bp,
         split_payment_bp,
         admin_bp,
+        staff_bp,
         auth_bp,
         me_bp,
         checkout_bp,

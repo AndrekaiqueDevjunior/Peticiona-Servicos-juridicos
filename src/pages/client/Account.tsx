@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,7 @@ import {
 
 export default function Account() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const profile = useClientProfile();
 
   const { data: user } = useQuery({
@@ -32,6 +33,22 @@ export default function Account() {
     if (profile.email) setEmail(profile.email);
     else if (user?.email) setEmail(user.email);
   }, [profile.phone, profile.email, user?.email]);
+
+  const mutation = useMutation({
+    mutationFn: (payload: { email: string; phone: string }) => api.me.update(payload),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(["me"], updated);
+      updateEditableProfile({ phone: updated.phone ?? "", email: updated.email });
+      toast({ title: "Dados atualizados com sucesso." });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Não foi possível salvar os dados",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,8 +68,7 @@ export default function Account() {
       return;
     }
     setErrors({});
-    updateEditableProfile({ phone: result.data.phone, email: result.data.email });
-    toast({ title: "Dados atualizados com sucesso." });
+    mutation.mutate({ phone: result.data.phone, email: result.data.email });
   };
 
   // Dados imutáveis — fallback para o backend quando o perfil local não tem.
@@ -133,9 +149,10 @@ export default function Account() {
             <div className="sm:col-span-2 flex justify-end">
               <Button
                 type="submit"
+                disabled={mutation.isPending}
                 className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
-                Salvar alterações
+                {mutation.isPending ? "Salvando..." : "Salvar alterações"}
               </Button>
             </div>
           </form>

@@ -1,11 +1,10 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes, useSearchParams } from "react-router-dom";
-import { useEffect } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/lib/auth";
-import { useRole, setRole, dashboardPathForRole, type UserRole } from "@/lib/roles";
+import { dashboardPathForRole, roleFromBackend } from "@/lib/roles";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
@@ -32,33 +31,19 @@ const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
 });
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+function ProtectedRoute({
+  children,
+  allow,
+}: {
+  children: React.ReactNode;
+  allow?: Array<"client" | "staff" | "admin">;
+}) {
+  const { isAuthenticated, isLoading, user } = useAuth();
   if (isLoading) return null;
   if (!isAuthenticated) return <Navigate to="/auth" replace />;
-  return <>{children}</>;
-}
-
-function RoleRoute({
-  allow,
-  children,
-}: {
-  allow: UserRole;
-  children: React.ReactNode;
-}) {
-  const role = useRole();
-  const [params] = useSearchParams();
-  const as = params.get("as") as UserRole | null;
-
-  // Atalho dev: ?as=admin|funcionario|cliente troca o role no localStorage.
-  useEffect(() => {
-    if (as && (as === "admin" || as === "funcionario" || as === "cliente") && as !== role) {
-      setRole(as);
-    }
-  }, [as, role]);
-
-  const efetivo = as ?? role;
-  if (efetivo !== allow) return <Navigate to={dashboardPathForRole(efetivo)} replace />;
+  if (allow && user?.role && !allow.includes(user.role as "client" | "staff" | "admin")) {
+    return <Navigate to={dashboardPathForRole(roleFromBackend(user.role))} replace />;
+  }
   return <>{children}</>;
 }
 
@@ -73,13 +58,13 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/cadastro" element={<Signup />} />
-            <Route path="/area-cliente" element={<ProtectedRoute><ClientLayout /></ProtectedRoute>}>
+            <Route path="/area-cliente" element={<ProtectedRoute allow={["client"]}><ClientLayout /></ProtectedRoute>}>
               <Route index element={<Dashboard />} />
               <Route path="pedidos" element={<Orders />} />
               <Route path="saldos" element={<Balance />} />
               <Route path="conta" element={<Account />} />
             </Route>
-            <Route path="/area-interna" element={<ProtectedRoute><StaffLayout /></ProtectedRoute>}>
+            <Route path="/area-interna" element={<ProtectedRoute allow={["staff"]}><StaffLayout /></ProtectedRoute>}>
               <Route index element={<Navigate to="/area-interna/perfil" replace />} />
               <Route path="perfil" element={<StaffProfile />} />
               <Route path="pedidos" element={<StaffOrders />} />
@@ -88,9 +73,9 @@ const App = () => (
             <Route
               path="/admin"
               element={
-                <RoleRoute allow="admin">
+                <ProtectedRoute allow={["admin"]}>
                   <AdminLayout />
-                </RoleRoute>
+                </ProtectedRoute>
               }
             >
               <Route index element={<Navigate to="/admin/perfil" replace />} />

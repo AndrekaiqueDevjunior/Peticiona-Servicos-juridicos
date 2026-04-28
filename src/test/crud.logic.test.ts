@@ -103,11 +103,11 @@ describe("roles", () => {
     expect(dashboardPathForRole("admin")).toBe("/admin");
   });
 
-  it("setRole / getRole: persiste e recupera role no localStorage", async () => {
+  it("setRole / getRole: mantém a role em memória", async () => {
     const { setRole, getRole } = await import("@/lib/roles");
     setRole("admin");
     expect(getRole()).toBe("admin");
-    expect(localStorage.getItem("peticiona:role:v1")).toBe("admin");
+    expect(localStorage.getItem("peticiona:role:v1")).toBeNull();
   });
 
   it("setRole: troca de role reflete em getRole", async () => {

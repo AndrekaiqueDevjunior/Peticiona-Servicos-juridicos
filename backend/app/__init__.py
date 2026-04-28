@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from flask import Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.bootstrap.migrations import run_runtime_migrations
 from app.bootstrap.seed import seed_reference_data
@@ -12,6 +13,10 @@ from app.modules import register_blueprints
 
 def create_app(config_overrides: dict | None = None) -> Flask:
     app = Flask(__name__)
+    # Trust one level of reverse proxy (nginx) so that request.remote_addr
+    # reflects the real client IP — required for per-user rate limiting.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
     app.config.from_object(Config())
     if config_overrides:
         app.config.update(config_overrides)

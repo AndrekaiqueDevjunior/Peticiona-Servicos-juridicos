@@ -30,6 +30,8 @@ def register_user(payload: dict) -> dict:
     full_name = (payload.get("full_name") or "").strip()
     email = (payload.get("email") or "").strip().lower()
     oab_number = (payload.get("oab_number") or "").strip() or None
+    cpf = (payload.get("cpf") or "").strip() or None
+    phone = (payload.get("phone") or "").strip() or None
     password = payload.get("password") or ""
     confirm_password = payload.get("confirm_password") or ""
 
@@ -51,6 +53,8 @@ def register_user(payload: dict) -> dict:
         full_name=full_name,
         email=email,
         oab_number=oab_number,
+        cpf=cpf,
+        phone=phone,
         password_hash=hash_password(password),
         role="client",
         company_id=company.id,

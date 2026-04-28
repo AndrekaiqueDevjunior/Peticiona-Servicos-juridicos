@@ -6,6 +6,7 @@ from uuid import uuid4
 from app.core.errors import NotFoundError, ValidationError
 from app.core.extensions import db
 from app.core.security import ensure_allowed_document, ensure_upload_size, upload_folder
+from app.domain.permissions import scoped_query
 from app.models import Company, Document, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
 from app.services.audit_service import log_action
 from app.services.serializers import format_brl_from_cents, serialize_document, serialize_order
@@ -122,8 +123,42 @@ def preview_cart(payload: dict) -> dict:
     }
 
 
+def _preview_service_request(payload: dict) -> dict:
+    title = (payload.get("tipo_peticao") or payload.get("area_direito") or payload.get("service_title") or "").strip()
+    if not title:
+        raise ValidationError("Informe o tipo de serviço solicitado.")
+
+    # Preço vem do catálogo; client-supplied total_amount_cents é ignorado.
+    service_code = (payload.get("service_code") or "solicitacao-juridica").strip()
+    catalog = _catalog_index()
+    catalog_item = catalog.get(service_code)
+    total_amount = catalog_item["unit_price"] if catalog_item else 0
+
+    item = {
+        "code": service_code,
+        "title": title,
+        "quantity": 1,
+        "unit_price": total_amount,
+        "line_total": total_amount,
+    }
+    return {
+        "is_valid": True,
+        "items": [item],
+        "total_amount": total_amount,
+        "total_brl": format_brl_from_cents(total_amount),
+    }
+
+
+def list_orders(user) -> dict:
+    orders = scoped_query(ServiceOrder, user).order_by(ServiceOrder.created_at.desc()).all()
+    return {"orders": [serialize_order(order) for order in orders]}
+
+
 def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
-    preview = preview_cart(payload)
+    if payload.get("items"):
+        preview = preview_cart(payload)
+    else:
+        preview = _preview_service_request(payload)
     company_id = getattr(user, "company_id", None) or _public_company().id
 
     order = ServiceOrder(
@@ -133,6 +168,15 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
         status="pendente",
         total_amount=preview["total_amount"],
     )
+    deadline_at = payload.get("deadline_at")
+    if deadline_at:
+        from datetime import datetime, timezone
+
+        parsed = datetime.fromisoformat(str(deadline_at).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        order.deadline_at = parsed
+
     db.session.add(order)
     db.session.flush()
 

@@ -1,6 +1,6 @@
 import { createElement, createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, type AuthUser, type RegisterPayload } from "./api";
-import { setRole, type UserRole } from "./roles";
+import { roleFromBackend, setRole } from "./roles";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -14,12 +14,6 @@ interface AuthContextValue {
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
 const USER_KEY = "auth_user";
-
-const roleFromBackend = (role?: string | null): UserRole => {
-  if (role === "admin") return "admin";
-  if (role === "staff") return "funcionario";
-  return "cliente";
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -76,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem("auth_token");
     localStorage.removeItem(USER_KEY);
+    setRole("cliente");
     setUser(null);
   };
 

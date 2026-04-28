@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from app.domain.permissions import scoped_query
-from app.models import Petition
-from app.services.serializers import format_brl_from_cents
+from app.models import ServiceOrder
+from app.services.serializers import format_brl_from_cents, serialize_order
 
 
 def _dashboard_payload(*, user_label: str, role: str, selected_filter: str, services: list[dict]) -> dict:
@@ -39,22 +39,26 @@ def get_dashboard(*, user=None, status: str | None = None) -> dict:
             services=[],
         )
 
-    base_query = scoped_query(Petition, user).order_by(Petition.created_at.desc())
-    visible_petitions = base_query.all()
-    filtered_petitions = [item for item in visible_petitions if status in (None, "todos", item.status)]
+    base_query = scoped_query(ServiceOrder, user).order_by(ServiceOrder.created_at.desc())
+    visible_orders = base_query.all()
+    filtered_orders = [item for item in visible_orders if status in (None, "todos", item.status)]
 
     services = [
         {
-            "reference": petition.reference,
-            "title": petition.tipo_peticao or petition.area_direito,
-            "client_name": petition.user.full_name,
-            "status": petition.status,
-            "status_label": petition.status.replace("_", " ").capitalize(),
-            "deadline": petition.created_at.strftime("%d/%m/%Y"),
-            "service_type": petition.area_direito,
-            "value_brl": format_brl_from_cents(0),
+            "reference": item["reference"],
+            "title": item["service_type"],
+            "client_name": item["client_name"] or user.full_name,
+            "status": item["status"],
+            "status_label": item["status_label"],
+            "deadline": (
+                filtered_order.deadline_at.strftime("%d/%m/%Y")
+                if filtered_order.deadline_at
+                else filtered_order.created_at.strftime("%d/%m/%Y")
+            ),
+            "service_type": item["service_type"],
+            "value_brl": item["total_brl"],
         }
-        for petition in filtered_petitions
+        for filtered_order, item in ((order, serialize_order(order)) for order in filtered_orders)
     ]
 
     return _dashboard_payload(

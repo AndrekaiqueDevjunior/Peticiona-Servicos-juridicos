@@ -8,8 +8,6 @@ import {
   useUserPricingProfile,
   type Modalidade,
 } from "@/lib/pricing";
-import { useBalance, getSaldoTotal, debitarPedido } from "@/lib/balance";
-import { criarPedido } from "@/lib/pedidos";
 import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import {
   AlertCircle,
@@ -237,10 +235,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   });
   const prazoCalc = modalidadePrazo ? calcularPrazo(modalidadePrazo) : null;
 
-  const balance = useBalance();
-  const saldoAtual = getSaldoTotal(balance);
-  const saldoApos = saldoAtual - valorPedido;
-  const semSaldo = tipoReconhecido && saldoAtual < valorPedido;
+  const saldoAtual = valorPedido;
+  const saldoApos = 0;
 
   // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
   const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
@@ -368,26 +364,19 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       return;
     }
 
-    if (semSaldo) {
-      toast({
-        title: "Saldo insuficiente",
-        description: "Adicione créditos para finalizar o pedido.",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setSubmitting(true);
     try {
+      // 1. Upload de documentos
       let documentIds: number[] = [];
       if (arquivos.length > 0) {
         const uploadRes = await api.documents.upload(arquivos.map((a) => a.file));
         documentIds = uploadRes.documents.map((d) => d.id);
       }
 
+      // 2. Persistir dados jurídicos completos via API de petições
       await api.petitions.create({
         area_direito: areaDireito,
-        tipo_peticao: tipoPeticao,
+        tipo_peticao: tipoPeticao || areaDireito,
         numero_processo: numeroProcesso,
         data_publicacao: dataPublicacao ? format(dataPublicacao, "yyyy-MM-dd") : "",
         justica_gratuita: justicaGratuita === "sim",
@@ -399,37 +388,16 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         document_ids: documentIds,
       });
 
-      // Débito automático em R$ — prioriza saldo do plano, depois avulso.
-      debitarPedido(valorPedido, `${tipoPeticao} — ${pricing.labelFinal}`);
-
-      // Persiste o pedido completo no store local para a aba "Meus pedidos".
-      criarPedido({
-        areaDireito,
-        tipoPeticao,
-        numeroProcesso,
-        dataPublicacao: dataPublicacao ? format(dataPublicacao, "yyyy-MM-dd") : "",
-        competencia,
-        comarca,
-        justicaGratuita: justicaGratuita === "sim",
-        tutelaUrgencia: tutelaUrgencia === "sim",
-        advogadoSubscritor,
-        resumoCaso,
-        detalhes,
-        partes: partes.map((p) => ({ nome: p.nome, tipo: p.tipo })),
-        anexosOriginais: arquivos.map((a) => ({
-          id: a.id,
-          nome: a.file.name,
-          tamanho: a.file.size,
-          tipo: a.file.type,
-        })),
-        modalidadeLabel: pricing.labelFinal,
-        valor: valorPedido,
-        prazoEntregaClienteISO: prazoCalc?.entregaClienteISO,
-        prazoEntregaInternoISO: prazoCalc?.entregaInternaISO,
+      // 3. Criar service order de rastreamento (preço definido pelo catálogo no backend)
+      await api.clientArea.createOrder({
+        tipo_peticao: tipoPeticao || areaDireito,
+        service_title: tipoPeticao || areaDireito,
+        deadline_at: prazoCalc?.entregaClienteISO,
       });
 
-      queryClient.invalidateQueries({ queryKey: ["petitions"] });
+      queryClient.invalidateQueries({ queryKey: ["client-orders"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["petitions"] });
 
       setSuccess(true);
     } catch (err: unknown) {
@@ -1169,40 +1137,23 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                     </span>
                   </div>
 
-                  {semSaldo ? (
-                    <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-                      Você está sem saldo.{" "}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onOpenChange(false);
-                          navigate("/area-cliente/saldos");
-                        }}
-                        className="font-semibold underline underline-offset-2 hover:opacity-80"
-                      >
-                        Clique aqui para adicionar mais saldo
-                      </button>
-                      .
+                  <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-2 text-muted-foreground">
+                        <Wallet className="h-4 w-4" />
+                        Valor estimado
+                      </span>
+                      <span className="font-medium">{formatBRL(saldoAtual)}</span>
                     </div>
-                  ) : (
-                    <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-2 text-muted-foreground">
-                          <Wallet className="h-4 w-4" />
-                          Saldo atual
-                        </span>
-                        <span className="font-medium">{formatBRL(saldoAtual)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">
-                          Saldo após o débito
-                        </span>
-                        <span className="font-semibold text-accent">
-                          {formatBRL(saldoApos)}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        Cobrança local mock removida
+                      </span>
+                      <span className="font-semibold text-accent">
+                        {formatBRL(saldoApos)}
+                      </span>
                     </div>
-                  )}
+                  </div>
                 </>
               )}
             </div>
@@ -1214,7 +1165,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </Button>
             <Button
               type="submit"
-              disabled={submitting || semSaldo || !tipoReconhecido}
+              disabled={submitting || !tipoReconhecido}
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               {submitting ? "Finalizando..." : "Finalizar pedido"}

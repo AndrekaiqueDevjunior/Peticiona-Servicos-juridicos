@@ -522,6 +522,8 @@ class BackendApiTestCase(unittest.TestCase):
             "/api/admin/clients",
             "/api/admin/staff",
             "/api/admin/plans",
+            "/api/admin/financial",
+            "/api/admin/financial/transactions",
             "/api/admin/financial/entries",
         ):
             with self.subTest(path=path):

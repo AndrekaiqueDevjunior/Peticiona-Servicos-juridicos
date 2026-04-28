@@ -106,16 +106,20 @@ def _serialize_order(order: ServiceOrder) -> dict:
     return {
         "id": order.id,
         "numero": order.reference,
+        "user_id": order.user_id,
         "cliente": order.user.full_name if order.user else "Cliente não identificado",
+        "staff_user_id": order.staff_user_id,
         "tipo_servico": tipo_servico,
         "status": order.status,
         "status_label": _status_label(order.status),
         "funcionario": order.staff_user.full_name if order.staff_user else None,
         "prazo_cliente": _format_date(order.deadline_at),
+        "prazo_cliente_iso": order.deadline_at.isoformat() if order.deadline_at else None,
         "valor": order.total_amount,
         "valor_brl": format_brl_from_cents(order.total_amount),
         "criado_em": _format_datetime(order.created_at),
         "finalizado_em": _format_datetime(order.completed_at),
+        "finalizado_em_iso": order.completed_at.isoformat() if order.completed_at else None,
         "split_plataforma": order.split_plataforma,
         "split_funcionario": order.split_funcionario,
     }
@@ -395,20 +399,16 @@ def delete_admin_order(actor, order_id: object) -> dict:
 
 
 def _create_or_update_user(actor, payload: dict, *, role: str, user: User | None = None) -> User:
-    full_name = str(payload.get("full_name") or "").strip()
-    email = str(payload.get("email") or "").strip().lower()
-    if not full_name:
-        raise ValidationError("Campo 'full_name' é obrigatório.")
-    if not email:
-        raise ValidationError("Campo 'email' é obrigatório.")
-
-    query = User.query.filter_by(email=email)
-    if user is not None:
-        query = query.filter(User.id != user.id)
-    if query.first() is not None:
-        raise ConflictError("E-mail já está em uso.")
-
     if user is None:
+        full_name = str(payload.get("full_name") or "").strip()
+        email = str(payload.get("email") or "").strip().lower()
+        if not full_name:
+            raise ValidationError("Campo 'full_name' é obrigatório.")
+        if not email:
+            raise ValidationError("Campo 'email' é obrigatório.")
+        if User.query.filter_by(email=email).first() is not None:
+            raise ConflictError("E-mail já está em uso.")
+
         password = str(payload.get("password") or "").strip()
         if len(password) < 8:
             raise ValidationError("Campo 'password' é obrigatório e deve ter ao menos 8 caracteres.")
@@ -422,14 +422,26 @@ def _create_or_update_user(actor, payload: dict, *, role: str, user: User | None
         )
         db.session.add(user)
     else:
-        user.full_name = full_name
-        user.email = email
+        if "full_name" in payload:
+            full_name = str(payload.get("full_name") or "").strip()
+            if not full_name:
+                raise ValidationError("Campo 'full_name' é obrigatório.")
+            user.full_name = full_name
 
-    user.oab_number = _normalize_optional(payload, "oab_number") or user.oab_number
-    user.phone = _normalize_optional(payload, "phone") or None
-    user.cpf = _normalize_optional(payload, "cpf") or None
-    user.role_title = _normalize_optional(payload, "role_title") or None
-    user.employee_code = _normalize_optional(payload, "employee_code") or None
+        if "email" in payload:
+            email = str(payload.get("email") or "").strip().lower()
+            if not email:
+                raise ValidationError("Campo 'email' é obrigatório.")
+            query = User.query.filter_by(email=email).filter(User.id != user.id)
+            if query.first() is not None:
+                raise ConflictError("E-mail já está em uso.")
+            user.email = email
+
+    for field in ("oab_number", "phone", "cpf", "role_title", "employee_code"):
+        value = _normalize_optional(payload, field)
+        if value is not None:
+            setattr(user, field, value or None)
+
     if "is_active" in payload:
         user.is_active = bool(payload.get("is_active"))
 
@@ -604,6 +616,47 @@ def create_financial_entry(actor, payload: dict) -> dict:
     log_action(action="admin.financial_entry_created", entity_type="financial_entry", entity_id=entry.id, user=actor)
     db.session.commit()
     return {"entry": _serialize_entry(entry)}
+
+
+def create_financial_refund(actor, payload: dict) -> dict:
+    order_id = payload.get("order_id")
+    if order_id is None:
+        raise ValidationError("Campo 'order_id' é obrigatório.")
+    order = _scoped_order(actor, order_id)
+
+    amount_cents = _to_int(
+        payload.get("amount_cents", order.total_amount),
+        field_name="amount_cents",
+        minimum=1,
+    )
+    if amount_cents > order.total_amount:
+        raise ValidationError("Reembolso não pode exceder o valor do pedido.")
+
+    reason = str(payload.get("reason") or payload.get("description") or "").strip()
+    if not reason:
+        raise ValidationError("Campo 'reason' é obrigatório.")
+
+    entry = FinancialEntry(
+        description=f"Reembolso: {reason}",
+        kind="debit",
+        amount_cents=amount_cents,
+        occurred_at=datetime.now(timezone.utc),
+        company_id=actor.company_id,
+        order_id=order.id,
+        created_by_user_id=actor.id,
+        is_active=True,
+    )
+    db.session.add(entry)
+    db.session.flush()
+    log_action(
+        action="admin.financial_refund_created",
+        entity_type="financial_entry",
+        entity_id=entry.id,
+        user=actor,
+        metadata={"order_id": order.id, "amount_cents": amount_cents},
+    )
+    db.session.commit()
+    return {"refund": _serialize_entry(entry)}
 
 
 def update_financial_entry(actor, entry_id: object, payload: dict) -> dict:

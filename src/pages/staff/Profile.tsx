@@ -1,34 +1,67 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 
-// Mock — em produção, viria do backend.
-const dadosFixos = {
-  nomeCompleto: "Ana Beatriz Souza",
-  cpf: "123.456.789-00",
-  cargo: "Advogada Sênior",
-  matricula: "PT-EQ-0042",
-  oab: "SP 345.678",
-  dataAdmissao: "12/03/2023",
-};
-
 export default function StaffProfile() {
-  const [telefone, setTelefone] = useState("(11) 98765-4321");
-  const [email, setEmail] = useState("ana.souza@peticiona.app.br");
-  const [cep, setCep] = useState("01310-100");
-  const [logradouro, setLogradouro] = useState("Av. Paulista");
-  const [numero, setNumero] = useState("1000");
-  const [complemento, setComplemento] = useState("Sala 1201");
-  const [bairro, setBairro] = useState("Bela Vista");
-  const [cidade, setCidade] = useState("São Paulo");
-  const [uf, setUf] = useState("SP");
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["staff", "profile"],
+    queryFn: () => api.staff.profile(),
+  });
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    toast({ title: "Dados atualizados com sucesso." });
+  const [form, setForm] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    zip_code: "",
+    street: "",
+    street_number: "",
+    address_complement: "",
+    neighborhood: "",
+    city: "",
+    state: "",
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    setForm({
+      full_name: data.full_name,
+      email: data.email,
+      phone: data.phone ?? "",
+      zip_code: data.zip_code ?? "",
+      street: data.street ?? "",
+      street_number: data.street_number ?? "",
+      address_complement: data.address_complement ?? "",
+      neighborhood: data.neighborhood ?? "",
+      city: data.city ?? "",
+      state: data.state ?? "",
+    });
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.staff.updateProfile(form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff", "profile"] });
+      toast({ title: "Perfil atualizado." });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Não foi possível salvar o perfil",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    saveMutation.mutate();
   };
 
   return (
@@ -38,7 +71,7 @@ export default function StaffProfile() {
           Meu perfil
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Você pode editar telefone, e-mail e endereço. Demais dados são somente leitura.
+          Dados reais do funcionário, salvos no backend.
         </p>
       </div>
 
@@ -47,80 +80,80 @@ export default function StaffProfile() {
           <CardTitle className="font-display text-xl">Dados pessoais</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
-            <ReadonlyInput label="Nome completo" value={dadosFixos.nomeCompleto} className="sm:col-span-2" />
-            <ReadonlyInput label="CPF" value={dadosFixos.cpf} />
-            <ReadonlyInput label="Matrícula" value={dadosFixos.matricula} />
-            <ReadonlyInput label="Cargo" value={dadosFixos.cargo} />
-            <ReadonlyInput label="OAB" value={dadosFixos.oab} />
-            <ReadonlyInput label="Data de admissão" value={dadosFixos.dataAdmissao} className="sm:col-span-2" />
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando perfil...</p>
+          ) : (
+            <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="staff-name">Nome completo</Label>
+                <Input
+                  id="staff-name"
+                  value={form.full_name}
+                  onChange={(e) => setForm((current) => ({ ...current, full_name: e.target.value }))}
+                />
+              </div>
+              <ReadonlyInput label="CPF" value={data?.cpf ?? "—"} />
+              <ReadonlyInput label="Matrícula" value={data?.employee_code ?? "—"} />
+              <ReadonlyInput label="Cargo" value={data?.role_title ?? "—"} />
+              <ReadonlyInput label="OAB" value={data?.oab_number ?? "—"} />
 
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-            </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="staff-email">E-mail</Label>
+                <Input
+                  id="staff-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => setForm((current) => ({ ...current, email: e.target.value }))}
+                />
+              </div>
 
-            <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="telefone">Telefone</Label>
-              <Input id="telefone" value={telefone} onChange={(e) => setTelefone(e.target.value)} />
-            </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="staff-phone">Telefone</Label>
+                <Input
+                  id="staff-phone"
+                  value={form.phone}
+                  onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
+                />
+              </div>
 
-            <div className="sm:col-span-2 mt-2">
-              <h3 className="text-sm font-semibold text-foreground">Endereço</h3>
-            </div>
+              <div className="sm:col-span-2 mt-2">
+                <h3 className="text-sm font-semibold text-foreground">Endereço</h3>
+              </div>
+              {[
+                ["CEP", "zip_code"],
+                ["Logradouro", "street"],
+                ["Número", "street_number"],
+                ["Complemento", "address_complement"],
+                ["Bairro", "neighborhood"],
+                ["Cidade", "city"],
+                ["UF", "state"],
+              ].map(([label, key]) => (
+                <div className="grid gap-2" key={key}>
+                  <Label htmlFor={key}>{label}</Label>
+                  <Input
+                    id={key}
+                    value={form[key as keyof typeof form]}
+                    onChange={(e) => setForm((current) => ({ ...current, [key]: e.target.value }))}
+                  />
+                </div>
+              ))}
 
-            <div className="grid gap-2">
-              <Label htmlFor="cep">CEP</Label>
-              <Input id="cep" value={cep} onChange={(e) => setCep(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="logradouro">Logradouro</Label>
-              <Input id="logradouro" value={logradouro} onChange={(e) => setLogradouro(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="numero">Número</Label>
-              <Input id="numero" value={numero} onChange={(e) => setNumero(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="complemento">Complemento</Label>
-              <Input id="complemento" value={complemento} onChange={(e) => setComplemento(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="bairro">Bairro</Label>
-              <Input id="bairro" value={bairro} onChange={(e) => setBairro(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="cidade">Cidade</Label>
-              <Input id="cidade" value={cidade} onChange={(e) => setCidade(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="uf">UF</Label>
-              <Input id="uf" maxLength={2} value={uf} onChange={(e) => setUf(e.target.value.toUpperCase())} />
-            </div>
-
-            <div className="sm:col-span-2 flex justify-end">
-              <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
-                Salvar alterações
-              </Button>
-            </div>
-          </form>
+              <div className="sm:col-span-2 flex justify-end">
+                <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
+                  {saveMutation.isPending ? "Salvando..." : "Salvar alterações"}
+                </Button>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>
   );
 }
 
-function ReadonlyInput({
-  label,
-  value,
-  className,
-}: {
-  label: string;
-  value: string;
-  className?: string;
-}) {
+function ReadonlyInput({ label, value }: { label: string; value: string }) {
   return (
-    <div className={`grid gap-2 ${className ?? ""}`}>
+    <div className="grid gap-2">
       <Label className="text-muted-foreground">{label}</Label>
       <Input value={value} disabled />
     </div>

@@ -105,6 +105,8 @@ const Signup = () => {
         full_name: form.full_name,
         email: form.email,
         oab_number: `${form.oab}/${form.oab_uf}`,
+        cpf: form.cpf,
+        phone: form.phone,
         password: form.password,
         confirm_password: form.confirm_password,
       });

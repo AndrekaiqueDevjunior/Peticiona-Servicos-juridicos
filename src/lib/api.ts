@@ -3,14 +3,19 @@ export interface AuthUser {
   full_name: string;
   email: string;
   oab_number: string | null;
+  cpf?: string | null;
+  phone?: string | null;
   role?: "admin" | "staff" | "client" | string;
   company_id?: number | null;
+  is_active?: boolean;
 }
 
 export interface RegisterPayload {
   full_name: string;
   email: string;
   oab_number: string;
+  cpf: string;
+  phone: string;
   oab_uf?: string;
   password: string;
   confirm_password: string;
@@ -62,16 +67,20 @@ export interface AdminProfile {
 export interface AdminOrder {
   id: number;
   numero: string;
+  user_id: number | null;
   cliente: string;
+  staff_user_id: number | null;
   tipo_servico: string;
   status: string;
   status_label: string;
   funcionario: string | null;
   prazo_cliente: string;
+  prazo_cliente_iso?: string | null;
   valor: number;
   valor_brl: string;
   criado_em: string;
   finalizado_em: string;
+  finalizado_em_iso?: string | null;
   split_plataforma: number;
   split_funcionario: number;
 }
@@ -129,6 +138,7 @@ export interface AdminPlansData {
     monthly_credits_cents: number;
     monthly_credits_brl: string;
     petition_limit_monthly: number | null;
+    is_active: boolean;
   }[];
   single_services: {
     id: number;
@@ -291,6 +301,61 @@ export interface PetitionPayload {
   document_ids: number[];
 }
 
+export interface ClientOrder {
+  id: number;
+  reference: string;
+  status: string;
+  status_label: string;
+  total_amount: number;
+  total_brl: string;
+  client_name?: string | null;
+  user_id?: number | null;
+  staff_name?: string | null;
+  staff_user_id?: number | null;
+  service_type: string;
+  created_at: string | null;
+  deadline_at: string | null;
+  completed_at: string | null;
+  items: {
+    code: string;
+    title: string;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }[];
+}
+
+export interface StaffProfile {
+  id: number;
+  full_name: string;
+  email: string;
+  cpf?: string | null;
+  phone?: string | null;
+  role: string;
+  role_title?: string | null;
+  employee_code?: string | null;
+  oab_number?: string | null;
+  zip_code?: string | null;
+  street?: string | null;
+  street_number?: string | null;
+  address_complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface StaffFinancialData {
+  summary: {
+    total_orders: number;
+    completed_orders: number;
+    estimated_payout_cents: number;
+    estimated_payout_brl: string;
+  };
+  orders: ClientOrder[];
+}
+
 export interface UploadedDocument {
   id: number;
   file_name: string;
@@ -357,9 +422,10 @@ export const api = {
 
   me: {
     get: () => request<AuthUser>("/me"),
-    update: (data: Partial<Pick<AuthUser, "full_name" | "oab_number">>) =>
-      request<AuthUser>("/me", { method: "PUT", body: JSON.stringify(data) }),
+    update: (data: Partial<Pick<AuthUser, "full_name" | "oab_number" | "email" | "phone">>) =>
+      request<AuthUser>("/me", { method: "PATCH", body: JSON.stringify(data) }),
     balance: () => request<BalanceData>("/me/balance"),
+    documents: () => request<{ documents: UploadedDocument[] }>("/me/documents"),
   },
 
   payments: {
@@ -406,14 +472,19 @@ export const api = {
     createOrder: (payload: Record<string, unknown>) =>
       request<{ order: AdminOrder }>("/admin/orders", { method: "POST", body: JSON.stringify(payload) }),
     updateOrder: (id: number, payload: Record<string, unknown>) =>
-      request<{ order: AdminOrder }>(`/admin/orders/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-    deleteOrder: (id: number) => request<{ deleted: boolean }>(`/admin/orders/${id}`, { method: "DELETE" }),
+      request<{ order: AdminOrder }>(`/admin/orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    updateOrderStatus: (id: number, status: string) =>
+      request<{ order: AdminOrder }>(`/admin/orders/${id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      }),
+    deleteOrder: (id: number) => request<Record<string, never>>(`/admin/orders/${id}`, { method: "DELETE" }),
     clients: () => request<{ clients: AdminClient[] }>("/admin/clients"),
     createClient: (payload: Record<string, unknown>) =>
       request<{ client: AdminClient }>("/admin/clients", { method: "POST", body: JSON.stringify(payload) }),
     updateClient: (id: number, payload: Record<string, unknown>) =>
-      request<{ client: AdminClient }>(`/admin/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
-    deleteClient: (id: number) => request<{ deleted: boolean }>(`/admin/clients/${id}`, { method: "DELETE" }),
+      request<{ client: AdminClient }>(`/admin/clients/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    deleteClient: (id: number) => request<Record<string, never>>(`/admin/clients/${id}`, { method: "DELETE" }),
     staff: () => request<{ staff: AdminStaffMember[] }>("/admin/staff"),
     createStaff: (payload: Record<string, unknown>) =>
       request<{ staff_member: AdminStaffMember }>("/admin/staff", {
@@ -422,11 +493,17 @@ export const api = {
       }),
     updateStaff: (id: number, payload: Record<string, unknown>) =>
       request<{ staff_member: AdminStaffMember }>(`/admin/staff/${id}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(payload),
       }),
-    deleteStaff: (id: number) => request<{ deleted: boolean }>(`/admin/staff/${id}`, { method: "DELETE" }),
+    deleteStaff: (id: number) => request<Record<string, never>>(`/admin/staff/${id}`, { method: "DELETE" }),
     financial: () => request<AdminFinancialData>("/admin/financial"),
+    financialTransactions: () => request<Pick<AdminFinancialData, "entries">>("/admin/financial/transactions"),
+    createFinancialRefund: (payload: Record<string, unknown>) =>
+      request<{ refund: NonNullable<AdminFinancialData["entries"]>[number] }>("/admin/financial/refund", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     createFinancialEntry: (payload: Record<string, unknown>) =>
       request<{ entry: unknown }>("/admin/financial/entries", {
         method: "POST",
@@ -434,7 +511,7 @@ export const api = {
       }),
     updateFinancialEntry: (id: number, payload: Record<string, unknown>) =>
       request<{ entry: unknown }>(`/admin/financial/entries/${id}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(payload),
       }),
     deleteFinancialEntry: (id: number) =>
@@ -447,10 +524,10 @@ export const api = {
       }),
     updatePlan: (id: number, payload: Record<string, unknown>) =>
       request<{ plan: AdminPlansData["plans"][number] }>(`/admin/plans/${id}`, {
-        method: "PUT",
+        method: "PATCH",
         body: JSON.stringify(payload),
       }),
-    deletePlan: (id: number) => request<{ deleted: boolean }>(`/admin/plans/${id}`, { method: "DELETE" }),
+    deletePlan: (id: number) => request<Record<string, never>>(`/admin/plans/${id}`, { method: "DELETE" }),
   },
 
   petitions: {
@@ -471,5 +548,30 @@ export const api = {
         body: form,
       });
     },
+  },
+
+  clientArea: {
+    orders: () => request<{ orders: ClientOrder[] }>("/client-area/orders"),
+    createOrder: (payload: Record<string, unknown>) =>
+      request<{ message: string; order: ClientOrder }>("/client-area/orders", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  staff: {
+    profile: () => request<StaffProfile>("/staff/profile"),
+    updateProfile: (payload: Partial<StaffProfile>) =>
+      request<StaffProfile>("/staff/profile", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    orders: () => request<{ orders: ClientOrder[] }>("/staff/orders"),
+    updateOrder: (id: number, payload: Record<string, unknown>) =>
+      request<{ order: ClientOrder }>(`/staff/orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    financial: () => request<StaffFinancialData>("/staff/financial"),
   },
 };

@@ -21,8 +21,11 @@ def serialize_user(user) -> dict:
         "full_name": user.full_name,
         "email": user.email,
         "oab_number": user.oab_number,
+        "cpf": user.cpf,
+        "phone": user.phone,
         "role": user.role,
         "company_id": user.company_id,
+        "is_active": user.is_active,
     }
 
 
@@ -49,6 +52,7 @@ def serialize_petition(petition) -> dict:
 
 
 def serialize_order(order) -> dict:
+    item_titles = [item.title for item in order.items if item.title]
     return {
         "id": order.id,
         "reference": order.reference,
@@ -56,6 +60,14 @@ def serialize_order(order) -> dict:
         "status_label": STATUS_LABELS.get(order.status, order.status.title()),
         "total_amount": order.total_amount,
         "total_brl": format_brl_from_cents(order.total_amount),
+        "client_name": order.user.full_name if getattr(order, "user", None) else None,
+        "user_id": order.user_id,
+        "staff_name": order.staff_user.full_name if getattr(order, "staff_user", None) else None,
+        "staff_user_id": order.staff_user_id,
+        "service_type": " · ".join(item_titles) if item_titles else "Serviço não informado",
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "deadline_at": order.deadline_at.isoformat() if getattr(order, "deadline_at", None) else None,
+        "completed_at": order.completed_at.isoformat() if getattr(order, "completed_at", None) else None,
         "items": [
             {
                 "code": item.code,
