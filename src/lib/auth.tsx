@@ -1,7 +1,6 @@
 import { createElement, createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { type AuthUser, type RegisterPayload } from "./api";
-import { ADMIN_FUNCIONARIOS } from "./adminMocks";
-import { isStaffActive } from "./staffStatus";
+import { api, type AuthUser, type RegisterPayload } from "./api";
+import { setRole, type UserRole } from "./roles";
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -16,13 +15,10 @@ export const AuthContext = createContext<AuthContextValue | null>(null);
 
 const USER_KEY = "auth_user";
 
-const loadStoredUser = (): AuthUser | null => {
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
-  } catch {
-    return null;
-  }
+const roleFromBackend = (role?: string | null): UserRole => {
+  if (role === "admin") return "admin";
+  if (role === "staff") return "funcionario";
+  return "cliente";
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -30,52 +26,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      const stored = loadStoredUser();
-      if (stored) setUser(stored);
-      else localStorage.removeItem("auth_token");
+    let cancelled = false;
+
+    async function bootstrap() {
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const next = await api.me.get();
+        if (cancelled) return;
+        localStorage.setItem(USER_KEY, JSON.stringify(next));
+        setRole(roleFromBackend(next.role));
+        setUser(next);
+      } catch {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem(USER_KEY);
+        if (!cancelled) setUser(null);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
-    setIsLoading(false);
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const persist = (next: AuthUser) => {
-    localStorage.setItem("auth_token", `mock-${next.id}-${Date.now()}`);
+  const persist = (next: AuthUser, token: string) => {
+    localStorage.setItem("auth_token", token);
     localStorage.setItem(USER_KEY, JSON.stringify(next));
+    setRole(roleFromBackend(next.role));
     setUser(next);
   };
 
-  const login = async (email: string, _password: string) => {
-    const blockedStaff = ADMIN_FUNCIONARIOS.find(
-      (f) => f.email.toLowerCase() === email.toLowerCase() && !isStaffActive(f.id),
-    );
-    if (blockedStaff) {
-      throw new Error("Acesso bloqueado. Entre em contato com o administrador.");
-    }
-    const stored = loadStoredUser();
-    const next: AuthUser =
-      stored && stored.email.toLowerCase() === email.toLowerCase()
-        ? stored
-        : {
-            id: Date.now(),
-            full_name: stored?.full_name ?? email.split("@")[0],
-            email,
-            oab_number: stored?.oab_number ?? null,
-          };
-    persist(next);
+  const login = async (email: string, password: string) => {
+    const response = await api.auth.login(email, password);
+    persist(response.user, response.token);
   };
 
   const register = async (payload: RegisterPayload) => {
-    if (payload.password !== payload.confirm_password) {
-      throw new Error("As senhas não conferem.");
-    }
-    const next: AuthUser = {
-      id: Date.now(),
-      full_name: payload.full_name,
-      email: payload.email,
-      oab_number: payload.oab_number,
-    };
-    persist(next);
+    const response = await api.auth.register(payload);
+    persist(response.user, response.token);
   };
 
   const logout = () => {

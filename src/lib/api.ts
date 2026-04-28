@@ -3,6 +3,8 @@ export interface AuthUser {
   full_name: string;
   email: string;
   oab_number: string | null;
+  role?: "admin" | "staff" | "client" | string;
+  company_id?: number | null;
 }
 
 export interface RegisterPayload {
