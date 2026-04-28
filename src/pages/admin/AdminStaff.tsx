@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Lock, Unlock, Plus } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Lock, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,95 +11,42 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { ADMIN_FUNCIONARIOS, type AdminFuncionarioMock } from "@/lib/adminMocks";
-import { isStaffActive, toggleStaffActive } from "@/lib/staffStatus";
-import { useSyncExternalStore } from "react";
-import { toast } from "@/hooks/use-toast";
-
-// Subscriber simples para forçar re-render quando status muda.
-const listeners = new Set<() => void>();
-let tick = 0;
-const notifyAll = () => {
-  tick++;
-  listeners.forEach((l) => l());
-};
-const useStatusTick = () =>
-  useSyncExternalStore(
-    (l) => {
-      listeners.add(l);
-      return () => listeners.delete(l);
-    },
-    () => tick,
-    () => tick,
-  );
+import { api } from "@/lib/api";
 
 export default function AdminStaff() {
-  useStatusTick();
-  const [target, setTarget] = useState<AdminFuncionarioMock | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "staff"],
+    queryFn: () => api.admin.staff(),
+  });
 
-  const funcionarios = useMemo(
-    () =>
-      ADMIN_FUNCIONARIOS.map((f) => ({
-        ...f,
-        ativo: isStaffActive(f.id),
-      })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tick],
-  );
-
-  const handleConfirm = () => {
-    if (!target) return;
-    const next = toggleStaffActive(target.id);
-    notifyAll();
-    toast({
-      title: next ? "Acesso liberado" : "Acesso bloqueado",
-      description: next
-        ? `${target.nome} pode voltar a entrar na plataforma.`
-        : `${target.nome} não conseguirá mais fazer login até ser desbloqueado.`,
-    });
-    setTarget(null);
-  };
+  const funcionarios = data?.staff ?? [];
 
   return (
-    <TooltipProvider>
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-              Funcionários
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Equipe interna que executa os pedidos da plataforma.
-            </p>
-          </div>
-          <Button disabled className="bg-accent text-accent-foreground hover:bg-accent/90">
-            <Plus className="mr-2 h-4 w-4" /> Novo funcionário
-          </Button>
+    <div className="mx-auto max-w-6xl space-y-6">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
+            Funcionários
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Equipe interna que executa os pedidos da plataforma.
+          </p>
         </div>
+        <Button disabled className="bg-accent text-accent-foreground hover:bg-accent/90">
+          <Plus className="mr-2 h-4 w-4" /> Novo funcionário
+        </Button>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="font-display text-xl">
-              {funcionarios.length} funcionários cadastrados
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-xl">
+            {isLoading ? "Carregando..." : `${funcionarios.length} funcionários cadastrados`}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <p className="p-6 text-sm text-muted-foreground">Carregando funcionários...</p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -119,10 +66,10 @@ export default function AdminStaff() {
                     <TableCell className="text-sm text-muted-foreground">{f.email}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">{f.telefone}</TableCell>
                     <TableCell className="text-right font-medium text-primary">
-                      {f.pedidosAtivos}
+                      {f.pedidos_ativos}
                     </TableCell>
                     <TableCell className="text-right font-medium text-accent">
-                      {f.pedidosConcluidos}
+                      {f.pedidos_concluidos}
                     </TableCell>
                     <TableCell>
                       <span
@@ -137,79 +84,21 @@ export default function AdminStaff() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setTarget(f)}
-                            aria-label={f.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
-                            className={cn(
-                              f.ativo
-                                ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                : "text-accent hover:bg-accent/10",
-                            )}
-                          >
-                            {f.ativo ? (
-                              <Lock className="h-4 w-4" />
-                            ) : (
-                              <Unlock className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {f.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
-                        </TooltipContent>
-                      </Tooltip>
+                      <Button variant="ghost" size="icon" disabled aria-label="Bloquear acesso">
+                        <Lock className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        <p className="text-center text-xs text-muted-foreground">
-          O bloqueio impede o login do funcionário e pode ser revertido a qualquer momento.
-        </p>
-      </div>
-
-      <AlertDialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {target?.ativo ? "Bloquear acesso do funcionário?" : "Desbloquear acesso do funcionário?"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {target?.ativo ? (
-                <>
-                  <strong>{target?.nome}</strong> não conseguirá mais fazer login na plataforma
-                  enquanto estiver bloqueado. Pedidos em andamento permanecem inalterados.
-                  Você pode reverter essa ação a qualquer momento.
-                </>
-              ) : (
-                <>
-                  <strong>{target?.nome}</strong> voltará a ter acesso normal à plataforma e
-                  poderá fazer login novamente.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirm}
-              className={cn(
-                target?.ativo
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  : "bg-accent text-accent-foreground hover:bg-accent/90",
-              )}
-            >
-              {target?.ativo ? "Bloquear" : "Desbloquear"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </TooltipProvider>
+      <p className="text-center text-xs text-muted-foreground">
+        O bloqueio de acesso será disponibilizado em uma próxima atualização.
+      </p>
+    </div>
   );
 }

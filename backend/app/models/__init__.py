@@ -1,6 +1,7 @@
 from app.models.audit import AuditLog
 from app.models.credits import CreditTransaction
 from app.models.documents import Document
+from app.models.financial import FinancialEntry
 from app.models.orders import ServiceCatalogItem, ServiceOrder, ServiceOrderItem
 from app.models.payments import CreditPurchase, Order, PaymentEvent
 from app.models.petitions import Petition, PetitionDocumentLink, PetitionParty
@@ -13,6 +14,7 @@ __all__ = [
     "CreditPurchase",
     "CreditTransaction",
     "Document",
+    "FinancialEntry",
     "Order",
     "PaymentEvent",
     "Petition",

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,19 +19,22 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ADMIN_PEDIDOS, type AdminPedidoMock } from "@/lib/adminMocks";
+import { api, type AdminOrder } from "@/lib/api";
 
-const statusBadge: Record<AdminPedidoMock["status"], string> = {
-  "Em análise": "bg-primary/10 text-primary border border-primary/20",
-  "Aguardando dados": "bg-destructive/10 text-destructive border border-destructive/30",
-  Concluído: "bg-accent/15 text-accent border border-accent/30",
+const statusBadge: Record<string, string> = {
+  pendente: "bg-primary/10 text-primary border border-primary/20",
+  em_andamento: "bg-destructive/10 text-destructive border border-destructive/30",
+  concluido: "bg-accent/15 text-accent border border-accent/30",
 };
 
-const formatBRL = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
 export default function AdminOrders() {
-  const [selecionado, setSelecionado] = useState<AdminPedidoMock | null>(null);
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "orders"],
+    queryFn: () => api.admin.orders(),
+  });
+  const [selecionado, setSelecionado] = useState<AdminOrder | null>(null);
+
+  const orders = data?.orders ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -44,7 +48,7 @@ export default function AdminOrders() {
           </p>
         </div>
         <div className="rounded-md border border-border bg-secondary/40 px-3 py-2 text-xs text-muted-foreground">
-          {ADMIN_PEDIDOS.length} pedidos
+          {isLoading ? "Carregando..." : `${orders.length} pedidos`}
         </div>
       </div>
 
@@ -53,7 +57,9 @@ export default function AdminOrders() {
           <CardTitle className="font-display text-xl">Pedidos</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {ADMIN_PEDIDOS.length === 0 ? (
+          {isLoading ? (
+            <p className="p-6 text-sm text-muted-foreground">Carregando pedidos...</p>
+          ) : orders.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-10 text-center text-muted-foreground">
               <Inbox className="h-8 w-8" />
               <p className="text-sm">Nenhum pedido encontrado.</p>
@@ -72,21 +78,21 @@ export default function AdminOrders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {ADMIN_PEDIDOS.map((p) => (
+                {orders.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">Nº {p.numero}</TableCell>
                     <TableCell>{p.cliente}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {p.tipoServico}
+                      {p.tipo_servico}
                     </TableCell>
                     <TableCell>
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                          statusBadge[p.status],
+                          statusBadge[p.status] ?? "bg-secondary text-foreground border border-border",
                         )}
                       >
-                        {p.status}
+                        {p.status_label}
                       </span>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
@@ -95,7 +101,7 @@ export default function AdminOrders() {
                       )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {p.prazoCliente}
+                      {p.prazo_cliente}
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -139,18 +145,18 @@ export default function AdminOrders() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Cliente" value={selecionado.cliente} />
                 <Field label="Funcionário vinculado" value={selecionado.funcionario ?? "—"} />
-                <Field label="Tipo de serviço" value={selecionado.tipoServico} className="sm:col-span-2" />
-                <Field label="Criado em" value={selecionado.criadoEm} />
-                <Field label="Prazo cliente" value={selecionado.prazoCliente} />
-                <Field label="Finalizado em" value={selecionado.finalizadoEm ?? "—"} />
-                <Field label="Valor" value={formatBRL(selecionado.valor)} />
+                <Field label="Tipo de serviço" value={selecionado.tipo_servico} className="sm:col-span-2" />
+                <Field label="Criado em" value={selecionado.criado_em} />
+                <Field label="Prazo cliente" value={selecionado.prazo_cliente} />
+                <Field label="Finalizado em" value={selecionado.finalizado_em ?? "—"} />
+                <Field label="Valor" value={selecionado.valor_brl} />
                 <Field
                   label="Split plataforma"
-                  value={`${selecionado.splitPlataforma}%`}
+                  value={`${selecionado.split_plataforma}%`}
                 />
                 <Field
                   label="Split funcionário"
-                  value={`${selecionado.splitFuncionario}%`}
+                  value={`${selecionado.split_funcionario}%`}
                 />
               </div>
 

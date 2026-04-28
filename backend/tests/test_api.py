@@ -20,7 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app import create_app
 from app.core.extensions import db
-from app.models import Order, PaymentEvent, User
+from app.models import Company, Order, PaymentEvent, Plan, User
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nsmoke-test"
@@ -461,6 +461,72 @@ class BackendApiTestCase(unittest.TestCase):
         petitions_response = self.client.get("/api/petitions", headers=headers)
         self.assertEqual(petitions_response.status_code, 200)
         self.assertEqual(len(petitions_response.get_json()["petitions"]), 1)
+
+    def test_admin_endpoints_smoke(self) -> None:
+        with self.app.app_context():
+            company = Company.query.filter_by(slug="smoke-admin-company").first()
+            if company is None:
+                company = Company(name="Smoke Admin Company", slug="smoke-admin-company")
+                db.session.add(company)
+                db.session.flush()
+
+            plan = Plan.query.filter_by(code="starter").first()
+            admin = User.query.filter_by(email="admin-smoke@example.com").first()
+            if admin is None:
+                admin = User(
+                    full_name="Admin Smoke",
+                    email="admin-smoke@example.com",
+                    password_hash=generate_password_hash("Sm0ke!Pass#2026"),
+                    role="admin",
+                    company_id=company.id,
+                    active_plan_id=plan.id if plan else None,
+                )
+                db.session.add(admin)
+
+            client = User.query.filter_by(email="client-smoke@example.com").first()
+            if client is None:
+                client = User(
+                    full_name="Client Smoke",
+                    email="client-smoke@example.com",
+                    password_hash=generate_password_hash("Sm0ke!Pass#2026"),
+                    role="client",
+                    company_id=company.id,
+                    active_plan_id=plan.id if plan else None,
+                )
+                db.session.add(client)
+
+            staff = User.query.filter_by(email="staff-smoke@example.com").first()
+            if staff is None:
+                staff = User(
+                    full_name="Staff Smoke",
+                    email="staff-smoke@example.com",
+                    password_hash=generate_password_hash("Sm0ke!Pass#2026"),
+                    role="staff",
+                    company_id=company.id,
+                    active_plan_id=plan.id if plan else None,
+                )
+                db.session.add(staff)
+
+            db.session.commit()
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            json={"email": "admin-smoke@example.com", "password": "Sm0ke!Pass#2026"},
+        )
+        self.assertEqual(login_response.status_code, 200)
+        headers = self.auth_headers(login_response.get_json()["token"])
+
+        for path in (
+            "/api/admin/profile",
+            "/api/admin/orders",
+            "/api/admin/clients",
+            "/api/admin/staff",
+            "/api/admin/plans",
+            "/api/admin/financial/entries",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path, headers=headers)
+                self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":

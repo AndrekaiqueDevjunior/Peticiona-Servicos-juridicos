@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Flask
 
+from app.bootstrap.migrations import run_runtime_migrations
 from app.bootstrap.seed import seed_reference_data
 from app.core.config import Config
 from app.core.errors import register_error_handlers
@@ -29,6 +30,7 @@ def create_app(config_overrides: dict | None = None) -> Flask:
 
     with app.app_context():
         db.create_all()
+        run_runtime_migrations()
         seed_reference_data()
 
     return app

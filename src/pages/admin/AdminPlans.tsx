@@ -1,28 +1,17 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  PRECO_PLANO,
-  PRECO_AVULSO_GRUPO_A,
-  PRECO_AVULSO_GRUPO_B,
-  PRECO_PETICAO_EXPRESS,
-  PRECO_RECURSO_EXPRESS,
-  formatBRL,
-} from "@/lib/pricing";
+import { api } from "@/lib/api";
 
 export default function AdminPlans() {
-  const planos = [
-    { key: "essencial", label: "Plano Essencial", preco: PRECO_PLANO.essencial },
-    { key: "profissional", label: "Plano Profissional", preco: PRECO_PLANO.profissional },
-    { key: "estrategico", label: "Plano Estratégico", preco: PRECO_PLANO.estrategico },
-  ];
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "plans"],
+    queryFn: () => api.admin.plans(),
+  });
 
-  const avulsos = [
-    { label: "Petição Avulsa (Grupo A)", preco: PRECO_AVULSO_GRUPO_A },
-    { label: "Recurso Avulso (Grupo B)", preco: PRECO_AVULSO_GRUPO_B },
-    { label: "Petição Express", preco: PRECO_PETICAO_EXPRESS },
-    { label: "Recurso Express", preco: PRECO_RECURSO_EXPRESS },
-  ];
+  const plans = data?.plans ?? [];
+  const singleServices = data?.single_services ?? [];
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -40,12 +29,16 @@ export default function AdminPlans() {
           <CardTitle className="font-display text-xl">Planos mensais</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-3">
-          {planos.map((p) => (
-            <div key={p.key} className="grid gap-2">
-              <Label className="text-muted-foreground">{p.label}</Label>
-              <Input value={formatBRL(p.preco)} disabled />
-            </div>
-          ))}
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando planos...</p>
+          ) : (
+            plans.map((plan) => (
+              <div key={plan.id} className="grid gap-2">
+                <Label className="text-muted-foreground">{plan.name}</Label>
+                <Input value={plan.monthly_price_brl} disabled />
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
@@ -54,12 +47,16 @@ export default function AdminPlans() {
           <CardTitle className="font-display text-xl">Serviços avulsos</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          {avulsos.map((a) => (
-            <div key={a.label} className="grid gap-2">
-              <Label className="text-muted-foreground">{a.label}</Label>
-              <Input value={formatBRL(a.preco)} disabled />
-            </div>
-          ))}
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Carregando serviços...</p>
+          ) : (
+            singleServices.map((service) => (
+              <div key={service.id} className="grid gap-2">
+                <Label className="text-muted-foreground">{service.title}</Label>
+                <Input value={service.unit_price_brl} disabled />
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 

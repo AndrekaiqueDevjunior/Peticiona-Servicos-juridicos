@@ -37,6 +37,109 @@ export interface BalanceData {
   }[];
 }
 
+export interface AdminProfile {
+  id: number;
+  full_name: string;
+  email: string;
+  oab_number: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  role: string;
+  role_title?: string | null;
+  employee_code?: string | null;
+  zip_code?: string | null;
+  street?: string | null;
+  street_number?: string | null;
+  address_complement?: string | null;
+  neighborhood?: string | null;
+  city?: string | null;
+  state?: string | null;
+  is_active: boolean;
+  created_at: string;
+  created_at_label: string;
+}
+
+export interface AdminOrder {
+  id: number;
+  numero: string;
+  cliente: string;
+  tipo_servico: string;
+  status: string;
+  status_label: string;
+  funcionario: string | null;
+  prazo_cliente: string;
+  valor: number;
+  valor_brl: string;
+  criado_em: string;
+  finalizado_em: string;
+  split_plataforma: number;
+  split_funcionario: number;
+}
+
+export interface AdminClient {
+  id: number;
+  nome: string;
+  oab: string;
+  email: string;
+  telefone: string;
+  plano: string;
+  cadastrado_em: string;
+  ativo: boolean;
+}
+
+export interface AdminStaffMember {
+  id: number;
+  nome: string;
+  email: string;
+  telefone: string;
+  pedidos_ativos: number;
+  pedidos_concluidos: number;
+  ativo: boolean;
+}
+
+export interface AdminFinancialData {
+  stats: {
+    receita_mes: number;
+    receita_mes_brl: string;
+    concluidos: number;
+    abertos: number;
+  };
+  orders: AdminOrder[];
+  entries?: {
+    id: number;
+    description: string;
+    kind: "credit" | "debit" | string;
+    amount_cents: number;
+    amount_brl: string;
+    occurred_at: string;
+    occurred_at_label: string;
+    order_id: number | null;
+    is_active: boolean;
+  }[];
+}
+
+export interface AdminPlansData {
+  plans: {
+    id: number;
+    code: string;
+    name: string;
+    description: string | null;
+    monthly_price_cents: number;
+    monthly_price_brl: string;
+    monthly_credits_cents: number;
+    monthly_credits_brl: string;
+    petition_limit_monthly: number | null;
+  }[];
+  single_services: {
+    id: number;
+    code: string;
+    section: string;
+    title: string;
+    unit_price: number;
+    unit_price_brl: string;
+  }[];
+}
+
 export interface CreditPackage {
   id: string;
   name: string;
@@ -293,6 +396,61 @@ export const api = {
   dashboard: {
     get: (status?: string) =>
       request<DashboardData>(`/dashboard${status ? `?status=${status}` : ""}`),
+  },
+
+  admin: {
+    profile: () => request<AdminProfile>("/admin/profile"),
+    updateProfile: (data: Partial<Pick<AdminProfile, "full_name" | "email" | "oab_number">>) =>
+      request<AdminProfile>("/admin/profile", { method: "PUT", body: JSON.stringify(data) }),
+    orders: () => request<{ orders: AdminOrder[] }>("/admin/orders"),
+    createOrder: (payload: Record<string, unknown>) =>
+      request<{ order: AdminOrder }>("/admin/orders", { method: "POST", body: JSON.stringify(payload) }),
+    updateOrder: (id: number, payload: Record<string, unknown>) =>
+      request<{ order: AdminOrder }>(`/admin/orders/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    deleteOrder: (id: number) => request<{ deleted: boolean }>(`/admin/orders/${id}`, { method: "DELETE" }),
+    clients: () => request<{ clients: AdminClient[] }>("/admin/clients"),
+    createClient: (payload: Record<string, unknown>) =>
+      request<{ client: AdminClient }>("/admin/clients", { method: "POST", body: JSON.stringify(payload) }),
+    updateClient: (id: number, payload: Record<string, unknown>) =>
+      request<{ client: AdminClient }>(`/admin/clients/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+    deleteClient: (id: number) => request<{ deleted: boolean }>(`/admin/clients/${id}`, { method: "DELETE" }),
+    staff: () => request<{ staff: AdminStaffMember[] }>("/admin/staff"),
+    createStaff: (payload: Record<string, unknown>) =>
+      request<{ staff_member: AdminStaffMember }>("/admin/staff", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    updateStaff: (id: number, payload: Record<string, unknown>) =>
+      request<{ staff_member: AdminStaffMember }>(`/admin/staff/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    deleteStaff: (id: number) => request<{ deleted: boolean }>(`/admin/staff/${id}`, { method: "DELETE" }),
+    financial: () => request<AdminFinancialData>("/admin/financial"),
+    createFinancialEntry: (payload: Record<string, unknown>) =>
+      request<{ entry: unknown }>("/admin/financial/entries", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    updateFinancialEntry: (id: number, payload: Record<string, unknown>) =>
+      request<{ entry: unknown }>(`/admin/financial/entries/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    deleteFinancialEntry: (id: number) =>
+      request<{ deleted: boolean }>(`/admin/financial/entries/${id}`, { method: "DELETE" }),
+    plans: () => request<AdminPlansData>("/admin/plans"),
+    createPlan: (payload: Record<string, unknown>) =>
+      request<{ plan: AdminPlansData["plans"][number] }>("/admin/plans", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    updatePlan: (id: number, payload: Record<string, unknown>) =>
+      request<{ plan: AdminPlansData["plans"][number] }>(`/admin/plans/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    deletePlan: (id: number) => request<{ deleted: boolean }>(`/admin/plans/${id}`, { method: "DELETE" }),
   },
 
   petitions: {

@@ -21,11 +21,17 @@ class ServiceOrder(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     __table_args__ = (db.Index("ix_service_orders_company_status", "company_id", "status"),)
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    staff_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     reference = db.Column(db.String(40), nullable=False, unique=True, index=True)
     status = db.Column(db.String(30), nullable=False, default="pendente", index=True)
     total_amount = db.Column(db.Integer, nullable=False, default=0)
+    deadline_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    split_plataforma = db.Column(db.Integer, nullable=False, default=100)
+    split_funcionario = db.Column(db.Integer, nullable=False, default=0)
 
-    user = db.relationship("User")
+    user = db.relationship("User", foreign_keys=[user_id])
+    staff_user = db.relationship("User", foreign_keys=[staff_user_id])
     items = db.relationship(
         "ServiceOrderItem",
         back_populates="order",

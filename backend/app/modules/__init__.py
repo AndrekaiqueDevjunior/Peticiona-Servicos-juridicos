@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Flask
 
+from app.modules.admin.routes import admin_bp
 from app.modules.auth.routes import auth_bp
 from app.modules.checkout.routes import checkout_bp
 from app.modules.client_area.routes import client_area_bp
@@ -22,6 +23,7 @@ def register_blueprints(app: Flask) -> None:
         content_bp,
         client_area_bp,
         split_payment_bp,
+        admin_bp,
         auth_bp,
         me_bp,
         checkout_bp,
