@@ -503,7 +503,7 @@ describe("/area-interna/perfil — Perfil funcionário (READ + UPDATE)", () => {
 
   it("campo e-mail é editável (UPDATE)", () => {
     renderWithOutlet(StaffLayout, StaffProfile, "/area-interna", "perfil", "/area-interna/perfil");
-    expect(screen.getByDisplayValue("ana.souza@peticiona.com.br")).not.toBeDisabled();
+    expect(screen.getByDisplayValue("ana.souza@peticiona.app.br")).not.toBeDisabled();
   });
 
   it("botão 'Salvar alterações' está presente", () => {
@@ -591,7 +591,7 @@ describe("/admin/perfil — Perfil admin (READ + UPDATE)", () => {
 
   it("campo e-mail do admin é editável (UPDATE)", () => {
     renderWithOutlet(AdminLayout, AdminProfile, "/admin", "perfil", "/admin/perfil");
-    expect(screen.getByDisplayValue("admin@peticiona.com.br")).not.toBeDisabled();
+    expect(screen.getByDisplayValue("admin@peticiona.app.br")).not.toBeDisabled();
   });
 });
 

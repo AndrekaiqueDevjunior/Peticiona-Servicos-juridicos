@@ -57,7 +57,7 @@ const Footer = () => (
         <div id="contato">
           <p className="text-[11px] uppercase tracking-[0.2em] text-accent">Contato</p>
           <ul className="mt-4 space-y-2 text-sm text-primary-foreground/80">
-            <li>contato@peticiona.adv.br</li>
+            <li>contato@peticiona.app.br</li>
             <li>Atendimento Seg–Sex · 9h–18h</li>
           </ul>
           <ContactForm />

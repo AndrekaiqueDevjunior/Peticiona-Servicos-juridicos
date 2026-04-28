@@ -38,7 +38,7 @@ export default function Dashboard() {
     },
     {
       label: "Saldo disponível",
-      value: `${balance?.credits_available ?? 0} créditos`,
+      value: balance?.credits_available_brl ?? `${balance?.credits_available ?? 0} créditos`,
       icon: Wallet,
       color: "text-accent",
     },

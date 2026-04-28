@@ -16,14 +16,118 @@ export interface RegisterPayload {
 
 export interface BalanceData {
   credits_available: number;
+  credits_available_cents?: number;
+  credits_available_brl?: string;
   credits_total: number;
+  credits_total_cents?: number;
+  credits_total_brl?: string;
   credits_used: number;
+  credits_used_cents?: number;
+  credits_used_brl?: string;
   movements: {
     type: "in" | "out";
     amount: number;
+    amount_cents?: number;
+    amount_brl?: string;
     description: string;
     date: string;
+    source?: "plano" | "avulso" | "mix";
   }[];
+}
+
+export interface CreditPackage {
+  id: string;
+  name: string;
+  kind: "plan" | "single";
+  source: "plano" | "avulso";
+  amount_cents: number;
+  amount_brl: string;
+  credit_cents: number;
+  credit_brl: string;
+  description: string;
+}
+
+export interface CreditPaymentConfig {
+  public_key: string;
+  dry_run: boolean;
+  packages: CreditPackage[];
+}
+
+export interface CreditOrderPayload {
+  package_id: string;
+  idempotency_key: string;
+  card_token: string;
+  customer: {
+    document: string;
+    phone: string;
+  };
+  billing_address: {
+    zip_code: string;
+    street: string;
+    number: string;
+    neighborhood: string;
+    complement?: string;
+    city: string;
+    state: string;
+  };
+  antifraud: {
+    session_id: string;
+    device: {
+      platform: string;
+    };
+    location?: {
+      latitude: string;
+      longitude: string;
+    };
+  };
+}
+
+export interface CreditOrderResponse {
+  purchase: {
+    id: number;
+    code: string;
+    package_id: string;
+    package_name: string;
+    kind: "plan" | "single";
+    source: "plano" | "avulso";
+    amount_cents: number;
+    amount_brl: string;
+    credit_cents: number;
+    credit_brl: string;
+    status: "processing" | "pending" | "paid" | "failed" | string;
+    paid: boolean;
+    credited: boolean;
+    pagarme_order_id?: string | null;
+    antifraud_status?: string | null;
+  };
+}
+
+export interface CheckoutOrder {
+  id: number;
+  user_id: number;
+  service_id: string;
+  service_name: string | null;
+  amount: number;
+  amount_brl: string;
+  currency: "BRL" | string;
+  status: "pending" | "processing" | "paid" | "failed" | "canceled" | "refunded" | string;
+  paid: boolean;
+  released: boolean;
+  pagarme_order_id?: string | null;
+  pagarme_charge_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  paid_at?: string | null;
+  released_at?: string | null;
+}
+
+export interface CheckoutPaymentPayload {
+  order_id: number;
+  idempotency_key?: string;
+  card_token: string;
+  customer: CreditOrderPayload["customer"];
+  billing_address: CreditOrderPayload["billing_address"];
+  antifraud: CreditOrderPayload["antifraud"];
 }
 
 export interface Petition {
@@ -94,7 +198,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   const res = await fetch(`/api${path}`, { ...options, headers });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error((data as { error?: string }).error || "Erro inesperado.");
+  if (!res.ok) {
+    const errorPayload = data as { error?: string; message?: string };
+    throw new Error(errorPayload.message || errorPayload.error || "Erro inesperado.");
+  }
   return data as T;
 }
 
@@ -117,6 +224,32 @@ export const api = {
     update: (data: Partial<Pick<AuthUser, "full_name" | "oab_number">>) =>
       request<AuthUser>("/me", { method: "PUT", body: JSON.stringify(data) }),
     balance: () => request<BalanceData>("/me/balance"),
+  },
+
+  payments: {
+    creditPackages: () => request<CreditPaymentConfig>("/payments/credit-packages"),
+    createCreditOrder: (payload: CreditOrderPayload) =>
+      request<CreditOrderResponse>("/payments/credit-orders", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+  },
+
+  checkout: {
+    createOrder: (serviceId: string, idempotencyKey?: string) =>
+      request<{ order: CheckoutOrder }>("/checkout/create-order", {
+        method: "POST",
+        body: JSON.stringify({
+          service_id: serviceId,
+          idempotency_key: idempotencyKey,
+        }),
+      }),
+    createPayment: (payload: CheckoutPaymentPayload) =>
+      request<{ order: CheckoutOrder }>("/checkout/create-payment", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    status: (orderId: number) => request<{ order: CheckoutOrder }>(`/checkout/status/${orderId}`),
   },
 
   dashboard: {

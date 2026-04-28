@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.core.errors import NotFoundError, ValidationError
 from app.core.extensions import db
 from app.core.security import ensure_allowed_document, ensure_upload_size, upload_folder
-from app.models import Company, Document, ServiceOrder, ServiceOrderItem
+from app.models import Company, Document, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
 from app.services.audit_service import log_action
 from app.services.serializers import format_brl_from_cents, serialize_document, serialize_order
 
@@ -43,7 +43,30 @@ CATALOG = [
 
 
 def _catalog_index() -> dict[str, dict]:
-    return {item["code"]: item for section in CATALOG for item in section["items"]}
+    return {item["code"]: item for section in _catalog_sections() for item in section["items"]}
+
+
+def _catalog_sections() -> list[dict]:
+    services = (
+        ServiceCatalogItem.query.filter_by(is_active=True)
+        .order_by(ServiceCatalogItem.id.asc())
+        .all()
+    )
+    if not services:
+        return CATALOG
+
+    sections: dict[str, dict] = {}
+    for service in services:
+        section = sections.setdefault(service.section, {"section": service.section, "items": []})
+        section["items"].append(
+            {
+                "code": service.code,
+                "title": service.title,
+                "description": service.description,
+                "unit_price": service.unit_price,
+            }
+        )
+    return list(sections.values())
 
 
 def _public_company() -> Company:
@@ -58,7 +81,7 @@ def _next_reference() -> str:
 
 
 def get_catalog() -> dict:
-    return {"catalog": CATALOG}
+    return {"catalog": _catalog_sections()}
 
 
 def preview_cart(payload: dict) -> dict:

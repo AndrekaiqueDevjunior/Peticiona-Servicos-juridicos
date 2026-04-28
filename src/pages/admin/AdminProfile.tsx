@@ -16,7 +16,7 @@ const dadosFixos = {
 
 export default function AdminProfile() {
   const [telefone, setTelefone] = useState("(11) 99999-1234");
-  const [email, setEmail] = useState("admin@peticiona.com.br");
+  const [email, setEmail] = useState("admin@peticiona.app.br");
   const [cep, setCep] = useState("04538-132");
   const [logradouro, setLogradouro] = useState("Av. Brigadeiro Faria Lima");
   const [numero, setNumero] = useState("3477");

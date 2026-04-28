@@ -84,7 +84,7 @@ export const ADMIN_FUNCIONARIOS: AdminFuncionarioMock[] = [
   {
     id: "f1",
     nome: "Ana Beatriz Souza",
-    email: "ana.souza@peticiona.com.br",
+    email: "ana.souza@peticiona.app.br",
     telefone: "(11) 98765-4321",
     pedidosAtivos: 4,
     pedidosConcluidos: 23,
@@ -93,7 +93,7 @@ export const ADMIN_FUNCIONARIOS: AdminFuncionarioMock[] = [
   {
     id: "f2",
     nome: "Carlos Henrique Lima",
-    email: "carlos.lima@peticiona.com.br",
+    email: "carlos.lima@peticiona.app.br",
     telefone: "(11) 91234-9988",
     pedidosAtivos: 2,
     pedidosConcluidos: 18,
@@ -102,7 +102,7 @@ export const ADMIN_FUNCIONARIOS: AdminFuncionarioMock[] = [
   {
     id: "f3",
     nome: "Juliana Ribeiro",
-    email: "juliana.r@peticiona.com.br",
+    email: "juliana.r@peticiona.app.br",
     telefone: "(11) 99887-1234",
     pedidosAtivos: 0,
     pedidosConcluidos: 7,

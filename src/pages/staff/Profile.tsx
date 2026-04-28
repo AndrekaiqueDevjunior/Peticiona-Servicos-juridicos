@@ -17,7 +17,7 @@ const dadosFixos = {
 
 export default function StaffProfile() {
   const [telefone, setTelefone] = useState("(11) 98765-4321");
-  const [email, setEmail] = useState("ana.souza@peticiona.com.br");
+  const [email, setEmail] = useState("ana.souza@peticiona.app.br");
   const [cep, setCep] = useState("01310-100");
   const [logradouro, setLogradouro] = useState("Av. Paulista");
   const [numero, setNumero] = useState("1000");

@@ -52,6 +52,11 @@ class PlanLimitExceeded(AppError):
     error_code = "PLAN_LIMIT_EXCEEDED"
 
 
+class PaymentGatewayError(AppError):
+    status_code = HTTPStatus.BAD_GATEWAY
+    error_code = "PAYMENT_GATEWAY_ERROR"
+
+
 def _payload(error: str, message: str, details: dict | list | None = None) -> tuple[dict, int]:
     response = {"error": error, "message": message}
     if details is not None:

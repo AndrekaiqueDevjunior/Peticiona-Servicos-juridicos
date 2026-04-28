@@ -6,6 +6,7 @@ from app.services.client_area_service import (
     upload_documents,
 )
 from app.services.content_service import get_home_content, get_plans_catalog
+from app.services.credit_payment_service import create_credit_purchase, get_credit_payment_config
 from app.services.dashboard_service import get_dashboard
 from app.services.petition_service import create_petition, list_petitions
 from app.services.split_payment_service import get_split_payment_seed, preview_split_payment
@@ -13,9 +14,11 @@ from app.services.user_service import get_balance_snapshot, get_profile, update_
 
 __all__ = [
     "create_order",
+    "create_credit_purchase",
     "create_petition",
     "get_balance_snapshot",
     "get_catalog",
+    "get_credit_payment_config",
     "get_dashboard",
     "get_home_content",
     "get_plans_catalog",

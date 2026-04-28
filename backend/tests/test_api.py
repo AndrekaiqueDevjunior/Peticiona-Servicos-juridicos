@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
+import hmac
 import io
+import json
 import sys
 import tempfile
 import unittest
@@ -17,7 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app import create_app
 from app.core.extensions import db
-from app.models import User
+from app.models import Order, PaymentEvent, User
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nsmoke-test"
@@ -148,6 +151,189 @@ class BackendApiTestCase(unittest.TestCase):
         petitions_response = self.client.get("/api/petitions", headers=self.auth_headers(token))
         self.assertEqual(petitions_response.status_code, 200)
         self.assertEqual(petitions_response.get_json()["petitions"], [])
+
+    def test_pagarme_credit_purchase_credits_balance_once(self) -> None:
+        self.app.config.update(
+            PAGARME_DRY_RUN=True,
+            PAGARME_PUBLIC_KEY="pk_test_public",
+            PAGARME_SECRET_KEY="sk_test_secret",
+        )
+        self.assertEqual(self.register_user().status_code, 201)
+        token = self.login_user().get_json()["token"]
+        headers = self.auth_headers(token)
+
+        config_response = self.client.get("/api/payments/credit-packages", headers=headers)
+        self.assertEqual(config_response.status_code, 200)
+        self.assertTrue(config_response.get_json()["dry_run"])
+
+        payload = {
+            "package_id": "peticao_avulsa",
+            "idempotency_key": "test-idempotency-001",
+            "card_token": "tok_test_card_123",
+            "customer": {
+                "document": "12345678909",
+                "phone": "(11) 91234-5678",
+            },
+            "billing_address": {
+                "zip_code": "01001000",
+                "street": "Praca da Se",
+                "number": "100",
+                "neighborhood": "Se",
+                "city": "Sao Paulo",
+                "state": "SP",
+            },
+            "antifraud": {
+                "session_id": "session-test-123",
+                "device": {"platform": "test"},
+            },
+        }
+
+        purchase_response = self.client.post(
+            "/api/payments/credit-orders",
+            headers=headers,
+            json=payload,
+        )
+        self.assertEqual(purchase_response.status_code, 201)
+        self.assertTrue(purchase_response.get_json()["purchase"]["paid"])
+
+        duplicate_response = self.client.post(
+            "/api/payments/credit-orders",
+            headers=headers,
+            json=payload,
+        )
+        self.assertEqual(duplicate_response.status_code, 201)
+
+        balance_response = self.client.get("/api/me/balance", headers=headers)
+        self.assertEqual(balance_response.status_code, 200)
+        self.assertEqual(balance_response.get_json()["credits_available"], 18000)
+
+    def test_checkout_payment_webhook_is_idempotent(self) -> None:
+        self.app.config.update(
+            PAGARME_DRY_RUN=True,
+            PAGARME_PUBLIC_KEY="pk_test_public",
+            PAGARME_SECRET_KEY="sk_test_secret",
+        )
+        self.assertEqual(self.register_user().status_code, 201)
+        token = self.login_user().get_json()["token"]
+        headers = self.auth_headers(token)
+        service = self.client.get("/api/client-area").get_json()["catalog"][0]["items"][0]
+
+        order_response = self.client.post(
+            "/api/checkout/create-order",
+            headers=headers,
+            json={
+                "service_id": service["code"],
+                "amount": 1,
+                "idempotency_key": "checkout-order-001",
+            },
+        )
+        self.assertEqual(order_response.status_code, 201)
+        order_payload = order_response.get_json()["order"]
+        self.assertEqual(order_payload["status"], "pending")
+        self.assertEqual(order_payload["amount"], service["unit_price"])
+
+        duplicate_order_response = self.client.post(
+            "/api/checkout/create-order",
+            headers=headers,
+            json={
+                "service_id": service["code"],
+                "idempotency_key": "checkout-order-001",
+            },
+        )
+        self.assertEqual(duplicate_order_response.status_code, 200)
+        self.assertEqual(duplicate_order_response.get_json()["order"]["id"], order_payload["id"])
+
+        payment_payload = {
+            "order_id": order_payload["id"],
+            "idempotency_key": "checkout-payment-001",
+            "card_token": "tok_test_card_123",
+            "customer": {
+                "document": "12345678909",
+                "phone": "(11) 91234-5678",
+            },
+            "billing_address": {
+                "zip_code": "01001000",
+                "street": "Praca da Se",
+                "number": "100",
+                "neighborhood": "Se",
+                "city": "Sao Paulo",
+                "state": "SP",
+            },
+            "antifraud": {
+                "session_id": "session-checkout-123",
+                "device": {"platform": "test"},
+            },
+        }
+        payment_response = self.client.post(
+            "/api/checkout/create-payment",
+            headers=headers,
+            json=payment_payload,
+        )
+        self.assertEqual(payment_response.status_code, 201)
+        paid_order = payment_response.get_json()["order"]
+        self.assertTrue(paid_order["paid"])
+        self.assertTrue(paid_order["released"])
+
+        repeat_payment_response = self.client.post(
+            "/api/checkout/create-payment",
+            headers=headers,
+            json=payment_payload,
+        )
+        self.assertEqual(repeat_payment_response.status_code, 200)
+
+        webhook_payload = {
+            "id": "evt_checkout_paid_001",
+            "type": "order.paid",
+            "data": {
+                "id": paid_order["pagarme_order_id"],
+                "status": "paid",
+                "charges": [{"id": paid_order["pagarme_charge_id"], "status": "paid"}],
+                "metadata": {"checkout_order_id": str(paid_order["id"])},
+            },
+        }
+        raw_webhook = json.dumps(webhook_payload, separators=(",", ":")).encode("utf-8")
+        signature = hmac.new(
+            self.app.config["PAGARME_SECRET_KEY"].encode("utf-8"),
+            raw_webhook,
+            hashlib.sha1,
+        ).hexdigest()
+
+        webhook_response = self.client.post(
+            "/api/webhooks/pagarme",
+            data=raw_webhook,
+            content_type="application/json",
+            headers={"X-Hub-Signature": signature},
+        )
+        self.assertEqual(webhook_response.status_code, 200)
+        self.assertFalse(webhook_response.get_json()["duplicate"])
+
+        duplicate_webhook_response = self.client.post(
+            "/api/webhooks/pagarme",
+            data=raw_webhook,
+            content_type="application/json",
+            headers={"X-Hub-Signature": signature},
+        )
+        self.assertEqual(duplicate_webhook_response.status_code, 200)
+        self.assertTrue(duplicate_webhook_response.get_json()["duplicate"])
+
+        invalid_webhook_response = self.client.post(
+            "/api/webhooks/pagarme",
+            data=raw_webhook,
+            content_type="application/json",
+            headers={"X-Hub-Signature": "invalid"},
+        )
+        self.assertEqual(invalid_webhook_response.status_code, 401)
+
+        balance_response = self.client.get("/api/me/balance", headers=headers)
+        self.assertEqual(balance_response.status_code, 200)
+        self.assertEqual(balance_response.get_json()["credits_available"], service["unit_price"])
+
+        with self.app.app_context():
+            order = db.session.get(Order, paid_order["id"])
+            self.assertEqual(order.status, "paid")
+            self.assertIsNotNone(order.paid_at)
+            self.assertIsNotNone(order.released_at)
+            self.assertEqual(PaymentEvent.query.count(), 1)
 
     def test_legacy_numeric_subject_tokens_remain_compatible(self) -> None:
         with self.app.app_context():

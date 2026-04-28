@@ -4,6 +4,17 @@ from app.core.extensions import db
 from app.models.base import BaseModel, CompanyScopedMixin, TimestampMixin
 
 
+class ServiceCatalogItem(BaseModel, TimestampMixin, db.Model):
+    __tablename__ = "service_catalog_items"
+
+    code = db.Column(db.String(80), nullable=False, unique=True, index=True)
+    section = db.Column(db.String(80), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(255), nullable=True)
+    unit_price = db.Column(db.Integer, nullable=False)
+    is_active = db.Column(db.Boolean, nullable=False, default=True, index=True)
+
+
 class ServiceOrder(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     __tablename__ = "service_orders"
 

@@ -30,13 +30,16 @@ env_value() {
 }
 
 check_env_warnings() {
-  local flask_env cors api_url flask_secret jwt_secret
+  local flask_env cors api_url flask_secret jwt_secret pagarme_secret pagarme_public pagarme_dry_run
 
   flask_env="$(env_value FLASK_ENV)"
   cors="$(env_value CORS_ALLOWED_ORIGINS)"
   api_url="$(env_value NEXT_PUBLIC_API_BASE_URL)"
   flask_secret="$(env_value FLASK_SECRET_KEY)"
   jwt_secret="$(env_value JWT_SECRET)"
+  pagarme_secret="$(env_value PAGARME_SECRET_KEY)"
+  pagarme_public="$(env_value PAGARME_PUBLIC_KEY)"
+  pagarme_dry_run="$(env_value PAGARME_DRY_RUN)"
 
   if [ "$flask_env" != "production" ]; then
     warn "FLASK_ENV está '$flask_env'. Para produção, o esperado é 'production'."
@@ -56,6 +59,14 @@ check_env_warnings() {
 
   if [ "${#jwt_secret}" -lt 32 ]; then
     warn "JWT_SECRET tem menos de 32 caracteres."
+  fi
+
+  if [ "$flask_env" = "production" ]; then
+    [ -n "$pagarme_secret" ] || fail "PAGARME_SECRET_KEY é obrigatória em produção."
+    [ -n "$pagarme_public" ] || fail "PAGARME_PUBLIC_KEY é obrigatória em produção."
+    if printf '%s' "$pagarme_dry_run" | grep -Eiq '^(1|true|yes|on)$'; then
+      fail "PAGARME_DRY_RUN não pode ficar ativo em produção."
+    fi
   fi
 }
 
