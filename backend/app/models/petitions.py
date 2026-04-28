@@ -17,9 +17,9 @@ class Petition(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     data_publicacao = db.Column(db.String(40), nullable=True)
     justica_gratuita = db.Column(db.Boolean, nullable=False, default=False)
     tutela_urgencia = db.Column(db.Boolean, nullable=False, default=False)
-    advogado_subscritor = db.Column(db.String(160), nullable=False)
-    resumo_caso = db.Column(db.Text, nullable=False)
-    detalhes = db.Column(db.Text, nullable=False)
+    advogado_subscritor = db.Column(db.String(160), nullable=True)
+    resumo_caso = db.Column(db.Text, nullable=True)
+    detalhes = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(30), nullable=False, default="pendente", index=True)
 
     user = db.relationship("User", back_populates="petitions")

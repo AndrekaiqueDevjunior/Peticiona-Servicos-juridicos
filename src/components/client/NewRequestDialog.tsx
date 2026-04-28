@@ -355,10 +355,18 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!areaDireito) {
+
+    // Validação com mensagens específicas por campo
+    const erros: string[] = [];
+    if (!areaDireito) erros.push("• Área do Direito é obrigatória (seção 1).");
+    const partesInvalidas = partes.filter((p) => !p.nome.trim() || !p.tipo);
+    if (partesInvalidas.length > 0) erros.push("• Todas as partes devem ter nome e tipo (seção 3).");
+    if (partes.length === 0) erros.push("• Informe ao menos uma parte (seção 3).");
+
+    if (erros.length > 0) {
       toast({
-        title: "Campo obrigatório",
-        description: "Selecione a área do Direito.",
+        title: "Preencha os campos obrigatórios",
+        description: erros.join("\n"),
         variant: "destructive",
       });
       return;
@@ -373,7 +381,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         documentIds = uploadRes.documents.map((d) => d.id);
       }
 
-      // 2. Persistir dados jurídicos completos via API de petições
+      // 2. Criar petição com dados jurídicos
       await api.petitions.create({
         area_direito: areaDireito,
         tipo_peticao: tipoPeticao || areaDireito,
@@ -388,7 +396,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         document_ids: documentIds,
       });
 
-      // 3. Criar service order de rastreamento (preço definido pelo catálogo no backend)
+      // 3. Criar service order de rastreamento
       await api.clientArea.createOrder({
         tipo_peticao: tipoPeticao || areaDireito,
         service_title: tipoPeticao || areaDireito,
@@ -401,9 +409,11 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
       setSuccess(true);
     } catch (err: unknown) {
+      // Exibe a mensagem real do backend, não uma mensagem genérica
+      const msg = err instanceof Error ? err.message : "Tente novamente.";
       toast({
-        title: "Erro ao enviar",
-        description: err instanceof Error ? err.message : "Tente novamente.",
+        title: "Não foi possível criar o pedido",
+        description: msg,
         variant: "destructive",
       });
     } finally {

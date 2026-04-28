@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import logging
 from http import HTTPStatus
 
 from flask import Flask, jsonify
+from sqlalchemy.exc import IntegrityError
 from werkzeug.exceptions import HTTPException
 
 from app.core.extensions import db
+
+logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
@@ -77,9 +81,23 @@ def register_error_handlers(app: Flask) -> None:
         payload, _ = _payload(exc.name.upper().replace(" ", "_"), exc.description)
         return jsonify(payload), exc.code
 
+    @app.errorhandler(IntegrityError)
+    def handle_integrity_error(exc: IntegrityError):
+        db.session.rollback()
+        logger.error("IntegrityError: %s", exc.orig)
+        orig = str(exc.orig or "")
+        if "not-null" in orig or "NotNullViolation" in orig:
+            payload, _ = _payload("VALIDATION_ERROR", "Campo obrigatório não preenchido. Verifique o formulário.")
+        elif "unique" in orig.lower() or "UniqueViolation" in orig:
+            payload, _ = _payload("CONFLICT", "Registro duplicado.")
+        else:
+            payload, _ = _payload("DATABASE_ERROR", "Erro de integridade no banco de dados.")
+        return jsonify(payload), HTTPStatus.BAD_REQUEST
+
     @app.errorhandler(Exception)
     def handle_unexpected_error(exc: Exception):
         db.session.rollback()
+        logger.exception("Unexpected error: %s", exc)
         if app.config.get("TESTING"):
             raise exc
         payload, _ = _payload("INTERNAL_ERROR", "Erro interno inesperado.")
