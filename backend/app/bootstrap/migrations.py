@@ -103,8 +103,57 @@ def _create_financial_entries_table() -> None:
     )
 
 
+def _fix_legacy_schema() -> None:
+    """Corrige schema legado (Lovable) para o novo modelo."""
+    if db.engine.dialect.name != "postgresql":
+        return
+
+    order_cols = _column_names("service_orders")
+    item_cols = _column_names("service_order_items")
+
+    # service_orders — colunas novas
+    for col, ddl in {
+        "total_amount": "ALTER TABLE service_orders ADD COLUMN total_amount INTEGER NOT NULL DEFAULT 0",
+        "company_id": "ALTER TABLE service_orders ADD COLUMN company_id INTEGER REFERENCES companies(id)",
+        "updated_at": "ALTER TABLE service_orders ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE",
+    }.items():
+        if col not in order_cols:
+            _execute(ddl)
+
+    # service_orders — tornar colunas legadas nullable
+    _execute("ALTER TABLE service_orders ALTER COLUMN requester_name DROP NOT NULL")
+    _execute("ALTER TABLE service_orders ALTER COLUMN deadline DROP NOT NULL")
+
+    # service_order_items — colunas novas
+    for col, ddl in {
+        "code": "ALTER TABLE service_order_items ADD COLUMN code VARCHAR(80)",
+        "title": "ALTER TABLE service_order_items ADD COLUMN title VARCHAR(200)",
+        "unit_price": "ALTER TABLE service_order_items ADD COLUMN unit_price INTEGER NOT NULL DEFAULT 0",
+        "line_total": "ALTER TABLE service_order_items ADD COLUMN line_total INTEGER NOT NULL DEFAULT 0",
+        "company_id": "ALTER TABLE service_order_items ADD COLUMN company_id INTEGER REFERENCES companies(id)",
+        "created_at": "ALTER TABLE service_order_items ADD COLUMN created_at TIMESTAMP WITH TIME ZONE",
+        "updated_at": "ALTER TABLE service_order_items ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE",
+    }.items():
+        if col not in item_cols:
+            _execute(ddl)
+
+    # service_order_items — tornar colunas legadas nullable
+    _execute("ALTER TABLE service_order_items ALTER COLUMN service_code DROP NOT NULL")
+    _execute("ALTER TABLE service_order_items ALTER COLUMN service_name DROP NOT NULL")
+    _execute("ALTER TABLE service_order_items ALTER COLUMN unit_price_cents DROP NOT NULL")
+    _execute("ALTER TABLE service_order_items ALTER COLUMN line_total_cents DROP NOT NULL")
+
+    # petitions — tornar opcionais
+    for col in ("advogado_subscritor", "resumo_caso", "detalhes"):
+        _execute(f"ALTER TABLE petitions ALTER COLUMN {col} DROP NOT NULL")
+
+
 def run_runtime_migrations() -> None:
     _add_user_columns()
     _add_service_order_columns()
     _create_financial_entries_table()
+    try:
+        _fix_legacy_schema()
+    except Exception:
+        pass  # colunas já existem ou constraint já foi dropada
     db.session.commit()
