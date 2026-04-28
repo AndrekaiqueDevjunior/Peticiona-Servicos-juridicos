@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 from urllib import error, request
+from uuid import uuid4
 
 from flask import current_app
 
@@ -34,6 +35,69 @@ class PagarmeClient:
             raise ValidationError("PAGARME_SECRET_KEY não configurada.")
 
         return self._request("GET", f"/orders/{pagarme_order_id}")
+
+    def smoke_charge(
+        self,
+        *,
+        method: str,
+        customer: dict,
+        card_token: str | None = None,
+        billing_address: dict | None = None,
+        amount: int = 100,
+    ) -> dict:
+        """Create a minimal R$ 1,00 charge to validate key configuration end-to-end.
+
+        method: "credit_card" | "pix"
+        In PAGARME_DRY_RUN mode returns a simulated response without hitting the API.
+        """
+        if current_app.config.get("PAGARME_DRY_RUN"):
+            return self._dry_run_smoke(method, amount)
+
+        if not self.secret_key:
+            raise ValidationError("PAGARME_SECRET_KEY não configurada.")
+
+        code = f"SMOKE-{uuid4().hex[:8].upper()}"
+        items = [{"amount": amount, "description": "Teste de integração Peticiona", "quantity": 1, "code": "smoke"}]
+        descriptor = current_app.config["PAGARME_STATEMENT_DESCRIPTOR"][:13]
+
+        if method == "credit_card":
+            payment: dict = {
+                "payment_method": "credit_card",
+                "credit_card": {
+                    "card_token": card_token,
+                    "installments": 1,
+                    "statement_descriptor": descriptor,
+                    "card": {"billing_address": billing_address or {}},
+                },
+            }
+        else:
+            payment = {"payment_method": "pix", "pix": {"expires_in": 300}}
+
+        payload = {"code": code, "closed": True, "items": items, "customer": customer, "payments": [payment]}
+        return self._request("POST", "/orders", payload)
+
+    @staticmethod
+    def _dry_run_smoke(method: str, amount: int) -> dict:
+        code = f"SMOKE-DRY-{uuid4().hex[:8].upper()}"
+        charge_id = f"dry_ch_{code}"
+        tran_id = f"dry_tran_{code}"
+        if method == "pix":
+            return {
+                "id": f"dry_or_{code}", "code": code, "status": "pending", "amount": amount,
+                "charges": [{"id": charge_id, "status": "pending", "last_transaction": {
+                    "id": tran_id, "status": "pending",
+                    "qr_code": "00020126480014br.gov.bcb.pix0136dry-run-qr-code-peticiona52040000530398654031.005802BR5910Peticiona6009SaoPaulo62070503***6304ABCD",
+                    "qr_code_url": "",
+                    "expires_at": "2099-12-31T23:59:59Z",
+                }}],
+            }
+        return {
+            "id": f"dry_or_{code}", "code": code, "status": "paid", "amount": amount,
+            "charges": [{"id": charge_id, "status": "paid", "amount": amount, "last_transaction": {
+                "id": tran_id, "status": "captured", "success": True,
+                "antifraud_response": {"status": "approved"},
+            }}],
+        }
 
     def smoke_test(self) -> dict:
         """Verify Pagar.me connectivity without creating charges.

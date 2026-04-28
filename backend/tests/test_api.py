@@ -207,6 +207,62 @@ class BackendApiTestCase(unittest.TestCase):
         self.assertEqual(balance_response.status_code, 200)
         self.assertEqual(balance_response.get_json()["credits_available"], 18000)
 
+    def test_admin_can_create_dry_run_smoke_charges(self) -> None:
+        self.app.config.update(
+            PAGARME_DRY_RUN=True,
+            PAGARME_PUBLIC_KEY="pk_test_public",
+            PAGARME_SECRET_KEY="sk_test_secret",
+        )
+        self.assertEqual(self.register_user(email="admin@example.com").status_code, 201)
+        with self.app.app_context():
+            user = User.query.filter_by(email="admin@example.com").first()
+            user.role = "admin"
+            db.session.commit()
+
+        token = self.login_user(email="admin@example.com").get_json()["token"]
+        headers = self.auth_headers(token)
+
+        pix_response = self.client.post(
+            "/api/payments/smoke-charge",
+            headers=headers,
+            json={
+                "method": "pix",
+                "customer": {
+                    "document": "12345678909",
+                    "phone": "(11) 91234-5678",
+                },
+            },
+        )
+        self.assertEqual(pix_response.status_code, 201)
+        pix_payload = pix_response.get_json()
+        self.assertEqual(pix_payload["status"], "pending")
+        self.assertTrue(pix_payload["charges"][0]["last_transaction"]["qr_code"])
+
+        card_response = self.client.post(
+            "/api/payments/smoke-charge",
+            headers=headers,
+            json={
+                "method": "credit_card",
+                "card_token": "tok_test_card_123",
+                "customer": {
+                    "document": "12345678909",
+                    "phone": "(11) 91234-5678",
+                },
+                "billing_address": {
+                    "zip_code": "01001000",
+                    "street": "Praca da Se",
+                    "number": "100",
+                    "neighborhood": "Se",
+                    "city": "Sao Paulo",
+                    "state": "SP",
+                },
+            },
+        )
+        self.assertEqual(card_response.status_code, 201)
+        card_payload = card_response.get_json()
+        self.assertEqual(card_payload["status"], "paid")
+        self.assertEqual(card_payload["charges"][0]["last_transaction"]["status"], "captured")
+
     def test_checkout_payment_webhook_is_idempotent(self) -> None:
         self.app.config.update(
             PAGARME_DRY_RUN=True,

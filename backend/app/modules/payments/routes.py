@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import re
+
 from flask import Blueprint, jsonify, request
 
-from app.core.errors import PermissionDenied
+from app.core.errors import PermissionDenied, ValidationError
 from app.core.rate_limit import limit_requests
 from app.permissions import auth_required, current_actor
 from app.services.credit_payment_service import (
+    _billing_address_payload,
+    _clean_card_token,
     create_credit_purchase,
     get_credit_payment_config,
     process_pagarme_webhook,
@@ -53,6 +57,65 @@ def smoke():
     if user.role not in {"admin", "staff"}:
         raise PermissionDenied("Acesso restrito a administradores.")
     return jsonify(PagarmeClient().smoke_test())
+
+
+@payments_bp.post("/smoke-charge")
+@auth_required
+@limit_requests("smoke-charge")
+def smoke_charge():
+    """Create a R$ 1,00 test charge (card or PIX) to validate the Pagar.me integration.
+
+    Request body:
+        method          : "credit_card" | "pix"
+        card_token      : string  (required for credit_card — tokenized on the frontend)
+        customer.document : CPF or CNPJ digits
+        customer.phone  : phone digits (DDD + number)
+        billing_address : { street, number, neighborhood, city, state, zip_code }
+                          (required for credit_card)
+    """
+    user = current_actor()
+    if user.role not in {"admin", "staff"}:
+        raise PermissionDenied("Acesso restrito a administradores.")
+
+    data = request.get_json(silent=True) or {}
+    method = str(data.get("method") or "pix").strip().lower()
+    if method not in {"credit_card", "pix"}:
+        raise ValidationError("Método inválido. Use 'credit_card' ou 'pix'.")
+
+    card_token = None
+    billing_address = None
+    if method == "credit_card":
+        card_token = _clean_card_token(data.get("card_token"))
+        billing_payload = data.get("billing_address") if isinstance(data.get("billing_address"), dict) else {}
+        billing_address = _billing_address_payload(billing_payload)
+
+    customer_payload = data.get("customer") if isinstance(data.get("customer"), dict) else {}
+    customer = _build_smoke_customer(user, customer_payload)
+    result = PagarmeClient().smoke_charge(
+        method=method,
+        customer=customer,
+        card_token=card_token,
+        billing_address=billing_address,
+    )
+    return jsonify(result), 201
+
+
+def _build_smoke_customer(user, extra: dict) -> dict:
+    doc = re.sub(r"\D", "", str(extra.get("document") or ""))
+    phone = re.sub(r"\D", "", str(extra.get("phone") or ""))
+    if len(doc) not in {11, 14}:
+        raise ValidationError("CPF ou CNPJ do pagador é obrigatório.")
+    if len(phone) not in {10, 11}:
+        raise ValidationError("Telefone do pagador inválido (DDD + número).")
+    doc_type = "CPF" if len(doc) == 11 else "CNPJ"
+    return {
+        "name": user.full_name[:64],
+        "email": user.email[:64],
+        "type": "individual" if len(doc) == 11 else "company",
+        "document": doc,
+        "document_type": doc_type,
+        "phones": {"mobile_phone": {"country_code": "55", "area_code": phone[:2], "number": phone[2:]}},
+    }
 
 
 def _client_ip() -> str | None:

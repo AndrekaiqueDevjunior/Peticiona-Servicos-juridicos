@@ -26,6 +26,7 @@ import AdminClients from "./pages/admin/AdminClients.tsx";
 import AdminStaff from "./pages/admin/AdminStaff.tsx";
 import AdminFinancial from "./pages/admin/AdminFinancial.tsx";
 import AdminPlans from "./pages/admin/AdminPlans.tsx";
+import PaymentTest from "./pages/admin/PaymentTest.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -99,6 +100,7 @@ const App = () => (
               <Route path="funcionarios" element={<AdminStaff />} />
               <Route path="financeiro" element={<AdminFinancial />} />
               <Route path="planos" element={<AdminPlans />} />
+              <Route path="teste-pagamento" element={<PaymentTest />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

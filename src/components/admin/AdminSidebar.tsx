@@ -5,6 +5,7 @@ import {
   Briefcase,
   BarChart3,
   Tags,
+  CreditCard,
   LogOut,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -31,6 +32,7 @@ const items = [
   { title: "Funcionários", url: "/admin/funcionarios", icon: Briefcase },
   { title: "Financeiro", url: "/admin/financeiro", icon: BarChart3 },
   { title: "Planos e preços", url: "/admin/planos", icon: Tags },
+  { title: "Teste de pagamento", url: "/admin/teste-pagamento", icon: CreditCard },
 ];
 
 export function AdminSidebar() {

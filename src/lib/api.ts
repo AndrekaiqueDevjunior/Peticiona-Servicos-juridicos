@@ -53,6 +53,37 @@ export interface CreditPaymentConfig {
   packages: CreditPackage[];
 }
 
+export interface SmokeChargePayload {
+  method: "credit_card" | "pix";
+  card_token?: string;
+  customer: { document: string; phone: string };
+  billing_address?: {
+    street: string; number: string; neighborhood: string;
+    city: string; state: string; zip_code: string; complement?: string;
+  };
+}
+
+export interface SmokeChargeResult {
+  id: string;
+  code: string;
+  status: string;
+  amount: number;
+  charges: {
+    id: string;
+    status: string;
+    amount?: number;
+    last_transaction?: {
+      id: string;
+      status: string;
+      success?: boolean;
+      qr_code?: string;
+      qr_code_url?: string;
+      expires_at?: string;
+      antifraud_response?: { status: string };
+    };
+  }[];
+}
+
 export interface CreditOrderPayload {
   package_id: string;
   idempotency_key: string;
@@ -230,6 +261,11 @@ export const api = {
     creditPackages: () => request<CreditPaymentConfig>("/payments/credit-packages"),
     createCreditOrder: (payload: CreditOrderPayload) =>
       request<CreditOrderResponse>("/payments/credit-orders", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    smokeCharge: (payload: SmokeChargePayload) =>
+      request<SmokeChargeResult>("/payments/smoke-charge", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
