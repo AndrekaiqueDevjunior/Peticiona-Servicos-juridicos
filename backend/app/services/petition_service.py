@@ -24,15 +24,9 @@ def _validate_document_ids(user, document_ids: list[int]) -> list[Document]:
 
 
 def create_petition(user, payload: dict) -> dict:
-    required_fields = {
-        "area_direito": "Área do Direito é obrigatória.",
-        "advogado_subscritor": "Advogado subscritor é obrigatório.",
-        "resumo_caso": "Resumo do caso é obrigatório.",
-        "detalhes": "Detalhes são obrigatórios.",
-    }
-    for field, message in required_fields.items():
-        if not (payload.get(field) or "").strip():
-            raise ValidationError(message)
+    area_direito = (payload.get("area_direito") or "").strip()
+    if not area_direito:
+        raise ValidationError("Área do Direito é obrigatória.")
 
     parties = payload.get("partes") or []
     if not isinstance(parties, list) or not parties:
@@ -45,15 +39,15 @@ def create_petition(user, payload: dict) -> dict:
         user_id=user.id,
         company_id=user.company_id,
         reference=_next_reference(),
-        area_direito=payload["area_direito"].strip(),
+        area_direito=area_direito,
         tipo_peticao=(payload.get("tipo_peticao") or "").strip() or None,
         numero_processo=(payload.get("numero_processo") or "").strip() or None,
         data_publicacao=(payload.get("data_publicacao") or "").strip() or None,
         justica_gratuita=bool(payload.get("justica_gratuita")),
         tutela_urgencia=bool(payload.get("tutela_urgencia")),
-        advogado_subscritor=payload["advogado_subscritor"].strip(),
-        resumo_caso=payload["resumo_caso"].strip(),
-        detalhes=payload["detalhes"].strip(),
+        advogado_subscritor=(payload.get("advogado_subscritor") or "").strip() or None,
+        resumo_caso=(payload.get("resumo_caso") or "").strip() or None,
+        detalhes=(payload.get("detalhes") or "").strip() or None,
         status="pendente",
     )
     db.session.add(petition)

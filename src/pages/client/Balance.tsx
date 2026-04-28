@@ -1,15 +1,26 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BuyCreditsDialog } from "@/components/client/BuyCreditsDialog";
-import { useBalance, getSaldoTotal } from "@/lib/balance";
-import { formatBRL, LABEL_PLANO } from "@/lib/pricing";
+import { api } from "@/lib/api";
+import { formatBRL } from "@/lib/pricing";
 
 export default function Balance() {
-  const balance = useBalance();
   const [openBuy, setOpenBuy] = useState(false);
-  const saldoTotal = getSaldoTotal(balance);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["me-balance"],
+    queryFn: () => api.me.balance(),
+    staleTime: 30_000,
+  });
+
+  const saldoDisponivel = data?.credits_available_cents ?? 0;
+  const saldoTotal = data?.credits_total_cents ?? 0;
+  const saldoUsado = data?.credits_used_cents ?? 0;
+  const movements = data?.movements ?? [];
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -32,9 +43,13 @@ export default function Balance() {
               <Wallet className="h-4 w-4" />
               Saldo disponível
             </div>
-            <p className="mt-3 font-display text-5xl font-semibold">
-              {formatBRL(saldoTotal)}
-            </p>
+            {isLoading ? (
+              <Skeleton className="mt-3 h-12 w-40 bg-white/20" />
+            ) : (
+              <p className="mt-3 font-display text-5xl font-semibold">
+                {data?.credits_available_brl ?? formatBRL(saldoDisponivel / 100)}
+              </p>
+            )}
             <p className="mt-1 text-sm opacity-80">
               Debitado automaticamente a cada pedido finalizado.
             </p>
@@ -54,34 +69,23 @@ export default function Balance() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Plano ativo</span>
+              <span className="text-muted-foreground">Total creditado</span>
               <span className="font-medium">
-                {balance.planoAtivo ? LABEL_PLANO[balance.planoAtivo] : "Nenhum"}
+                {data?.credits_total_brl ?? formatBRL(saldoTotal / 100)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Saldo do plano</span>
-              <span className="font-medium">{formatBRL(balance.saldoPlano)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Saldo avulso</span>
-              <span className="font-medium">{formatBRL(balance.saldoAvulso)}</span>
+              <span className="text-muted-foreground">Utilizado</span>
+              <span className="font-medium">
+                {data?.credits_used_brl ?? formatBRL(saldoUsado / 100)}
+              </span>
             </div>
             <div className="flex justify-between border-t border-border pt-3">
               <span className="text-muted-foreground">Disponível</span>
               <span className="font-semibold text-primary">
-                {formatBRL(saldoTotal)}
+                {data?.credits_available_brl ?? formatBRL(saldoDisponivel / 100)}
               </span>
             </div>
-            {(balance.peticaoExpressDisponivel || balance.recursoExpressDisponivel) && (
-              <div className="border-t border-border pt-3 text-xs text-muted-foreground">
-                <p className="font-medium text-foreground">Express disponível:</p>
-                <ul className="mt-1 list-inside list-disc">
-                  {balance.peticaoExpressDisponivel && <li>Petição Express</li>}
-                  {balance.recursoExpressDisponivel && <li>Recurso Express</li>}
-                </ul>
-              </div>
-            )}
           </CardContent>
         </Card>
       </div>
@@ -91,23 +95,20 @@ export default function Balance() {
           <CardTitle className="font-display text-xl">Movimentações</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {balance.movements.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-3 p-6">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : movements.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
               Nenhuma movimentação ainda.
             </p>
           ) : (
             <ul className="divide-y divide-border">
-              {balance.movements.map((m) => (
-                <li
-                  key={m.id}
-                  className="flex items-center justify-between px-6 py-4"
-                >
+              {movements.map((m, i) => (
+                <li key={i} className="flex items-center justify-between px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div
-                      className={`rounded-md p-2 ${
-                        m.type === "in" ? "bg-accent/15" : "bg-secondary"
-                      }`}
-                    >
+                    <div className={`rounded-md p-2 ${m.type === "in" ? "bg-accent/15" : "bg-secondary"}`}>
                       {m.type === "in" ? (
                         <TrendingUp className="h-4 w-4 text-accent" />
                       ) : (
@@ -115,22 +116,16 @@ export default function Balance() {
                       )}
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {m.description}
-                      </p>
+                      <p className="text-sm font-medium text-foreground">{m.description}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(m.date).toLocaleString("pt-BR")}
                         {m.source ? ` · ${labelSource(m.source)}` : ""}
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`font-semibold ${
-                      m.type === "in" ? "text-accent" : "text-foreground"
-                    }`}
-                  >
+                  <span className={`font-semibold ${m.type === "in" ? "text-accent" : "text-foreground"}`}>
                     {m.type === "in" ? "+" : "-"}
-                    {formatBRL(m.amount)}
+                    {m.amount_brl ?? formatBRL((m.amount_cents ?? m.amount ?? 0) / 100)}
                   </span>
                 </li>
               ))}
@@ -144,7 +139,7 @@ export default function Balance() {
   );
 }
 
-const labelSource = (s: "plano" | "avulso" | "mix") => {
+const labelSource = (s: string) => {
   if (s === "plano") return "saldo do plano";
   if (s === "avulso") return "saldo avulso";
   return "plano + avulso";

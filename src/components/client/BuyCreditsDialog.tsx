@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type InputHTMLAttributes } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Check, CreditCard, ShieldCheck, Sparkles, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,13 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { api, type CreditPaymentConfig } from "@/lib/api";
-import {
-  AVULSOS_INFO,
-  PLANOS_INFO,
-  assinarPlano,
-  comprarCreditoAvulso,
-  type CreditoAvulsoTipo,
-} from "@/lib/balance";
+import { AVULSOS_INFO, PLANOS_INFO, type CreditoAvulsoTipo } from "@/lib/balance";
 import { useClientProfile } from "@/lib/clientProfile";
 import { maskPhone } from "@/lib/masks";
 import { createPagarmeCardToken } from "@/lib/pagarme";
@@ -76,6 +71,7 @@ const emptyForm: PaymentFormState = {
 };
 
 export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) => {
+  const queryClient = useQueryClient();
   const profile = useClientProfile();
   const [config, setConfig] = useState<CreditPaymentConfig | null>(null);
   const [selectedId, setSelectedId] = useState<PackageId | null>(null);
@@ -193,7 +189,7 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
       });
 
       if (response.purchase.paid) {
-        applyLocalCredit(selected);
+        queryClient.invalidateQueries({ queryKey: ["me-balance"] });
         toast({
           title: "Crédito adicionado",
           description: `${selected.name} confirmado pela Pagar.me.`,
@@ -542,14 +538,6 @@ function validate(form: PaymentFormState) {
   if (!form.city.trim()) errors.city = "Cidade obrigatória.";
   if (!/^[A-Z]{2}$/.test(form.state)) errors.state = "UF inválida.";
   return { ok: Object.keys(errors).length === 0, errors };
-}
-
-function applyLocalCredit(selected: PackageOption) {
-  if (selected.kind === "plan") {
-    assinarPlano(selected.id as PlanoId);
-    return;
-  }
-  comprarCreditoAvulso(selected.id as CreditoAvulsoTipo);
 }
 
 function normalizeYear(value: string) {

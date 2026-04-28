@@ -205,23 +205,23 @@ export const PLANOS_INFO = [
   {
     id: "essencial" as const,
     nome: "Plano Essencial",
-    valor: 540,
-    porPedido: 180,
-    descricao: "Saldo mensal de R$ 540,00 — cada pedido debita R$ 180,00.",
+    valor: 480,
+    porPedido: 160,
+    descricao: "Saldo de R$ 480,00 — R$ 160,00 por serviço.",
   },
   {
     id: "profissional" as const,
     nome: "Plano Profissional",
-    valor: 800,
-    porPedido: 160,
-    descricao: "Saldo mensal de R$ 800,00 — cada pedido debita R$ 160,00.",
+    valor: 750,
+    porPedido: 150,
+    descricao: "Saldo de R$ 750,00 — R$ 150,00 por serviço.",
   },
   {
     id: "estrategico" as const,
     nome: "Plano Estratégico",
-    valor: 3000,
-    porPedido: 150,
-    descricao: "Saldo mensal de R$ 3.000,00 — cada pedido debita R$ 150,00.",
+    valor: 2800,
+    porPedido: 140,
+    descricao: "Saldo de R$ 2.800,00 — R$ 140,00 por serviço.",
   },
 ];
 
