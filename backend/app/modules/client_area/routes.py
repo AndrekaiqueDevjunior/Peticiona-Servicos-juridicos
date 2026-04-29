@@ -2,8 +2,19 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from app.permissions import auth_required, current_actor
-from app.services.client_area_service import create_order, get_catalog, list_orders, preview_cart, upload_documents
+from app.permissions import current_actor, roles_required
+from app.services.client_area_service import (
+    cancel_order,
+    create_order,
+    delete_document,
+    get_catalog,
+    get_order,
+    list_orders,
+    preview_cart,
+    preview_service_request,
+    update_order,
+    upload_documents,
+)
 
 client_area_bp = Blueprint("client_area", __name__, url_prefix="/api/client-area")
 
@@ -19,7 +30,7 @@ def cart_preview():
 
 
 @client_area_bp.post("/orders")
-@auth_required
+@roles_required("client")
 def create_client_order():
     actor = current_actor()
     payload, status = create_order(request.get_json(silent=True) or {}, user=actor)
@@ -27,14 +38,45 @@ def create_client_order():
 
 
 @client_area_bp.get("/orders")
-@auth_required
+@roles_required("client")
 def list_client_orders():
     return jsonify(list_orders(current_actor()))
 
 
+@client_area_bp.post("/orders/preview")
+@roles_required("client")
+def preview_client_order():
+    return jsonify(preview_service_request(request.get_json(silent=True) or {}))
+
+
+@client_area_bp.get("/orders/<int:order_id>")
+@roles_required("client")
+def client_order_detail(order_id: int):
+    return jsonify(get_order(current_actor(), order_id))
+
+
+@client_area_bp.put("/orders/<int:order_id>")
+@client_area_bp.patch("/orders/<int:order_id>")
+@roles_required("client")
+def update_client_order(order_id: int):
+    return jsonify(update_order(current_actor(), order_id, request.get_json(silent=True) or {}))
+
+
+@client_area_bp.delete("/orders/<int:order_id>")
+@roles_required("client")
+def delete_client_order(order_id: int):
+    return jsonify(cancel_order(current_actor(), order_id))
+
+
 @client_area_bp.post("/documents")
-@auth_required
+@roles_required("client")
 def upload_client_documents():
     actor = current_actor()
     payload, status = upload_documents(actor, request.files.getlist("documents"))
     return jsonify(payload), status
+
+
+@client_area_bp.delete("/documents/<int:document_id>")
+@roles_required("client")
+def delete_client_document(document_id: int):
+    return jsonify(delete_document(current_actor(), document_id))

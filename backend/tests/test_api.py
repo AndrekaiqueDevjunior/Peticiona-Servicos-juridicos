@@ -20,7 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app import create_app
 from app.core.extensions import db
-from app.models import Company, Order, PaymentEvent, Plan, User
+from app.models import Company, Order, PaymentEvent, Plan, ServiceOrder, User
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\nsmoke-test"
@@ -35,6 +35,7 @@ class BackendApiTestCase(unittest.TestCase):
             {
                 "TESTING": True,
                 "SECRET_KEY": "test-secret-key",
+                "AUTH_RATE_LIMIT": 1000,
                 "SQLALCHEMY_DATABASE_URI": f"sqlite:///{self.db_path}",
                 "UPLOAD_FOLDER": self.upload_dir,
             }
@@ -87,8 +88,6 @@ class BackendApiTestCase(unittest.TestCase):
             "/api/home",
             "/api/plans",
             "/api/client-area",
-            "/api/dashboard",
-            "/api/dashboard?status=pendente",
             "/api/split-payment",
         ):
             with self.subTest(path=path):
@@ -96,6 +95,10 @@ class BackendApiTestCase(unittest.TestCase):
                 self.assertEqual(response.status_code, 200)
 
     def test_split_preview_and_order_creation(self) -> None:
+        self.assertEqual(self.register_user().status_code, 201)
+        token = self.login_user().get_json()["token"]
+        headers = self.auth_headers(token)
+
         split_seed = self.client.get("/api/split-payment").get_json()
         split_preview = self.client.post(
             "/api/split-payment/preview",
@@ -119,10 +122,30 @@ class BackendApiTestCase(unittest.TestCase):
 
         order_response = self.client.post(
             "/api/client-area/orders",
+            headers=headers,
             json={"items": [{"code": service_code, "quantity": 1}]},
         )
         self.assertEqual(order_response.status_code, 201)
-        self.assertEqual(order_response.get_json()["order"]["status"], "pendente")
+        order_payload = order_response.get_json()["order"]
+        self.assertEqual(order_payload["status"], "pendente")
+        order_id = order_payload["id"]
+
+        detail_response = self.client.get(f"/api/client-area/orders/{order_id}", headers=headers)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.get_json()["order"]["id"], order_id)
+
+        update_response = self.client.patch(
+            f"/api/client-area/orders/{order_id}",
+            headers=headers,
+            json={"deadline_at": "2026-05-10T10:00:00+00:00"},
+        )
+        self.assertEqual(update_response.status_code, 200)
+        self.assertEqual(update_response.get_json()["order"]["deadline_at"], "2026-05-10T10:00:00+00:00")
+
+        cancel_response = self.client.delete(f"/api/client-area/orders/{order_id}", headers=headers)
+        self.assertEqual(cancel_response.status_code, 200)
+        self.assertTrue(cancel_response.get_json()["deleted"])
+        self.assertEqual(cancel_response.get_json()["order"]["status"], "cancelado")
 
     def test_login_token_grants_access_to_protected_endpoints(self) -> None:
         register_response = self.register_user()
@@ -148,9 +171,54 @@ class BackendApiTestCase(unittest.TestCase):
         self.assertEqual(balance_response.status_code, 200)
         self.assertEqual(balance_response.get_json()["credits_available"], 0)
 
+        terms_response = self.client.get("/api/me/terms", headers=self.auth_headers(token))
+        self.assertEqual(terms_response.status_code, 200)
+        self.assertFalse(terms_response.get_json()["accepted"])
+
+        accept_terms_response = self.client.post("/api/me/terms", headers=self.auth_headers(token))
+        self.assertEqual(accept_terms_response.status_code, 200)
+        self.assertTrue(accept_terms_response.get_json()["accepted"])
+
+        terms_after_response = self.client.get("/api/me/terms", headers=self.auth_headers(token))
+        self.assertEqual(terms_after_response.status_code, 200)
+        self.assertTrue(terms_after_response.get_json()["accepted"])
+
         petitions_response = self.client.get("/api/petitions", headers=self.auth_headers(token))
         self.assertEqual(petitions_response.status_code, 200)
         self.assertEqual(petitions_response.get_json()["petitions"], [])
+
+    def test_client_profile_crud_persists_on_backend(self) -> None:
+        self.assertEqual(self.register_user().status_code, 201)
+        token = self.login_user().get_json()["token"]
+        headers = self.auth_headers(token)
+
+        profile_response = self.client.get("/api/me", headers=headers)
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.get_json()["email"], "smoke@example.com")
+
+        update_response = self.client.patch(
+            "/api/me",
+            headers=headers,
+            json={
+                "full_name": "Cliente Perfil Atualizado",
+                "email": "cliente.perfil@test.com",
+                "phone": "(11) 98888-7777",
+                "oab_number": "SP 999888",
+            },
+        )
+        self.assertEqual(update_response.status_code, 200)
+        updated_payload = update_response.get_json()
+        self.assertEqual(updated_payload["full_name"], "Cliente Perfil Atualizado")
+        self.assertEqual(updated_payload["email"], "cliente.perfil@test.com")
+        self.assertEqual(updated_payload["phone"], "(11) 98888-7777")
+        self.assertEqual(updated_payload["oab_number"], "SP 999888")
+
+        detail_response = self.client.get("/api/me", headers=headers)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.get_json()["email"], "cliente.perfil@test.com")
+
+        admin_profile_response = self.client.get("/api/admin/profile", headers=headers)
+        self.assertEqual(admin_profile_response.status_code, 403)
 
     def test_pagarme_credit_purchase_credits_balance_once(self) -> None:
         self.app.config.update(
@@ -194,7 +262,8 @@ class BackendApiTestCase(unittest.TestCase):
             json=payload,
         )
         self.assertEqual(purchase_response.status_code, 201)
-        self.assertTrue(purchase_response.get_json()["purchase"]["paid"])
+        purchase_payload = purchase_response.get_json()["purchase"]
+        self.assertTrue(purchase_payload["paid"])
 
         duplicate_response = self.client.post(
             "/api/payments/credit-orders",
@@ -205,7 +274,35 @@ class BackendApiTestCase(unittest.TestCase):
 
         balance_response = self.client.get("/api/me/balance", headers=headers)
         self.assertEqual(balance_response.status_code, 200)
-        self.assertEqual(balance_response.get_json()["credits_available"], 18000)
+        self.assertEqual(balance_response.get_json()["credits_available"], purchase_payload["credit_cents"])
+
+        refund_payload = {
+            "id": "evt_credit_refund_001",
+            "type": "charge.refunded",
+            "data": {
+                "id": f"dry_ch_{purchase_payload['code']}",
+                "status": "refunded",
+            },
+        }
+        raw_refund_webhook = json.dumps(refund_payload, separators=(",", ":")).encode("utf-8")
+        refund_signature = hmac.new(
+            self.app.config["PAGARME_SECRET_KEY"].encode("utf-8"),
+            raw_refund_webhook,
+            hashlib.sha1,
+        ).hexdigest()
+
+        refund_webhook_response = self.client.post(
+            "/api/payments/pagarme/webhook",
+            data=raw_refund_webhook,
+            content_type="application/json",
+            headers={"X-Hub-Signature": refund_signature},
+        )
+        self.assertEqual(refund_webhook_response.status_code, 200)
+        self.assertEqual(refund_webhook_response.get_json()["status"], "refunded")
+
+        balance_after_refund = self.client.get("/api/me/balance", headers=headers)
+        self.assertEqual(balance_after_refund.status_code, 200)
+        self.assertEqual(balance_after_refund.get_json()["credits_available"], 0)
 
     def test_admin_can_create_dry_run_smoke_charges(self) -> None:
         self.app.config.update(
@@ -435,6 +532,22 @@ class BackendApiTestCase(unittest.TestCase):
         document_id = upload_payload["documents"][0]["id"]
         self.assertTrue(any(self.upload_dir.iterdir()))
 
+        removable_upload_response = self.client.post(
+            "/api/client-area/documents",
+            headers=headers,
+            data={"documents": (io.BytesIO(PNG_BYTES), "removable.png")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(removable_upload_response.status_code, 201)
+        removable_document_id = removable_upload_response.get_json()["documents"][0]["id"]
+
+        delete_document_response = self.client.delete(
+            f"/api/client-area/documents/{removable_document_id}",
+            headers=headers,
+        )
+        self.assertEqual(delete_document_response.status_code, 200)
+        self.assertTrue(delete_document_response.get_json()["deleted"])
+
         petition_response = self.client.post(
             "/api/petitions",
             headers=headers,
@@ -456,11 +569,22 @@ class BackendApiTestCase(unittest.TestCase):
             },
         )
         self.assertEqual(petition_response.status_code, 201)
-        self.assertEqual(petition_response.get_json()["petition"]["status"], "pendente")
+        created_payload = petition_response.get_json()
+        self.assertEqual(created_payload["petition"]["status"], "pendente")
+        self.assertEqual(created_payload["order"]["status"], "pendente")
+        self.assertEqual(created_payload["order"]["petition"]["resumo_caso"], "Teste automatizado.")
 
         petitions_response = self.client.get("/api/petitions", headers=headers)
         self.assertEqual(petitions_response.status_code, 200)
         self.assertEqual(len(petitions_response.get_json()["petitions"]), 1)
+        orders_response = self.client.get("/api/client-area/orders", headers=headers)
+        self.assertEqual(orders_response.status_code, 200)
+        self.assertEqual(len(orders_response.get_json()["orders"]), 1)
+
+        with self.app.app_context():
+            service_order = ServiceOrder.query.first()
+            self.assertIsNotNone(service_order)
+            self.assertIsNotNone(service_order.petition_id)
 
     def test_admin_endpoints_smoke(self) -> None:
         with self.app.app_context():

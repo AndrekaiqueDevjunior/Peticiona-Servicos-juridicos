@@ -21,6 +21,7 @@ class ServiceOrder(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     __table_args__ = (db.Index("ix_service_orders_company_status", "company_id", "status"),)
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
+    petition_id = db.Column(db.Integer, db.ForeignKey("petitions.id"), nullable=True, index=True)
     staff_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True, index=True)
     reference = db.Column(db.String(40), nullable=False, unique=True, index=True)
     status = db.Column(db.String(30), nullable=False, default="pendente", index=True)
@@ -31,6 +32,7 @@ class ServiceOrder(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     split_funcionario = db.Column(db.Integer, nullable=False, default=0)
 
     user = db.relationship("User", foreign_keys=[user_id])
+    petition = db.relationship("Petition")
     staff_user = db.relationship("User", foreign_keys=[staff_user_id])
     items = db.relationship(
         "ServiceOrderItem",

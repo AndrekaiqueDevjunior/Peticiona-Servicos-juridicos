@@ -3,11 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+from datetime import datetime, timezone
+
 from app.core.errors import NotFoundError, ValidationError
 from app.core.extensions import db
 from app.core.security import ensure_allowed_document, ensure_upload_size, upload_folder
 from app.domain.permissions import scoped_query
-from app.models import Company, Document, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
+from app.models import Company, Document, Petition, PetitionDocumentLink, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
 from app.services.audit_service import log_action
 from app.services.serializers import format_brl_from_cents, serialize_document, serialize_order
 
@@ -15,6 +17,12 @@ CATALOG = [
     {
         "section": "Petições",
         "items": [
+            {
+                "code": "solicitacao-juridica",
+                "title": "Solicitação jurídica",
+                "description": "Solicitação padrão de petição (preço base).",
+                "unit_price": 16000,
+            },
             {
                 "code": "peticao-inicial",
                 "title": "Petição inicial",
@@ -81,6 +89,33 @@ def _next_reference() -> str:
     return f"ORD-{ServiceOrder.query.count() + 1:06d}"
 
 
+def _parse_datetime(value: object, *, field_name: str) -> datetime | None:
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValidationError(f"Campo '{field_name}' precisa estar em formato ISO-8601.") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _scoped_client_order(user, order_id: object) -> ServiceOrder:
+    try:
+        parsed_id = int(order_id)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Pedido inválido.") from exc
+    order = (
+        scoped_query(ServiceOrder, user)
+        .filter(ServiceOrder.id == parsed_id, ServiceOrder.user_id == user.id)
+        .first()
+    )
+    if order is None:
+        raise NotFoundError("Pedido não encontrado.")
+    return order
+
+
 def get_catalog() -> dict:
     return {"catalog": _catalog_sections()}
 
@@ -96,7 +131,10 @@ def preview_cart(payload: dict) -> dict:
 
     for raw in items:
         code = (raw.get("code") or "").strip()
-        quantity = int(raw.get("quantity") or 0)
+        try:
+            quantity = int(raw.get("quantity") or 0)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Quantidade inválida.") from exc
         if quantity <= 0:
             raise ValidationError("Quantidade deve ser maior que zero.")
         if code not in catalog:
@@ -149,9 +187,74 @@ def _preview_service_request(payload: dict) -> dict:
     }
 
 
+def preview_service_request(payload: dict) -> dict:
+    return _preview_service_request(payload)
+
+
 def list_orders(user) -> dict:
     orders = scoped_query(ServiceOrder, user).order_by(ServiceOrder.created_at.desc()).all()
     return {"orders": [serialize_order(order) for order in orders]}
+
+
+def get_order(user, order_id: object) -> dict:
+    return {"order": serialize_order(_scoped_client_order(user, order_id))}
+
+
+def update_order(user, order_id: object, payload: dict) -> dict:
+    order = _scoped_client_order(user, order_id)
+    if order.status != "pendente":
+        raise ValidationError("Apenas pedidos pendentes podem ser editados pelo cliente.")
+
+    if "deadline_at" in payload:
+        order.deadline_at = _parse_datetime(payload.get("deadline_at"), field_name="deadline_at")
+
+    petition = order.petition
+    if petition is not None:
+        for field in (
+            "area_direito",
+            "tipo_peticao",
+            "numero_processo",
+            "data_publicacao",
+            "advogado_subscritor",
+            "resumo_caso",
+            "detalhes",
+        ):
+            if field in payload:
+                value = str(payload.get(field) or "").strip()
+                if field == "area_direito" and not value:
+                    raise ValidationError("Área do Direito é obrigatória.")
+                setattr(petition, field, value or None)
+        if "justica_gratuita" in payload:
+            petition.justica_gratuita = bool(payload.get("justica_gratuita"))
+        if "tutela_urgencia" in payload:
+            petition.tutela_urgencia = bool(payload.get("tutela_urgencia"))
+
+    log_action(
+        action="order.updated_by_client",
+        entity_type="service_order",
+        entity_id=order.id,
+        user=user,
+        metadata={"reference": order.reference},
+    )
+    db.session.commit()
+    return {"order": serialize_order(order)}
+
+
+def cancel_order(user, order_id: object) -> dict:
+    order = _scoped_client_order(user, order_id)
+    if order.status == "concluido":
+        raise ValidationError("Pedidos concluídos não podem ser cancelados pelo cliente.")
+    if order.status != "cancelado":
+        order.status = "cancelado"
+        log_action(
+            action="order.cancelled_by_client",
+            entity_type="service_order",
+            entity_id=order.id,
+            user=user,
+            metadata={"reference": order.reference},
+        )
+        db.session.commit()
+    return {"deleted": True, "order": serialize_order(order)}
 
 
 def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
@@ -160,9 +263,24 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
     else:
         preview = _preview_service_request(payload)
     company_id = getattr(user, "company_id", None) or _public_company().id
+    petition_id = None
+    if payload.get("petition_id") is not None and user is not None:
+        try:
+            parsed_petition_id = int(payload.get("petition_id"))
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("Campo 'petition_id' inválido.") from exc
+        petition = (
+            scoped_query(Petition, user)
+            .filter(Petition.id == parsed_petition_id, Petition.user_id == user.id)
+            .first()
+        )
+        if petition is None:
+            raise NotFoundError("Petição vinculada ao pedido não encontrada.")
+        petition_id = petition.id
 
     order = ServiceOrder(
         user_id=getattr(user, "id", None),
+        petition_id=petition_id,
         company_id=company_id,
         reference=_next_reference(),
         status="pendente",
@@ -170,12 +288,7 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
     )
     deadline_at = payload.get("deadline_at")
     if deadline_at:
-        from datetime import datetime, timezone
-
-        parsed = datetime.fromisoformat(str(deadline_at).replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        order.deadline_at = parsed
+        order.deadline_at = _parse_datetime(deadline_at, field_name="deadline_at")
 
     db.session.add(order)
     db.session.flush()
@@ -245,3 +358,39 @@ def upload_documents(user, files) -> tuple[dict, int]:
         "message": "Upload concluído com segurança.",
         "documents": [serialize_document(item) for item in created_documents],
     }, 201
+
+
+def delete_document(user, document_id: object) -> dict:
+    try:
+        parsed_id = int(document_id)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError("Documento inválido.") from exc
+
+    document = (
+        scoped_query(Document, user)
+        .filter(Document.id == parsed_id, Document.user_id == user.id)
+        .first()
+    )
+    if document is None:
+        raise NotFoundError("Documento não encontrado.")
+
+    linked = PetitionDocumentLink.query.filter_by(document_id=document.id).first()
+    if linked is not None:
+        raise ValidationError("Documento vinculado a uma petição não pode ser removido.")
+
+    stored_name = document.stored_name
+    db.session.delete(document)
+    log_action(
+        action="document.deleted",
+        entity_type="document",
+        entity_id=parsed_id,
+        user=user,
+        metadata={"file_name": document.file_name},
+    )
+    db.session.commit()
+
+    try:
+        (upload_folder() / stored_name).unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"deleted": True}

@@ -14,7 +14,8 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app import create_app
 from app.core.extensions import db
-from app.models import Company, Plan, ServiceOrder, User
+from app.models import Company, CreditPurchase, CreditTransaction, Plan, ServiceOrder, User
+from app.models.base import utcnow
 
 
 class AdminCrudTestCase(unittest.TestCase):
@@ -26,6 +27,7 @@ class AdminCrudTestCase(unittest.TestCase):
             {
                 "TESTING": True,
                 "SECRET_KEY": "admin-crud-secret-key",
+                "AUTH_RATE_LIMIT": 1000,
                 "SQLALCHEMY_DATABASE_URI": f"sqlite:///{self.db_path}",
                 "UPLOAD_FOLDER": self.upload_dir,
             }
@@ -100,6 +102,42 @@ class AdminCrudTestCase(unittest.TestCase):
 
     def auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token}"}
+
+    def test_admin_profile_crud_and_client_forbidden(self) -> None:
+        profile_response = self.client.get("/api/admin/profile", headers=self.auth_headers())
+        self.assertEqual(profile_response.status_code, 200)
+        self.assertEqual(profile_response.get_json()["email"], "admin.crud@test.com")
+
+        update_response = self.client.put(
+            "/api/admin/profile",
+            headers=self.auth_headers(),
+            json={
+                "full_name": "Admin CRUD Atualizado",
+                "email": "admin.crud.updated@test.com",
+                "oab_number": "SP 111222",
+            },
+        )
+        self.assertEqual(update_response.status_code, 200)
+        updated_payload = update_response.get_json()
+        self.assertEqual(updated_payload["full_name"], "Admin CRUD Atualizado")
+        self.assertEqual(updated_payload["email"], "admin.crud.updated@test.com")
+        self.assertEqual(updated_payload["oab_number"], "SP 111222")
+
+        detail_response = self.client.get("/api/admin/profile", headers=self.auth_headers())
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.get_json()["email"], "admin.crud.updated@test.com")
+
+        client_login = self.client.post(
+            "/api/auth/login",
+            json={"email": "cliente.crud@test.com", "password": "Cl13nt!Pass#2026"},
+        )
+        self.assertEqual(client_login.status_code, 200)
+        client_token = client_login.get_json()["token"]
+        forbidden_response = self.client.get(
+            "/api/admin/profile",
+            headers={"Authorization": f"Bearer {client_token}"},
+        )
+        self.assertEqual(forbidden_response.status_code, 403)
 
     def test_admin_orders_crud(self) -> None:
         response = self.client.get("/api/admin/orders", headers=self.auth_headers())
@@ -227,6 +265,31 @@ class AdminCrudTestCase(unittest.TestCase):
         self.assertEqual(update_plan.status_code, 200)
         self.assertEqual(update_plan.get_json()["plan"]["monthly_price_cents"], 99500)
 
+        create_service = self.client.post(
+            "/api/admin/services",
+            headers=self.auth_headers(),
+            json={
+                "code": "audiencia-admin-crud",
+                "section": "Audiências",
+                "title": "Preparação de audiência",
+                "description": "Serviço avulso criado em teste.",
+                "unit_price": 22000,
+            },
+        )
+        self.assertEqual(create_service.status_code, 201)
+        service_id = create_service.get_json()["service"]["id"]
+
+        detail_service = self.client.get(f"/api/admin/services/{service_id}", headers=self.auth_headers())
+        self.assertEqual(detail_service.status_code, 200)
+
+        update_service = self.client.patch(
+            f"/api/admin/services/{service_id}",
+            headers=self.auth_headers(),
+            json={"unit_price": 22500, "title": "Preparação de audiência atualizada"},
+        )
+        self.assertEqual(update_service.status_code, 200)
+        self.assertEqual(update_service.get_json()["service"]["unit_price"], 22500)
+
         create_entry = self.client.post(
             "/api/admin/financial/entries",
             headers=self.auth_headers(),
@@ -259,11 +322,76 @@ class AdminCrudTestCase(unittest.TestCase):
         delete_plan = self.client.delete(f"/api/admin/plans/{plan_id}", headers=self.auth_headers())
         self.assertEqual(delete_plan.status_code, 204)
 
+        delete_service = self.client.delete(f"/api/admin/services/{service_id}", headers=self.auth_headers())
+        self.assertEqual(delete_service.status_code, 204)
+
         delete_staff = self.client.delete(f"/api/admin/staff/{staff_id}", headers=self.auth_headers())
         self.assertEqual(delete_staff.status_code, 204)
 
         delete_client = self.client.delete(f"/api/admin/clients/{client_id}", headers=self.auth_headers())
         self.assertEqual(delete_client.status_code, 204)
+
+    def test_admin_can_refund_credit_purchase_total(self) -> None:
+        self.app.config.update(PAGARME_DRY_RUN=True, PAGARME_SECRET_KEY="sk_test_secret")
+        with self.app.app_context():
+            client = db.session.get(User, self.client_user_id)
+            purchase = CreditPurchase(
+                user_id=client.id,
+                company_id=client.company_id,
+                code="CRED-REFUND-001",
+                idempotency_key="refund-idempotency-001",
+                package_id="peticao_avulsa",
+                package_name="Petição Avulsa",
+                kind="single",
+                source="avulso",
+                amount_cents=16000,
+                credit_cents=16000,
+                status="paid",
+                pagarme_order_id="dry_or_refund_001",
+                pagarme_charge_id="dry_ch_refund_001",
+                credited_at=utcnow(),
+            )
+            db.session.add(purchase)
+            db.session.add(
+                CreditTransaction(
+                    user_id=client.id,
+                    company_id=client.company_id,
+                    type="in",
+                    source="avulso",
+                    amount=16000,
+                    description="Compra Pagar.me - Petição Avulsa",
+                )
+            )
+            db.session.flush()
+            purchase_id = purchase.id
+            db.session.commit()
+
+        list_response = self.client.get("/api/admin/credit-purchases", headers=self.auth_headers())
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.get_json()["purchases"][0]["code"], "CRED-REFUND-001")
+
+        refund_response = self.client.post(
+            f"/api/admin/credit-purchases/{purchase_id}/refund",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(refund_response.status_code, 200)
+        refund_payload = refund_response.get_json()
+        self.assertTrue(refund_payload["refunded"])
+        self.assertTrue(refund_payload["credits_reversed"])
+        self.assertEqual(refund_payload["gateway_status"], "canceled")
+
+        with self.app.app_context():
+            refunded_purchase = db.session.get(CreditPurchase, purchase_id)
+            self.assertEqual(refunded_purchase.status, "refunded")
+            transactions = CreditTransaction.query.filter_by(user_id=self.client_user_id).all()
+            self.assertEqual(sum(item.amount for item in transactions if item.type == "in"), 16000)
+            self.assertEqual(sum(item.amount for item in transactions if item.type == "out"), 16000)
+
+        repeat_response = self.client.post(
+            f"/api/admin/credit-purchases/{purchase_id}/refund",
+            headers=self.auth_headers(),
+        )
+        self.assertEqual(repeat_response.status_code, 409)
 
 
 if __name__ == "__main__":

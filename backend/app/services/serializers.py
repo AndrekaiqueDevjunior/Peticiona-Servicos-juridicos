@@ -6,6 +6,7 @@ STATUS_LABELS = {
     "pendente": "Pendente",
     "em_andamento": "Em andamento",
     "concluido": "Concluído",
+    "cancelado": "Cancelado",
 }
 
 
@@ -45,9 +46,24 @@ def serialize_petition(petition) -> dict:
         "area_direito": petition.area_direito,
         "tipo_peticao": petition.tipo_peticao,
         "numero_processo": petition.numero_processo,
+        "data_publicacao": petition.data_publicacao,
+        "justica_gratuita": petition.justica_gratuita,
+        "tutela_urgencia": petition.tutela_urgencia,
+        "advogado_subscritor": petition.advogado_subscritor,
+        "resumo_caso": petition.resumo_caso,
+        "detalhes": petition.detalhes,
         "status": petition.status,
         "status_label": STATUS_LABELS.get(petition.status, petition.status.title()),
         "created_at": petition.created_at.isoformat(),
+        "partes": [
+            {"nome": party.nome, "tipo": party.tipo}
+            for party in (getattr(petition, "parties", None) or [])
+        ],
+        "documents": [
+            serialize_document(link.document)
+            for link in (getattr(petition, "document_links", None) or [])
+            if getattr(link, "document", None) is not None
+        ],
     }
 
 
@@ -62,6 +78,8 @@ def serialize_order(order) -> dict:
         "total_brl": format_brl_from_cents(order.total_amount),
         "client_name": order.user.full_name if getattr(order, "user", None) else None,
         "user_id": order.user_id,
+        "petition_id": getattr(order, "petition_id", None),
+        "petition": serialize_petition(order.petition) if getattr(order, "petition", None) else None,
         "staff_name": order.staff_user.full_name if getattr(order, "staff_user", None) else None,
         "staff_user_id": order.staff_user_id,
         "service_type": " · ".join(item_titles) if item_titles else "Serviço não informado",

@@ -30,6 +30,7 @@ class BackendArchitectureTestCase(unittest.TestCase):
             {
                 "TESTING": True,
                 "SECRET_KEY": "architecture-secret-key",
+                "AUTH_RATE_LIMIT": 1000,
                 "SQLALCHEMY_DATABASE_URI": f"sqlite:///{self.db_path}",
                 "UPLOAD_FOLDER": self.upload_dir,
             }
@@ -126,9 +127,12 @@ class BackendArchitectureTestCase(unittest.TestCase):
             )
             db.session.commit()
 
-        token = self.login_user("staff@empresa-a.test", "Sm0ke!Pass#2026")
-        response = self.client.get("/api/petitions", headers=self.auth_headers(token))
+        staff_token = self.login_user("staff@empresa-a.test", "Sm0ke!Pass#2026")
+        staff_response = self.client.get("/api/petitions", headers=self.auth_headers(staff_token))
+        self.assertEqual(staff_response.status_code, 403)
 
+        token = self.login_user("cliente-a@test.com", "Sm0ke!Pass#2026")
+        response = self.client.get("/api/petitions", headers=self.auth_headers(token))
         self.assertEqual(response.status_code, 200)
         payload = response.get_json()
         self.assertEqual(len(payload["petitions"]), 1)

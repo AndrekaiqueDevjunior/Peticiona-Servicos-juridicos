@@ -1,5 +1,20 @@
 # Projeto Peticiona
 
+## Estrutura
+
+- `frontend/`: aplicação Vite/React, incluindo `src/`, `public/`, Tailwind, Vitest e lockfile npm.
+- `backend/`: API Flask, modelos, serviços, blueprints e testes Python.
+- raiz: arquivos de deploy/orquestração (`Dockerfile`, `nginx.conf`, scripts e comandos npm compatíveis).
+
+Os comandos principais continuam funcionando pela raiz para não quebrar produção:
+
+```bash
+npm run dev
+npm run build
+npm run test:frontend
+npm run test:backend
+```
+
 ## Preflight de Produção
 
 Antes de publicar, rode:

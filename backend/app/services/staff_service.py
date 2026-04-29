@@ -17,11 +17,11 @@ def _scoped_staff_order(actor, order_id: object) -> ServiceOrder:
         raise ValidationError("Pedido inválido.") from exc
     order = (
         scoped_query(ServiceOrder, actor)
-        .filter(ServiceOrder.id == parsed_id, ServiceOrder.staff_user_id == actor.id)
+        .filter(ServiceOrder.id == parsed_id)
         .first()
     )
     if order is None:
-        raise NotFoundError("Pedido não encontrado para este funcionário.")
+        raise NotFoundError("Pedido não encontrado.")
     return order
 
 
@@ -78,7 +78,6 @@ def update_staff_profile(actor, payload: dict) -> dict:
 def list_staff_orders(actor) -> dict:
     orders = (
         scoped_query(ServiceOrder, actor)
-        .filter(ServiceOrder.staff_user_id == actor.id)
         .order_by(ServiceOrder.deadline_at.asc().nullslast(), ServiceOrder.created_at.desc())
         .all()
     )

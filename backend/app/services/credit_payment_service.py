@@ -84,6 +84,7 @@ CREDIT_PACKAGES: dict[str, dict] = {
 
 PAID_STATUSES = {"paid", "captured"}
 FAILED_STATUSES = {"failed", "canceled", "cancelled", "payment_failed", "refused"}
+REFUNDED_STATUSES = {"refunded", "partial_refunded"}
 
 
 def get_credit_payment_config() -> dict:
@@ -172,19 +173,27 @@ def process_pagarme_webhook(payload: dict) -> dict:
 
     previous_status = purchase.status
     webhook_status = _status_from_webhook(event, data)
-    if webhook_status:
+    if webhook_status and purchase.status != "refunded":
         purchase.status = webhook_status
 
     _copy_gateway_ids(purchase, data)
+    credits_reversed = False
     if purchase.status == "paid":
         _credit_purchase(purchase, purchase.user)
+    elif purchase.status == "refunded" and previous_status != "refunded":
+        credits_reversed = _reverse_purchase_credits(purchase)
 
     log_action(
         action="credit_purchase.webhook",
         entity_type="credit_purchase",
         entity_id=purchase.id,
         user=purchase.user,
-        metadata={"event": event, "previous_status": previous_status, "status": purchase.status},
+        metadata={
+            "event": event,
+            "previous_status": previous_status,
+            "status": purchase.status,
+            "credits_reversed": credits_reversed,
+        },
     )
     db.session.commit()
     return {"received": True, "matched": True, "status": purchase.status}
@@ -347,9 +356,11 @@ def _apply_pagarme_response(purchase: CreditPurchase, response: dict) -> None:
 
 def _copy_gateway_ids(purchase: CreditPurchase, data: dict) -> None:
     charges = data.get("charges") if isinstance(data.get("charges"), list) else []
-    charge = charges[0] if charges and isinstance(charges[0], dict) else data if str(data.get("id") or "").startswith("ch_") else {}
+    data_id = str(data.get("id") or "")
+    is_charge_id = data_id.startswith(("ch_", "dry_ch_"))
+    charge = charges[0] if charges and isinstance(charges[0], dict) else data if is_charge_id else {}
     transaction = charge.get("last_transaction") if isinstance(charge.get("last_transaction"), dict) else {}
-    if data.get("id") and str(data.get("id")).startswith("or_"):
+    if data_id and data_id.startswith(("or_", "dry_or_")):
         purchase.pagarme_order_id = data["id"]
     if charge.get("id"):
         purchase.pagarme_charge_id = charge["id"]
@@ -364,6 +375,8 @@ def _status_from_order(response: dict) -> str:
     status = str(response.get("status") or "").lower()
     if status in PAID_STATUSES:
         return "paid"
+    if status in REFUNDED_STATUSES:
+        return "refunded"
     if status in FAILED_STATUSES:
         return "failed"
 
@@ -376,6 +389,8 @@ def _status_from_order(response: dict) -> str:
         transaction_status = str(transaction.get("status") or "").lower()
         if charge_status in PAID_STATUSES or transaction_status in PAID_STATUSES:
             return "paid"
+        if charge_status in REFUNDED_STATUSES or transaction_status in REFUNDED_STATUSES:
+            return "refunded"
         if charge_status in FAILED_STATUSES or transaction_status in FAILED_STATUSES:
             return "failed"
     return "pending"
@@ -384,6 +399,8 @@ def _status_from_order(response: dict) -> str:
 def _status_from_webhook(event: str, data: dict) -> str | None:
     if event in {"order.paid", "charge.paid"}:
         return "paid"
+    if event in {"order.refunded", "charge.refunded"}:
+        return "refunded"
     if event in {"order.payment_failed", "charge.payment_failed", "order.canceled", "charge.canceled"}:
         return "failed"
     return _status_from_order(data)
@@ -392,8 +409,9 @@ def _status_from_webhook(event: str, data: dict) -> str | None:
 def _find_purchase_from_webhook(data: dict) -> CreditPurchase | None:
     order = data.get("order") if isinstance(data.get("order"), dict) else {}
     code = data.get("code") or order.get("code")
-    order_id = order.get("id") or (data.get("id") if str(data.get("id") or "").startswith("or_") else None)
-    charge_id = data.get("id") if str(data.get("id") or "").startswith("ch_") else None
+    data_id = str(data.get("id") or "")
+    order_id = order.get("id") or (data_id if data_id.startswith(("or_", "dry_or_")) else None)
+    charge_id = data_id if data_id.startswith(("ch_", "dry_ch_")) else None
 
     query = CreditPurchase.query
     filters = []
@@ -434,6 +452,23 @@ def _credit_purchase(purchase: CreditPurchase, user) -> None:
             "source": purchase.source,
         },
     )
+
+
+def _reverse_purchase_credits(purchase: CreditPurchase) -> bool:
+    if purchase.credited_at is None:
+        return False
+
+    db.session.add(
+        CreditTransaction(
+            user_id=purchase.user_id,
+            company_id=purchase.company_id,
+            type="out",
+            source=purchase.source,
+            amount=purchase.credit_cents,
+            description=f"Estorno Pagar.me - {purchase.package_name} (#{purchase.code})",
+        )
+    )
+    return True
 
 
 def _serialize_purchase_response(purchase: CreditPurchase) -> dict:

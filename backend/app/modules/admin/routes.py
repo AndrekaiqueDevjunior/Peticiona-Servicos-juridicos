@@ -7,12 +7,14 @@ from app.services.admin_service import (
     create_admin_client,
     create_admin_order,
     create_admin_plan,
+    create_admin_service,
     create_admin_staff,
     create_financial_entry,
     create_financial_refund,
     delete_admin_client,
     delete_admin_order,
     delete_admin_plan,
+    delete_admin_service,
     delete_admin_staff,
     delete_financial_entry,
     get_admin_client,
@@ -20,17 +22,21 @@ from app.services.admin_service import (
     get_admin_order,
     get_admin_plan,
     get_admin_profile,
+    get_admin_service,
     get_admin_staff_member,
     get_financial_entry,
+    list_admin_credit_purchases,
     list_admin_clients,
     list_admin_orders,
     list_admin_plans,
     list_admin_staff,
     list_financial_entries,
+    refund_credit_purchase,
     update_admin_client,
     update_admin_order,
     update_admin_plan,
     update_admin_profile,
+    update_admin_service,
     update_admin_staff,
     update_financial_entry,
 )
@@ -179,6 +185,18 @@ def financial_transactions():
     return jsonify(list_financial_entries(current_actor()))
 
 
+@admin_bp.get("/credit-purchases")
+@roles_required("admin")
+def credit_purchases():
+    return jsonify(list_admin_credit_purchases(current_actor()))
+
+
+@admin_bp.post("/credit-purchases/<int:purchase_id>/refund")
+@roles_required("admin")
+def refund_credit_purchase_route(purchase_id: int):
+    return jsonify(refund_credit_purchase(current_actor(), purchase_id))
+
+
 @admin_bp.post("/financial/refund")
 @roles_required("admin")
 def create_refund():
@@ -244,4 +262,32 @@ def update_plan(plan_id: int):
 @roles_required("admin")
 def delete_plan(plan_id: int):
     delete_admin_plan(current_actor(), plan_id)
+    return "", 204
+
+
+@admin_bp.post("/services")
+@roles_required("admin")
+def create_service():
+    actor = current_actor()
+    return jsonify(create_admin_service(actor, request.get_json(silent=True) or {})), 201
+
+
+@admin_bp.get("/services/<int:service_id>")
+@roles_required("admin")
+def service_detail(service_id: int):
+    return jsonify(get_admin_service(service_id))
+
+
+@admin_bp.put("/services/<int:service_id>")
+@admin_bp.patch("/services/<int:service_id>")
+@roles_required("admin")
+def update_service(service_id: int):
+    actor = current_actor()
+    return jsonify(update_admin_service(actor, service_id, request.get_json(silent=True) or {}))
+
+
+@admin_bp.delete("/services/<int:service_id>")
+@roles_required("admin")
+def delete_service(service_id: int):
+    delete_admin_service(current_actor(), service_id)
     return "", 204

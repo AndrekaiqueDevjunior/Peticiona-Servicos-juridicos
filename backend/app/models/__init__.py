@@ -6,6 +6,7 @@ from app.models.orders import ServiceCatalogItem, ServiceOrder, ServiceOrderItem
 from app.models.payments import CreditPurchase, Order, PaymentEvent
 from app.models.petitions import Petition, PetitionDocumentLink, PetitionParty
 from app.models.plans import Plan, Subscription
+from app.models.terms import TermsAcceptance
 from app.models.users import Company, User
 
 __all__ = [
@@ -25,5 +26,6 @@ __all__ = [
     "ServiceOrder",
     "ServiceOrderItem",
     "Subscription",
+    "TermsAcceptance",
     "User",
 ]

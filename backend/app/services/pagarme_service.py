@@ -36,6 +36,29 @@ class PagarmeClient:
 
         return self._request("GET", f"/orders/{pagarme_order_id}")
 
+    def cancel_charge(self, charge_id: str, amount_cents: int | None = None) -> dict:
+        """Estorno total (ou parcial) de uma cobrança via Pagar.me.
+
+        Para estorno total, não informar amount_cents.
+        Retorna o objeto charge atualizado com status 'canceled' ou 'partial_canceled'.
+        """
+        if current_app.config.get("PAGARME_DRY_RUN"):
+            return {
+                "id": charge_id,
+                "status": "canceled",
+                "amount": amount_cents or 0,
+                "canceled_amount": amount_cents or 0,
+            }
+
+        if not self.secret_key:
+            raise ValidationError("PAGARME_SECRET_KEY não configurada.")
+
+        payload: dict = {}
+        if amount_cents is not None:
+            payload["amount"] = amount_cents
+
+        return self._request("DELETE", f"/charges/{charge_id}", payload or None)
+
     def smoke_charge(
         self,
         *,

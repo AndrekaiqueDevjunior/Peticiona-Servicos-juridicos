@@ -56,6 +56,11 @@ class PlanLimitExceeded(AppError):
     error_code = "PLAN_LIMIT_EXCEEDED"
 
 
+class InsufficientCredits(AppError):
+    status_code = HTTPStatus.UNPROCESSABLE_ENTITY
+    error_code = "INSUFFICIENT_CREDITS"
+
+
 class PaymentGatewayError(AppError):
     status_code = HTTPStatus.BAD_GATEWAY
     error_code = "PAYMENT_GATEWAY_ERROR"

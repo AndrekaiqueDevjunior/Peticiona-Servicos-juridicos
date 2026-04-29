@@ -1,4 +1,9 @@
-node_modules
-dist
+**/node_modules
+**/dist
+**/.next
+.cache
+.codex
+.venv
+.env
 .git
 *.md

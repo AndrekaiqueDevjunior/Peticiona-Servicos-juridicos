@@ -7,16 +7,18 @@ from werkzeug.security import generate_password_hash
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
-from app.models import FinancialEntry, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
+from app.models import CreditPurchase, CreditTransaction, FinancialEntry, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
 from app.services.audit_service import log_action
-from app.services.serializers import format_brl_from_cents
+from app.services.pagarme_service import PagarmeClient
+from app.services.serializers import format_brl_from_cents, serialize_petition
 
 _ORDER_STATUS_LABELS = {
     "pendente": "Em análise",
     "em_andamento": "Aguardando dados",
     "concluido": "Concluído",
+    "cancelado": "Cancelado",
 }
-_ORDER_STATUSES = {"pendente", "em_andamento", "concluido"}
+_ORDER_STATUSES = {"pendente", "em_andamento", "concluido", "cancelado"}
 _ENTRY_KINDS = {"credit", "debit"}
 
 
@@ -108,6 +110,8 @@ def _serialize_order(order: ServiceOrder) -> dict:
         "numero": order.reference,
         "user_id": order.user_id,
         "cliente": order.user.full_name if order.user else "Cliente não identificado",
+        "petition_id": order.petition_id,
+        "petition": serialize_petition(order.petition) if order.petition else None,
         "staff_user_id": order.staff_user_id,
         "tipo_servico": tipo_servico,
         "status": order.status,
@@ -162,6 +166,19 @@ def _serialize_plan(plan: Plan) -> dict:
         "monthly_credits_brl": format_brl_from_cents(plan.monthly_credits_cents),
         "petition_limit_monthly": plan.petition_limit_monthly,
         "is_active": plan.is_active,
+    }
+
+
+def _serialize_service(service: ServiceCatalogItem) -> dict:
+    return {
+        "id": service.id,
+        "code": service.code,
+        "section": service.section,
+        "title": service.title,
+        "description": service.description,
+        "unit_price": service.unit_price,
+        "unit_price_brl": format_brl_from_cents(service.unit_price),
+        "is_active": service.is_active,
     }
 
 
@@ -704,19 +721,82 @@ def list_admin_plans(actor) -> dict:
 
     return {
         "plans": [_serialize_plan(plan) for plan in plans],
-        "single_services": [
-            {
-                "id": service.id,
-                "code": service.code,
-                "section": service.section,
-                "title": service.title,
-                "unit_price": service.unit_price,
-                "unit_price_brl": format_brl_from_cents(service.unit_price),
-                "is_active": service.is_active,
-            }
-            for service in avulsos
-        ],
+        "single_services": [_serialize_service(service) for service in avulsos],
     }
+
+
+def get_admin_service(service_id: object) -> dict:
+    parsed_id = _to_int(service_id, field_name="id")
+    service = db.session.get(ServiceCatalogItem, parsed_id)
+    if service is None:
+        raise NotFoundError("Serviço avulso não encontrado.")
+    return {"service": _serialize_service(service)}
+
+
+def create_admin_service(actor, payload: dict) -> dict:
+    code = str(payload.get("code") or "").strip().lower()
+    section = str(payload.get("section") or "").strip()
+    title = str(payload.get("title") or "").strip()
+    if not code:
+        raise ValidationError("Campo 'code' é obrigatório.")
+    if not section:
+        raise ValidationError("Campo 'section' é obrigatório.")
+    if not title:
+        raise ValidationError("Campo 'title' é obrigatório.")
+    if ServiceCatalogItem.query.filter_by(code=code).first() is not None:
+        raise ConflictError("Já existe serviço com este código.")
+
+    service = ServiceCatalogItem(
+        code=code,
+        section=section,
+        title=title,
+        description=str(payload.get("description") or "").strip() or None,
+        unit_price=_to_int(payload.get("unit_price", 0), field_name="unit_price", minimum=0),
+        is_active=bool(payload.get("is_active", True)),
+    )
+    db.session.add(service)
+    log_action(action="admin.service_created", entity_type="service_catalog_item", entity_id=code, user=actor)
+    db.session.commit()
+    return {"service": _serialize_service(service)}
+
+
+def update_admin_service(actor, service_id: object, payload: dict) -> dict:
+    parsed_id = _to_int(service_id, field_name="id")
+    service = db.session.get(ServiceCatalogItem, parsed_id)
+    if service is None:
+        raise NotFoundError("Serviço avulso não encontrado.")
+
+    if "section" in payload:
+        section = str(payload.get("section") or "").strip()
+        if not section:
+            raise ValidationError("Campo 'section' inválido.")
+        service.section = section
+    if "title" in payload:
+        title = str(payload.get("title") or "").strip()
+        if not title:
+            raise ValidationError("Campo 'title' inválido.")
+        service.title = title
+    if "description" in payload:
+        service.description = str(payload.get("description") or "").strip() or None
+    if "unit_price" in payload:
+        service.unit_price = _to_int(payload.get("unit_price"), field_name="unit_price", minimum=0)
+    if "is_active" in payload:
+        service.is_active = bool(payload.get("is_active"))
+
+    log_action(action="admin.service_updated", entity_type="service_catalog_item", entity_id=service.id, user=actor)
+    db.session.commit()
+    return {"service": _serialize_service(service)}
+
+
+def delete_admin_service(actor, service_id: object) -> dict:
+    parsed_id = _to_int(service_id, field_name="id")
+    service = db.session.get(ServiceCatalogItem, parsed_id)
+    if service is None:
+        raise NotFoundError("Serviço avulso não encontrado.")
+    service.is_active = False
+    log_action(action="admin.service_deleted", entity_type="service_catalog_item", entity_id=service.id, user=actor)
+    db.session.commit()
+    return {"deleted": True}
 
 
 def get_admin_plan(plan_id: object) -> dict:
@@ -800,3 +880,104 @@ def delete_admin_plan(actor, plan_id: object) -> dict:
     log_action(action="admin.plan_deleted", entity_type="plan", entity_id=plan.id, user=actor)
     db.session.commit()
     return {"deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Estorno via Pagar.me
+# ---------------------------------------------------------------------------
+
+def _serialize_credit_purchase(cp: CreditPurchase) -> dict:
+    return {
+        "id": cp.id,
+        "code": cp.code,
+        "user_email": cp.user.email if cp.user else None,
+        "user_name": cp.user.full_name if cp.user else None,
+        "package_name": cp.package_name,
+        "amount_cents": cp.amount_cents,
+        "amount_brl": format_brl_from_cents(cp.amount_cents),
+        "status": cp.status,
+        "pagarme_charge_id": cp.pagarme_charge_id,
+        "pagarme_order_id": cp.pagarme_order_id,
+        "credited_at": cp.credited_at.isoformat() if cp.credited_at else None,
+        "created_at": cp.created_at.isoformat(),
+    }
+
+
+def list_admin_credit_purchases(actor) -> dict:
+    purchases = (
+        scoped_query(CreditPurchase, actor)
+        .order_by(CreditPurchase.created_at.desc())
+        .all()
+    )
+    return {"purchases": [_serialize_credit_purchase(cp) for cp in purchases]}
+
+
+def refund_credit_purchase(actor, purchase_id: object) -> dict:
+    parsed_id = _to_int(purchase_id, field_name="id")
+    purchase = scoped_query(CreditPurchase, actor).filter(CreditPurchase.id == parsed_id).first()
+
+    if purchase is None:
+        raise NotFoundError("Compra de crédito não encontrada.")
+
+    if purchase.status == "refunded":
+        raise ConflictError("Esta compra já foi estornada.")
+
+    if purchase.status not in {"paid", "processing"}:
+        raise ValidationError(
+            f"Não é possível estornar uma compra com status '{purchase.status}'. "
+            "Apenas compras pagas podem ser estornadas."
+        )
+
+    if not purchase.pagarme_charge_id:
+        raise ValidationError(
+            "Esta compra não possui ID de cobrança da Pagar.me. "
+            "Verifique se o pagamento foi processado pelo gateway."
+        )
+
+    # Chamar Pagar.me — estorno total
+    pagarme_response = PagarmeClient().cancel_charge(purchase.pagarme_charge_id)
+    gateway_status = str(pagarme_response.get("status") or "").lower()
+
+    if gateway_status not in {"canceled", "refunded", "voided"}:
+        raise ValidationError(
+            f"A Pagar.me retornou status inesperado: '{gateway_status}'. "
+            "Verifique no painel da Pagar.me se o estorno total foi processado."
+        )
+
+    # Atualizar status da compra
+    purchase.status = "refunded"
+
+    # Reverter créditos se já foram creditados
+    if purchase.credited_at is not None:
+        reversal = CreditTransaction(
+            user_id=purchase.user_id,
+            company_id=purchase.company_id,
+            type="out",
+            source=purchase.source,
+            amount=purchase.credit_cents,
+            description=f"Estorno Pagar.me - {purchase.package_name} (#{purchase.code})",
+        )
+        db.session.add(reversal)
+
+    log_action(
+        action="admin.refund_credit_purchase",
+        entity_type="credit_purchase",
+        entity_id=purchase.id,
+        user=actor,
+        metadata={
+            "code": purchase.code,
+            "amount_cents": purchase.amount_cents,
+            "pagarme_charge_id": purchase.pagarme_charge_id,
+            "gateway_status": gateway_status,
+            "credits_reversed": purchase.credited_at is not None,
+        },
+    )
+    db.session.commit()
+
+    return {
+        "refunded": True,
+        "purchase": _serialize_credit_purchase(purchase),
+        "gateway_status": gateway_status,
+        "credits_reversed": purchase.credited_at is not None,
+        "message": "Estorno processado com sucesso pela Pagar.me.",
+    }
