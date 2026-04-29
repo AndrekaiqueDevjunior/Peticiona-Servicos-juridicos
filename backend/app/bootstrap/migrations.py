@@ -5,6 +5,14 @@ from sqlalchemy import inspect, text
 from app.core.extensions import db
 
 
+def _inspector():
+    return inspect(db.session.connection())
+
+
+def _table_names() -> set[str]:
+    return set(_inspector().get_table_names())
+
+
 def _acquire_runtime_migrations_lock() -> None:
     """Ensure runtime migrations run in a single process at a time.
 
@@ -20,7 +28,7 @@ def _acquire_runtime_migrations_lock() -> None:
 
 
 def _column_names(table_name: str) -> set[str]:
-    inspector = inspect(db.engine)
+    inspector = _inspector()
     if table_name not in inspector.get_table_names():
         return set()
     return {column["name"] for column in inspector.get_columns(table_name)}
@@ -69,7 +77,7 @@ def _add_service_order_columns() -> None:
 
 
 def _create_financial_entries_table() -> None:
-    existing_tables = inspect(db.engine).get_table_names()
+    existing_tables = _table_names()
     if "financial_entries" in existing_tables:
         return
 
@@ -119,7 +127,7 @@ def _create_financial_entries_table() -> None:
 
 
 def _create_terms_acceptances_table() -> None:
-    existing_tables = inspect(db.engine).get_table_names()
+    existing_tables = _table_names()
     if "terms_acceptances" in existing_tables:
         return
 
@@ -165,7 +173,7 @@ def _create_terms_acceptances_table() -> None:
 
 
 def _backfill_petition_service_orders() -> None:
-    existing_tables = set(inspect(db.engine).get_table_names())
+    existing_tables = _table_names()
     if {"petitions", "service_orders", "service_order_items"} - existing_tables:
         return
     if "petition_id" not in _column_names("service_orders"):
@@ -250,6 +258,7 @@ def _fix_legacy_schema() -> None:
 
     order_cols = _column_names("service_orders")
     item_cols = _column_names("service_order_items")
+    petition_cols = _column_names("petitions")
 
     # service_orders — colunas novas
     for col, ddl in {
@@ -261,8 +270,10 @@ def _fix_legacy_schema() -> None:
             _execute(ddl)
 
     # service_orders — tornar colunas legadas nullable
-    _execute("ALTER TABLE service_orders ALTER COLUMN requester_name DROP NOT NULL")
-    _execute("ALTER TABLE service_orders ALTER COLUMN deadline DROP NOT NULL")
+    if "requester_name" in order_cols:
+        _execute("ALTER TABLE service_orders ALTER COLUMN requester_name DROP NOT NULL")
+    if "deadline" in order_cols:
+        _execute("ALTER TABLE service_orders ALTER COLUMN deadline DROP NOT NULL")
 
     # service_order_items — colunas novas
     for col, ddl in {
@@ -278,14 +289,14 @@ def _fix_legacy_schema() -> None:
             _execute(ddl)
 
     # service_order_items — tornar colunas legadas nullable
-    _execute("ALTER TABLE service_order_items ALTER COLUMN service_code DROP NOT NULL")
-    _execute("ALTER TABLE service_order_items ALTER COLUMN service_name DROP NOT NULL")
-    _execute("ALTER TABLE service_order_items ALTER COLUMN unit_price_cents DROP NOT NULL")
-    _execute("ALTER TABLE service_order_items ALTER COLUMN line_total_cents DROP NOT NULL")
+    for col in ("service_code", "service_name", "unit_price_cents", "line_total_cents"):
+        if col in item_cols:
+            _execute(f"ALTER TABLE service_order_items ALTER COLUMN {col} DROP NOT NULL")
 
     # petitions — tornar opcionais
     for col in ("advogado_subscritor", "resumo_caso", "detalhes"):
-        _execute(f"ALTER TABLE petitions ALTER COLUMN {col} DROP NOT NULL")
+        if col in petition_cols:
+            _execute(f"ALTER TABLE petitions ALTER COLUMN {col} DROP NOT NULL")
 
 
 def run_runtime_migrations() -> None:
@@ -295,8 +306,5 @@ def run_runtime_migrations() -> None:
     _create_financial_entries_table()
     _create_terms_acceptances_table()
     _backfill_petition_service_orders()
-    try:
-        _fix_legacy_schema()
-    except Exception:
-        pass  # colunas já existem ou constraint já foi dropada
+    _fix_legacy_schema()
     db.session.commit()
