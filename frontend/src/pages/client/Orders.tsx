@@ -92,9 +92,6 @@ export default function Orders() {
         <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
           Meus pedidos
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Acompanhe as petições registradas na API real do backend.
-        </p>
       </div>
 
       <Card>
