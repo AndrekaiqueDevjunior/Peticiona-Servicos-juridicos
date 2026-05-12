@@ -50,7 +50,7 @@ export default function Balance() {
               className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <Plus className="h-4 w-4" />
-              Comprar mais Dinheiro
+              Recarregar Saldo
             </Button>
           </div>
         </Card>
