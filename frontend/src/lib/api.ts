@@ -10,6 +10,14 @@ export interface AuthUser {
   role: BackendRole;
   company_id: number | null;
   is_active: boolean;
+  role_title: string | null;
+  zip_code: string | null;
+  street: string | null;
+  street_number: string | null;
+  address_complement: string | null;
+  neighborhood: string | null;
+  city: string | null;
+  state: string | null;
 }
 
 export interface RegisterPayload {
@@ -478,6 +486,24 @@ export const api = {
   },
 
   admin: {
+    profile: {
+      get: () => request<AuthUser>("/admin/profile"),
+      update: (data: Partial<{
+        phone: string | null;
+        email: string | null;
+        zip_code: string | null;
+        street: string | null;
+        street_number: string | null;
+        address_complement: string | null;
+        neighborhood: string | null;
+        city: string | null;
+        state: string | null;
+      }>) =>
+        request<AuthUser>("/admin/profile", {
+          method: "PUT",
+          body: JSON.stringify(data),
+        }),
+    },
     clients: {
       list: () => request<{ clients: AdminClient[] }>("/admin/clients"),
       update: (

@@ -1,38 +1,60 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
 import {
   setContactInfo,
   useContactInfo,
   whatsappDisplayToRaw,
 } from "@/lib/contactInfo";
 
-const dadosFixos = {
-  nomeCompleto: "Roberto Almeida Pinheiro",
-  cpf: "987.654.321-00",
-  cargo: "Administrador da plataforma",
-  matricula: "PT-ADM-0001",
-  oab: "SP 112.345",
-  dataAdmissao: "01/01/2022",
-};
-
 export default function AdminProfile() {
-  const [telefone, setTelefone] = useState("(11) 99999-1234");
-  const [email, setEmail] = useState("admin@peticiona.com.br");
-  const [cep, setCep] = useState("04538-132");
-  const [logradouro, setLogradouro] = useState("Av. Brigadeiro Faria Lima");
-  const [numero, setNumero] = useState("3477");
-  const [complemento, setComplemento] = useState("Andar 14");
-  const [bairro, setBairro] = useState("Itaim Bibi");
-  const [cidade, setCidade] = useState("São Paulo");
-  const [uf, setUf] = useState("SP");
+  const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Dados do perfil
+  const [telefone, setTelefone] = useState(user?.phone || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [cep, setCep] = useState(user?.zip_code || "");
+  const [logradouro, setLogradouro] = useState(user?.street || "");
+  const [numero, setNumero] = useState(user?.street_number || "");
+  const [complemento, setComplemento] = useState(user?.address_complement || "");
+  const [bairro, setBairro] = useState(user?.neighborhood || "");
+  const [cidade, setCidade] = useState(user?.city || "");
+  const [uf, setUf] = useState(user?.state || "");
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({ title: "Dados atualizados com sucesso." });
+    setIsLoading(true);
+    
+    try {
+      await api.admin.profile.update({
+        phone: telefone.trim() || null,
+        email: email.trim() || null,
+        zip_code: cep.trim() || null,
+        street: logradouro.trim() || null,
+        street_number: numero.trim() || null,
+        address_complement: complemento.trim() || null,
+        neighborhood: bairro.trim() || null,
+        city: cidade.trim() || null,
+        state: uf.trim().toUpperCase() || null,
+      });
+      
+      toast({ title: "Perfil atualizado com sucesso." });
+    } catch (error) {
+      console.error("Erro ao atualizar perfil:", error);
+      toast({ 
+        title: "Erro ao atualizar perfil", 
+        description: "Tente novamente mais tarde.",
+        variant: "destructive" 
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -52,12 +74,12 @@ export default function AdminProfile() {
         </CardHeader>
         <CardContent>
           <form className="grid gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
-            <ReadonlyInput label="Nome completo" value={dadosFixos.nomeCompleto} className="sm:col-span-2" />
-            <ReadonlyInput label="CPF" value={dadosFixos.cpf} />
-            <ReadonlyInput label="Matrícula" value={dadosFixos.matricula} />
-            <ReadonlyInput label="Cargo" value={dadosFixos.cargo} />
-            <ReadonlyInput label="OAB" value={dadosFixos.oab} />
-            <ReadonlyInput label="Data de admissão" value={dadosFixos.dataAdmissao} className="sm:col-span-2" />
+            <ReadonlyInput label="Nome completo" value={user?.full_name || ""} className="sm:col-span-2" />
+            <ReadonlyInput label="CPF" value={user?.cpf || ""} />
+            <ReadonlyInput label="Cargo" value={user?.role_title || "Administrador da plataforma"} />
+            <ReadonlyInput label="OAB" value={user?.oab_number || ""} />
+            <ReadonlyInput label="Função" value={user?.role || "admin"} />
+            <ReadonlyInput label="ID Usuário" value={user?.id?.toString() || ""} className="sm:col-span-2" />
 
             <div className="grid gap-2 sm:col-span-2">
               <Label htmlFor="email">E-mail</Label>
@@ -103,8 +125,12 @@ export default function AdminProfile() {
             </div>
 
             <div className="sm:col-span-2 flex justify-end">
-              <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
-                Salvar alterações
+              <Button 
+                type="submit" 
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+                disabled={isLoading}
+              >
+                {isLoading ? "Salvando..." : "Salvar alterações"}
               </Button>
             </div>
           </form>
