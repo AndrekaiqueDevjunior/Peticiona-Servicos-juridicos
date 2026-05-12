@@ -38,8 +38,8 @@ export default function Dashboard() {
       color: "text-primary",
     },
     {
-      label: "Saldo disponível",
-      value: `${balance?.credits_available ?? 0} créditos`,
+      label: "Dinheiro Disponível",
+      value: `R$ ${balance?.credits_available ?? 0}`,
       icon: Wallet,
       color: "text-accent",
     },

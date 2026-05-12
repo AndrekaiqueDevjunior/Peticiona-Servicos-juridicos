@@ -19,7 +19,7 @@ import logo from "@/assets/peticiona-logo.png";
 const items = [
   { title: "Início", url: "/area-cliente", icon: Home, end: true },
   { title: "Meus pedidos", url: "/area-cliente/pedidos", icon: FileText },
-  { title: "Meus saldos", url: "/area-cliente/saldos", icon: Wallet },
+  { title: "Meus Dinheiros", url: "/area-cliente/saldos", icon: Wallet },
   { title: "Minha conta", url: "/area-cliente/conta", icon: UserCircle },
 ];
 

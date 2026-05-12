@@ -1249,7 +1249,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                         }}
                         className="font-semibold underline underline-offset-2 hover:opacity-80"
                       >
-                        Comprar mais créditos
+                        Comprar mais Dinheiro
                       </button>
                       .
                     </div>

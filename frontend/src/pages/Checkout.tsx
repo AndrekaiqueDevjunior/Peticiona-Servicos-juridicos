@@ -1168,7 +1168,7 @@ function ConfirmationScreen({
 
           <Button className="w-full" size="lg" onClick={onGoToBalance}>
             <Wallet className="mr-2 h-4 w-4" />
-            Ver meus créditos
+            Ver meu Dinheiro
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
