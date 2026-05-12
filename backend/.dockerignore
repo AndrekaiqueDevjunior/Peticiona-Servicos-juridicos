@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+app/uploads/*
+!app/uploads/.gitkeep
+legalcraft.sqlite3

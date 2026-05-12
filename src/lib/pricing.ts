@@ -1,0 +1,302 @@
+import { useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api, type CatalogSection, type PublicPlan } from "./api";
+
+export type PlanoAtivo = "essencial" | "profissional" | "estrategico" | null;
+
+export interface UserPricingProfile {
+  plano: PlanoAtivo;
+  peticaoExpressDisponivel: boolean;
+  recursoExpressDisponivel: boolean;
+}
+
+interface PricingSnapshot {
+  planUnitPrices: Record<Exclude<PlanoAtivo, null>, number>;
+  avulsoGrupoA: number;
+  avulsoGrupoB: number;
+  peticaoExpress: number;
+  recursoExpress: number;
+}
+
+const DEFAULT_PRICING: PricingSnapshot = {
+  planUnitPrices: {
+    essencial: 160,
+    profissional: 150,
+    estrategico: 140,
+  },
+  avulsoGrupoA: 180,
+  avulsoGrupoB: 200,
+  peticaoExpress: 220,
+  recursoExpress: 250,
+};
+
+let pricingSnapshot: PricingSnapshot = DEFAULT_PRICING;
+
+const normalize = (value: string | null | undefined) =>
+  (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+
+const PLAN_BUCKETS: Exclude<PlanoAtivo, null>[] = ["essencial", "profissional", "estrategico"];
+
+const PLAN_ALIASES: Record<Exclude<PlanoAtivo, null>, string[]> = {
+  essencial: ["essencial", "starter", "start"],
+  profissional: ["profissional", "pro"],
+  estrategico: ["estrategico", "estrategico", "premium", "enterprise"],
+};
+
+const resolvePlanBucket = (plan: PublicPlan, index: number): Exclude<PlanoAtivo, null> | null => {
+  const haystack = `${normalize(plan.code)} ${normalize(plan.name)}`;
+  for (const bucket of PLAN_BUCKETS) {
+    if (PLAN_ALIASES[bucket].some((alias) => haystack.includes(alias))) {
+      return bucket;
+    }
+  }
+  return PLAN_BUCKETS[index] ?? null;
+};
+
+const derivePlanUnitPrice = (
+  plan: PublicPlan,
+  bucket: Exclude<PlanoAtivo, null>,
+): number => {
+  const petitionLimit = plan.petition_limit_monthly ?? 0;
+  if (petitionLimit > 0 && plan.monthly_price_cents > 0) {
+    return roundCurrency(plan.monthly_price_cents / 100 / petitionLimit);
+  }
+  return DEFAULT_PRICING.planUnitPrices[bucket];
+};
+
+const derivePricingSnapshot = (
+  plans: PublicPlan[] | undefined,
+  catalog: CatalogSection[] | undefined,
+): PricingSnapshot => {
+  const next: PricingSnapshot = {
+    planUnitPrices: { ...DEFAULT_PRICING.planUnitPrices },
+    avulsoGrupoA: DEFAULT_PRICING.avulsoGrupoA,
+    avulsoGrupoB: DEFAULT_PRICING.avulsoGrupoB,
+    peticaoExpress: DEFAULT_PRICING.peticaoExpress,
+    recursoExpress: DEFAULT_PRICING.recursoExpress,
+  };
+
+  plans?.forEach((plan, index) => {
+    const bucket = resolvePlanBucket(plan, index);
+    if (!bucket) return;
+    next.planUnitPrices[bucket] = derivePlanUnitPrice(plan, bucket);
+  });
+
+  catalog?.forEach((section) => {
+    const sectionKey = normalize(section.section);
+    section.items.forEach((item) => {
+      const key = `${normalize(item.code)} ${normalize(item.title)} ${sectionKey}`;
+      const price = roundCurrency(item.unit_price / 100);
+      const isExpress = key.includes("express");
+      const isRecurso = key.includes("recurso");
+      const isPeticao = key.includes("peticao") || key.includes("peticoes");
+
+      if (isExpress && isPeticao) {
+        next.peticaoExpress = price;
+        return;
+      }
+      if (isExpress && isRecurso) {
+        next.recursoExpress = price;
+        return;
+      }
+      if (isRecurso || sectionKey.includes("recursos")) {
+        next.avulsoGrupoB = price;
+        return;
+      }
+      if (isPeticao || sectionKey.includes("peticoes")) {
+        next.avulsoGrupoA = price;
+      }
+    });
+  });
+
+  return next;
+};
+
+export const usePricingCatalog = ({ includeCatalog = false }: { includeCatalog?: boolean } = {}) => {
+  const plansQuery = useQuery({
+    queryKey: ["public-plans"],
+    queryFn: () => api.content.plans(),
+  });
+  const catalogQuery = useQuery({
+    queryKey: ["public-catalog"],
+    queryFn: () => api.content.catalog(),
+    enabled: includeCatalog,
+  });
+
+  const pricing = useMemo(
+    () => derivePricingSnapshot(plansQuery.data?.plans, catalogQuery.data?.catalog),
+    [catalogQuery.data?.catalog, plansQuery.data?.plans],
+  );
+
+  useEffect(() => {
+    pricingSnapshot = pricing;
+  }, [pricing]);
+
+  return {
+    data: pricing,
+    isLoading: plansQuery.isLoading || (includeCatalog && catalogQuery.isLoading),
+  };
+};
+
+export const PRECO_PLANO = {
+  get essencial() { return pricingSnapshot.planUnitPrices.essencial; },
+  get profissional() { return pricingSnapshot.planUnitPrices.profissional; },
+  get estrategico() { return pricingSnapshot.planUnitPrices.estrategico; },
+} as Record<Exclude<PlanoAtivo, null>, number>;
+
+export const LABEL_PLANO: Record<Exclude<PlanoAtivo, null>, string> = {
+  essencial: "Plano Essencial",
+  profissional: "Plano Profissional",
+  estrategico: "Plano Estratégico",
+};
+
+export const getPrecoAvulsoGrupoA = () => pricingSnapshot.avulsoGrupoA;
+export const getPrecoAvulsoGrupoB = () => pricingSnapshot.avulsoGrupoB;
+export const getPrecoPeticaoExpress = () => pricingSnapshot.peticaoExpress;
+export const getPrecoRecursoExpress = () => pricingSnapshot.recursoExpress;
+
+// Grupo A — Petição Avulsa padrão / Petição Express
+const GRUPO_A = new Set<string>([
+  // Defesas
+  "Contestação",
+  "Embargos à execução",
+  "Impugnação ao cumprimento de sentença",
+  // Manifestações Gerais
+  "Contrarrazões",
+  "Petição intermediária",
+  "Manifestação",
+  "Alegações finais",
+  "Razões finais",
+  // Administrativo / Extrajudicial
+  "Notificação extrajudicial",
+  "Defesa administrativa",
+  "Recurso administrativo",
+  "Requerimentos administrativos",
+]);
+
+// Grupo B — Recurso Avulso padrão / Recurso Express
+const GRUPO_B = new Set<string>([
+  // Petições Iniciais
+  "Petição inicial comum",
+  "Mandado de segurança",
+  "Cumprimento de sentença (inicial)",
+  // Recursos
+  "Apelação",
+  "Agravo de instrumento",
+  "Agravo interno",
+  "Embargos de declaração",
+  "Recurso ordinário",
+  "Recurso especial",
+  "Recurso extraordinário",
+  "Agravo em recurso especial",
+  "Agravo em recurso extraordinário",
+]);
+
+export type GrupoServico = "A" | "B" | null;
+
+export const getGrupoServico = (tipoPeticao: string): GrupoServico => {
+  if (!tipoPeticao) return null;
+  if (GRUPO_A.has(tipoPeticao)) return "A";
+  if (GRUPO_B.has(tipoPeticao)) return "B";
+  return null;
+};
+
+// ---- Cálculo ---------------------------------------------------------------
+
+export type Modalidade = "express" | "padrao";
+
+export interface PricingResult {
+  /** Preço do serviço padrão (plano ou avulso) — null se tipo não reconhecido */
+  precoPadrao: number | null;
+  /** Rótulo da modalidade padrão (ex: "Plano Profissional", "Petição Avulsa") */
+  labelPadrao: string;
+  /** Preço Express se aplicável e disponível para o usuário */
+  precoExpress: number | null;
+  /** Rótulo da modalidade express (ex: "Petição Express") */
+  labelExpress: string | null;
+  /** Modalidade efetivamente escolhida pelo usuário */
+  modalidadeEscolhida: Modalidade;
+  /** Preço final aplicado ao pedido */
+  precoFinal: number;
+  /** Rótulo da modalidade final */
+  labelFinal: string;
+  /** Grupo do serviço (A ou B) */
+  grupo: GrupoServico;
+}
+
+export const calcularPrecoPedido = (
+  tipoPeticao: string,
+  perfil: UserPricingProfile,
+  modalidadeEscolhida: Modalidade = "padrao",
+): PricingResult => {
+  const grupo = getGrupoServico(tipoPeticao);
+
+  // Padrão: plano ativo tem prioridade sobre avulso.
+  let precoPadrao: number | null = null;
+  let labelPadrao = "";
+
+  if (grupo) {
+    if (perfil.plano) {
+      precoPadrao = PRECO_PLANO[perfil.plano];
+      labelPadrao = LABEL_PLANO[perfil.plano];
+    } else if (grupo === "A") {
+      precoPadrao = getPrecoAvulsoGrupoA();
+      labelPadrao = "Petição Avulsa";
+    } else {
+      precoPadrao = getPrecoAvulsoGrupoB();
+      labelPadrao = "Recurso Avulso";
+    }
+  }
+
+  // Express é sempre opcional e adicional, independente do plano.
+  let precoExpress: number | null = null;
+  let labelExpress: string | null = null;
+  if (grupo === "A" && perfil.peticaoExpressDisponivel) {
+    precoExpress = getPrecoPeticaoExpress();
+    labelExpress = "Petição Express";
+  } else if (grupo === "B" && perfil.recursoExpressDisponivel) {
+    precoExpress = getPrecoRecursoExpress();
+    labelExpress = "Recurso Express";
+  }
+
+  const expressAtivo =
+    modalidadeEscolhida === "express" && precoExpress !== null;
+
+  return {
+    precoPadrao,
+    labelPadrao,
+    precoExpress,
+    labelExpress,
+    modalidadeEscolhida: expressAtivo ? "express" : "padrao",
+    precoFinal: expressAtivo ? (precoExpress as number) : (precoPadrao ?? 0),
+    labelFinal: expressAtivo ? (labelExpress as string) : labelPadrao,
+    grupo,
+  };
+};
+
+import { useBalance, planoEmUso } from "@/lib/balance";
+
+export const useUserPricingProfile = () => {
+  usePricingCatalog({ includeCatalog: true });
+  const balance = useBalance();
+  const ativo = planoEmUso(balance);
+  const profile: UserPricingProfile = {
+    plano: ativo?.tipo ?? null,
+    // Express só fica "disponível" quando há saldo Express comprado.
+    peticaoExpressDisponivel: balance.saldoPeticaoExpress > 0,
+    recursoExpressDisponivel: balance.saldoRecursoExpress > 0,
+  };
+  return { data: profile } as { data: UserPricingProfile };
+};
+
+export const formatBRL = (v: number) =>
+  v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
