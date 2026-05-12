@@ -125,7 +125,7 @@ export default function AdminStaff() {
                 {!isLoading && !error && funcionarios.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                      Nenhum funcionario encontrado no backend.
+                      Nenhum funcionário encontrado.
                     </TableCell>
                   </TableRow>
                 )}
@@ -186,7 +186,7 @@ export default function AdminStaff() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          O bloqueio e salvo no backend e pode ser revertido a qualquer momento.
+          O bloqueio é salvo no sistema e pode ser revertido a qualquer momento.
         </p>
       </div>
 

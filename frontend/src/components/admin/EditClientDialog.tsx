@@ -75,7 +75,7 @@ export const EditClientDialog = ({
       queryClient.invalidateQueries({ queryKey: ["admin-clients"] });
       toast({
         title: "Cadastro atualizado",
-        description: `${client.nome} foi salvo no backend.`,
+        description: `${client.nome} foi salvo com sucesso.`,
       });
       onOpenChange(false);
     },
@@ -123,7 +123,7 @@ export const EditClientDialog = ({
         <DialogHeader>
           <DialogTitle>Editar cadastro do cliente</DialogTitle>
           <DialogDescription>
-            As alterações são salvas diretamente no backend e recarregadas na tabela.
+            As alterações são salvas automaticamente e atualizadas na lista.
           </DialogDescription>
         </DialogHeader>
 

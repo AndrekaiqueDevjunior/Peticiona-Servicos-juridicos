@@ -872,7 +872,7 @@ export default function Checkout() {
                       <Separator />
                       <p className="text-xs text-muted-foreground">
                         <ShieldCheck className="mr-1 inline h-3.5 w-3.5" />
-                        Os dados do cartão são usados apenas no navegador para tokenização direta com a Pagar.me e não são enviados ao nosso backend.
+                        Os dados do cartão são usados apenas no navegador para tokenização segura com a Pagar.me e não são armazenados em nossos servidores.
                       </p>
                     </div>
                   )}

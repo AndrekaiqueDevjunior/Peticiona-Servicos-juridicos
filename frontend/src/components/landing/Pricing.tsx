@@ -94,11 +94,11 @@ const Pricing = () => {
       <div className="mt-16 grid gap-6 md:grid-cols-3">
         {loadingPlans ? (
           <div className="rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground md:col-span-3">
-            Carregando planos reais do backend...
+            Carregando planos disponíveis...
           </div>
         ) : plans.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground md:col-span-3">
-            Nenhum plano público ativo foi encontrado no backend.
+            Nenhum plano público ativo foi encontrado.
           </div>
         ) : plans.map((plan, index) => {
           const pricePerService = PLAN_PRICE_PER_SERVICE[plan.code];
@@ -168,7 +168,7 @@ const Pricing = () => {
         {loadingCatalog ? (
           <div className="mt-10 rounded-xl border border-border bg-card p-6 text-center shadow-card">
             <p className="text-sm text-muted-foreground">
-              Carregando serviços avulsos do catálogo público...
+              Planos e créditos carregados do catálogo oficial da plataforma, refletindo os valores atualizados.
             </p>
           </div>
         ) : avulsos.length > 0 ? (
@@ -200,7 +200,7 @@ const Pricing = () => {
         ) : (
           <div className="mt-10 rounded-xl border border-border bg-card p-6 text-center shadow-card">
             <p className="text-sm text-muted-foreground">
-              Nenhum serviço avulso público foi encontrado no backend.
+              Nenhum serviço avulso público foi encontrado.
             </p>
           </div>
         )}

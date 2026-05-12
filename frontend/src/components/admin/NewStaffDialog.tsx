@@ -92,7 +92,7 @@ export function NewStaffDialog({ open, onOpenChange, onCreated }: Props) {
         <DialogHeader>
           <DialogTitle className="font-display text-xl">Novo funcionario</DialogTitle>
           <DialogDescription>
-            Cadastre um novo membro da equipe interna usando a API real do backend.
+            Cadastre um novo membro da equipe interna da plataforma.
           </DialogDescription>
         </DialogHeader>
 

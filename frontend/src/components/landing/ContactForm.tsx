@@ -55,7 +55,7 @@ const ContactForm = () => {
     }
     setErrors({});
     setSubmitting(true);
-    // Fallback enquanto não há backend: abre o cliente de e-mail do usuário
+    // Contato direto via e-mail: abre o cliente de e-mail do usuário
     // pré-preenchido para o endereço de contato configurado pelo admin.
     const subject = encodeURIComponent(`Contato pela landing — ${values.name}`);
     const body = encodeURIComponent(
