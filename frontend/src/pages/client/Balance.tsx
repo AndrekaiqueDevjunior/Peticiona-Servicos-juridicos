@@ -18,7 +18,7 @@ export default function Balance() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          Meus Dinheiros
+          Meu Saldo
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Visualize seu dinheiro disponível e as movimentações registradas pela plataforma.
