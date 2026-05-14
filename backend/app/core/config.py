@@ -50,9 +50,23 @@ DEFAULT_UPLOAD_FOLDER = BACKEND_ROOT / "app" / "uploads"
 
 class Config:
     BACKEND_DIR = str(BACKEND_ROOT)
-    SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY") or "dev-secret-key"
-    JWT_SECRET = os.getenv("JWT_SECRET") or SECRET_KEY
-    JWT_EXPIRATION = int(os.getenv("JWT_EXPIRATION", "86400"))
+    
+    @property
+    def SECRET_KEY(self):
+        key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY")
+        if not key:
+            raise ValueError("SECRET_KEY não configurada. Configure FLASK_SECRET_KEY ou SECRET_KEY.")
+        # Em produção, exige chave forte
+        is_production = os.getenv("FLASK_ENV") == "production" or not os.getenv("DEBUG", "true").lower() in {"true", "1", "yes"}
+        if is_production and len(key) < 32:
+            raise ValueError("SECRET_KEY muito curta para produção. Use pelo menos 32 caracteres.")
+        return key
+    
+    @property
+    def JWT_SECRET(self):
+        return os.getenv("JWT_SECRET") or self.SECRET_KEY
+    
+    JWT_EXPIRATION = int(os.getenv("JWT_EXPIRATION", "3600"))  # Reduzido para 1 hora em produção
 
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL") or f"sqlite:///{DEFAULT_SQLITE_PATH}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -71,6 +85,7 @@ class Config:
 
     AUTH_RATE_LIMIT = int(os.getenv("AUTH_RATE_LIMIT", "12"))
     AUTH_RATE_WINDOW_SECONDS = int(os.getenv("AUTH_RATE_WINDOW_SECONDS", "60"))
+    RATE_LIMIT_ENABLED = _to_bool(os.getenv("RATE_LIMIT_ENABLED"), True)
 
     SMTP_HOST = os.getenv("SMTP_HOST", "")
     SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))

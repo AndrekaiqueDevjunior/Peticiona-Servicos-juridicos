@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, Unlock, Plus } from "lucide-react";
+import { Lock, Unlock, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,7 @@ export default function AdminStaff() {
   });
   const funcionarios = data?.staff ?? [];
   const [target, setTarget] = useState<AdminStaffMember | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminStaffMember | null>(null);
   const [openNew, setOpenNew] = useState(false);
 
   const toggleMutation = useMutation({
@@ -58,6 +59,22 @@ export default function AdminStaff() {
     onError: (err) => {
       toast({
         title: "Nao foi possivel atualizar o funcionario",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (staff: AdminStaffMember) => api.admin.staff.delete(staff.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-staff"] });
+      toast({ title: "Funcionário removido." });
+      setPendingDelete(null);
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível remover o funcionário",
         description: err instanceof Error ? err.message : "Tente novamente.",
         variant: "destructive",
       });
@@ -153,30 +170,46 @@ export default function AdminStaff() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setTarget(staff)}
-                            aria-label={staff.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
-                            className={cn(
-                              staff.ativo
-                                ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                : "text-accent hover:bg-accent/10",
-                            )}
-                          >
-                            {staff.ativo ? (
-                              <Lock className="h-4 w-4" />
-                            ) : (
-                              <Unlock className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          {staff.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
-                        </TooltipContent>
-                      </Tooltip>
+                      <div className="flex justify-end gap-1">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setTarget(staff)}
+                              aria-label={staff.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
+                              className={cn(
+                                staff.ativo
+                                  ? "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  : "text-accent hover:bg-accent/10",
+                              )}
+                            >
+                              {staff.ativo ? (
+                                <Lock className="h-4 w-4" />
+                              ) : (
+                                <Unlock className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {staff.ativo ? "Bloquear acesso" : "Desbloquear acesso"}
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setPendingDelete(staff)}
+                              aria-label="Remover funcionário"
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Remover funcionário</TooltipContent>
+                        </Tooltip>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -191,6 +224,31 @@ export default function AdminStaff() {
       </div>
 
       <NewStaffDialog open={openNew} onOpenChange={setOpenNew} />
+
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(open) => !open && setPendingDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover este funcionário?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete?.nome} perderá acesso e não aparecerá mais na lista.
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingDelete && deleteMutation.mutate(pendingDelete)}
+              disabled={deleteMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? "Removendo..." : "Remover"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!target} onOpenChange={(open) => !open && setTarget(null)}>
         <AlertDialogContent>

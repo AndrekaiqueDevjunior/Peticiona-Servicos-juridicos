@@ -24,11 +24,50 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     if config_overrides:
         app.config.update(config_overrides)
 
+    # Configuração CORS segura para produção
+    cors_origins = app.config.get("CORS_ALLOWED_ORIGINS", [])
+    if cors_origins:
+        cors.init_app(app, origins=cors_origins, supports_credentials=True)
+    else:
+        # Fallback seguro - apenas localhost em desenvolvimento
+        if app.config.get("DEBUG", True):
+            cors.init_app(app, origins=["http://localhost:3000", "http://localhost:8080"], supports_credentials=True)
+        else:
+            raise ValueError("CORS_ALLOWED_ORIGINS não configurado para produção")
+
     db.init_app(app)
-    cors.init_app(app)
     register_error_handlers(app)
     install_admin_order_status_patch()
     register_blueprints(app)
+    
+    # Adiciona headers de segurança
+    @app.after_request
+    def add_security_headers(response):
+        # Headers básicos de segurança
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+        
+        # Em produção com HTTPS
+        if not app.config.get("DEBUG", True):
+            response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+            
+            # Content Security Policy
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: https:; "
+                "font-src 'self'; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'"
+            )
+            response.headers['Content-Security-Policy'] = csp
+        
+        return response
 
     with app.app_context():
         db.create_all()

@@ -1,10 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Save, RotateCcw } from "lucide-react";
+import { Save, RotateCcw, Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { api, type AdminPlan, type AdminServiceCatalogItem } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -19,6 +37,46 @@ export default function AdminPlans() {
   const [draftPlans, setDraftPlans] = useState<AdminPlan[]>([]);
   const [draftServices, setDraftServices] = useState<AdminServiceCatalogItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [createPlanOpen, setCreatePlanOpen] = useState(false);
+  const [createServiceOpen, setCreateServiceOpen] = useState(false);
+  const [pendingPlanDelete, setPendingPlanDelete] = useState<AdminPlan | null>(null);
+  const [pendingServiceDelete, setPendingServiceDelete] = useState<AdminServiceCatalogItem | null>(null);
+
+  const deletePlanMutation = useMutation({
+    mutationFn: (plan: AdminPlan) => api.admin.pricing.deletePlan(plan.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["public-plans"] });
+      toast({ title: "Plano excluído." });
+      setPendingPlanDelete(null);
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível excluir o plano",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteServiceMutation = useMutation({
+    mutationFn: (service: AdminServiceCatalogItem) =>
+      api.admin.pricing.deleteService(service.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["public-catalog"] });
+      queryClient.invalidateQueries({ queryKey: ["client-catalog"] });
+      toast({ title: "Serviço excluído." });
+      setPendingServiceDelete(null);
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível excluir o serviço",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -173,8 +231,17 @@ export default function AdminPlans() {
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="font-display text-xl">Planos</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreatePlanOpen(true)}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Novo plano
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {draftPlans.map((plan) => (
@@ -185,6 +252,15 @@ export default function AdminPlans() {
                   <p className="text-xs text-muted-foreground">Codigo: {plan.code}</p>
                 </div>
                 <div className="flex items-center gap-3 text-sm">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPendingPlanDelete(plan)}
+                    aria-label="Excluir plano"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -288,8 +364,17 @@ export default function AdminPlans() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle className="font-display text-xl">Servicos avulsos</CardTitle>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setCreateServiceOpen(true)}
+            className="gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Novo serviço
+          </Button>
         </CardHeader>
         <CardContent className="space-y-4">
           {draftServices.map((service) => (
@@ -299,14 +384,25 @@ export default function AdminPlans() {
                   <p className="font-medium text-foreground">{service.title}</p>
                   <p className="text-xs text-muted-foreground">Codigo: {service.code}</p>
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={service.is_active}
-                    onChange={(e) => updateService(service.id, "is_active", e.target.checked)}
-                  />
-                  Ativo
-                </label>
+                <div className="flex items-center gap-3 text-sm">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setPendingServiceDelete(service)}
+                    aria-label="Excluir serviço"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={service.is_active}
+                      onChange={(e) => updateService(service.id, "is_active", e.target.checked)}
+                    />
+                    Ativo
+                  </label>
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -343,7 +439,366 @@ export default function AdminPlans() {
           ))}
         </CardContent>
       </Card>
+
+      <CreatePlanDialog
+        open={createPlanOpen}
+        onOpenChange={setCreatePlanOpen}
+        onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })}
+      />
+      <CreateServiceDialog
+        open={createServiceOpen}
+        onOpenChange={setCreateServiceOpen}
+        onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })}
+      />
+
+      <AlertDialog
+        open={!!pendingPlanDelete}
+        onOpenChange={(open) => !open && setPendingPlanDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este plano?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O plano {pendingPlanDelete?.name} ({pendingPlanDelete?.code}) será removido do catálogo público.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletePlanMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingPlanDelete && deletePlanMutation.mutate(pendingPlanDelete)}
+              disabled={deletePlanMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletePlanMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!pendingServiceDelete}
+        onOpenChange={(open) => !open && setPendingServiceDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir este serviço?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingServiceDelete?.title} ({pendingServiceDelete?.code}) será removido do catálogo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteServiceMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() =>
+                pendingServiceDelete && deleteServiceMutation.mutate(pendingServiceDelete)
+              }
+              disabled={deleteServiceMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteServiceMutation.isPending ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
+  );
+}
+
+function CreatePlanDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [monthlyPrice, setMonthlyPrice] = useState("0");
+  const [monthlyCredits, setMonthlyCredits] = useState("0");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const reset = () => {
+    setCode("");
+    setName("");
+    setMonthlyPrice("0");
+    setMonthlyCredits("0");
+    setDescription("");
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code.trim() || !name.trim()) {
+      toast({
+        title: "Dados incompletos",
+        description: "Código e nome são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.admin.pricing.createPlan({
+        code: code.trim(),
+        name: name.trim(),
+        monthly_price_cents: Number(monthlyPrice) || 0,
+        monthly_credits_cents: Number(monthlyCredits) || 0,
+        description: description.trim() || null,
+        is_active: true,
+      });
+      toast({ title: "Plano criado." });
+      onCreated();
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: "Não foi possível criar o plano",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!submitting) onOpenChange(value);
+        if (!value) reset();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Novo plano</DialogTitle>
+          <DialogDescription>
+            Adicione um novo plano ao catálogo. Valores em centavos.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-code">Código *</Label>
+              <Input
+                id="new-plan-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+                maxLength={60}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-name">Nome *</Label>
+              <Input
+                id="new-plan-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                maxLength={120}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-price">Preço mensal (centavos) *</Label>
+              <Input
+                id="new-plan-price"
+                type="number"
+                min="0"
+                value={monthlyPrice}
+                onChange={(e) => setMonthlyPrice(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-credits">Créditos mensais (centavos)</Label>
+              <Input
+                id="new-plan-credits"
+                type="number"
+                min="0"
+                value={monthlyCredits}
+                onChange={(e) => setMonthlyCredits(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="new-plan-description">Descrição</Label>
+            <Input
+              id="new-plan-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={300}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Criando..." : "Criar plano"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function CreateServiceDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCreated: () => void;
+}) {
+  const { toast } = useToast();
+  const [code, setCode] = useState("");
+  const [title, setTitle] = useState("");
+  const [section, setSection] = useState("");
+  const [unitPrice, setUnitPrice] = useState("0");
+  const [description, setDescription] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const reset = () => {
+    setCode("");
+    setTitle("");
+    setSection("");
+    setUnitPrice("0");
+    setDescription("");
+  };
+
+  const onSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code.trim() || !title.trim() || !section.trim()) {
+      toast({
+        title: "Dados incompletos",
+        description: "Código, título e seção são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await api.admin.pricing.createService({
+        code: code.trim(),
+        title: title.trim(),
+        section: section.trim(),
+        unit_price: Number(unitPrice) || 0,
+        description: description.trim() || null,
+        is_active: true,
+      });
+      toast({ title: "Serviço criado." });
+      onCreated();
+      reset();
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        title: "Não foi possível criar o serviço",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(value) => {
+        if (!submitting) onOpenChange(value);
+        if (!value) reset();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Novo serviço avulso</DialogTitle>
+          <DialogDescription>
+            Adicione um novo serviço avulso. Preço em centavos.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={onSubmit} className="grid gap-4">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="new-svc-code">Código *</Label>
+              <Input
+                id="new-svc-code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+                maxLength={60}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-svc-section">Seção *</Label>
+              <Input
+                id="new-svc-section"
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                required
+                maxLength={80}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="new-svc-title">Título *</Label>
+            <Input
+              id="new-svc-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+              maxLength={120}
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="new-svc-price">Preço unitário (centavos) *</Label>
+              <Input
+                id="new-svc-price"
+                type="number"
+                min="0"
+                value={unitPrice}
+                onChange={(e) => setUnitPrice(e.target.value)}
+                required
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="new-svc-description">Descrição</Label>
+              <Input
+                id="new-svc-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={300}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Criando..." : "Criar serviço"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -289,7 +289,8 @@ def update_order(user, order_id: object, payload: dict) -> dict:
                 value = str(payload.get(field) or "").strip()
                 if field == "area_direito" and not value:
                     raise ValidationError("Área do Direito é obrigatória.")
-                setattr(petition, field, value or None)
+                # Mantém string vazia se for o caso, não converte para None
+                setattr(petition, field, value if value != "" else "")
         if "justica_gratuita" in payload:
             petition.justica_gratuita = bool(payload.get("justica_gratuita"))
         if "tutela_urgencia" in payload:

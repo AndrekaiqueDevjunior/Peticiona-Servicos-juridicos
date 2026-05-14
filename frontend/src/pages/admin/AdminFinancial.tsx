@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, ShoppingBag, Users } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { BarChart3, CheckCircle2, ShoppingBag, Undo2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -20,89 +21,137 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  ADMIN_COMPRAS,
-  ADMIN_FUNCIONARIOS,
-  type AdminPedidoMock,
-  type AdminCompraMock,
-} from "@/lib/adminMocks";
-import { useAdminPedidos, atualizarSplit, ADMIN_RESPONSAVEL_ID } from "@/lib/adminPedidos";
-
-const formatBRL = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-const statusBadge: Record<AdminPedidoMock["status"], string> = {
-  "Em análise": "bg-primary/10 text-primary border border-primary/20",
-  "Aguardando dados": "bg-destructive/10 text-destructive border border-destructive/30",
-  Concluído: "bg-accent/15 text-accent border border-accent/30",
-};
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "@/hooks/use-toast";
+import { api, type AdminCreditPurchase, type AdminOrder } from "@/lib/api";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ];
 
-// Pedidos usam "dd/MM/yyyy HH:mm"; compras usam ISO.
-const parsePedidoDate = (s: string): Date => {
-  const [data, hora = "00:00"] = s.split(" ");
-  const [dd, mm, yyyy] = data.split("/").map(Number);
-  const [hh, mi] = hora.split(":").map(Number);
-  return new Date(yyyy, (mm ?? 1) - 1, dd ?? 1, hh ?? 0, mi ?? 0);
-};
+const formatBRL = (cents: number) =>
+  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-const formatCompraData = (iso: string) => {
+const formatDateTime = (iso: string | null) => {
+  if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR") + " " +
-    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return (
+    d.toLocaleDateString("pt-BR") +
+    " " +
+    d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  );
 };
 
-const tipoBadge: Record<AdminCompraMock["tipo"], string> = {
-  plano: "bg-primary/10 text-primary border border-primary/20",
-  avulso: "bg-accent/15 text-accent border border-accent/30",
+const statusBadge: Record<string, string> = {
+  pendente: "bg-primary/10 text-primary border border-primary/20",
+  em_andamento: "bg-secondary text-foreground border border-border",
+  concluido: "bg-accent/15 text-accent border border-accent/30",
+  cancelado: "bg-destructive/10 text-destructive border border-destructive/30",
+};
+
+const purchaseStatusBadge: Record<string, string> = {
+  paid: "bg-accent/15 text-accent border border-accent/30",
+  processing: "bg-primary/10 text-primary border border-primary/20",
+  pending: "bg-secondary text-foreground border border-border",
+  refunded: "bg-destructive/10 text-destructive border border-destructive/30",
+  failed: "bg-destructive/10 text-destructive border border-destructive/30",
 };
 
 export default function AdminFinancial() {
+  const queryClient = useQueryClient();
   const hoje = new Date();
   const [mes, setMes] = useState<number>(hoje.getMonth());
   const [ano, setAno] = useState<number>(hoje.getFullYear());
   const [funcionarioFiltro, setFuncionarioFiltro] = useState<string>("todos");
+  const [refundTarget, setRefundTarget] = useState<AdminCreditPurchase | null>(null);
 
-  const pedidosStore = useAdminPedidos();
+  const { data: summary, isLoading: loadingSummary, error: summaryError } = useQuery({
+    queryKey: ["admin-financial"],
+    queryFn: () => api.admin.financial.summary(),
+  });
 
-  // Anos disponíveis: dos dados + ano corrente.
+  const { data: purchasesData, isLoading: loadingPurchases, error: purchasesError } = useQuery({
+    queryKey: ["admin-credit-purchases"],
+    queryFn: () => api.admin.financial.creditPurchases(),
+  });
+
+  const orders: AdminOrder[] = summary?.orders ?? [];
+  const purchases: AdminCreditPurchase[] = purchasesData?.purchases ?? [];
+
+  const refundMutation = useMutation({
+    mutationFn: (purchase: AdminCreditPurchase) =>
+      api.admin.financial.refundPurchase(purchase.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-credit-purchases"] });
+      queryClient.invalidateQueries({ queryKey: ["admin-financial"] });
+      toast({ title: "Estorno solicitado à Pagar.me com sucesso." });
+      setRefundTarget(null);
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível estornar",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const anosDisponiveis = useMemo(() => {
     const set = new Set<number>([hoje.getFullYear()]);
-    ADMIN_COMPRAS.forEach((c) => set.add(new Date(c.dataISO).getFullYear()));
-    pedidosStore.forEach((p) => set.add(parsePedidoDate(p.criadoEm).getFullYear()));
+    purchases.forEach((p) => set.add(new Date(p.created_at).getFullYear()));
+    orders.forEach((p) => {
+      if (p.criado_em) set.add(new Date(p.criado_em).getFullYear());
+    });
     return Array.from(set).sort((a, b) => b - a);
-  }, [hoje, pedidosStore]);
+  }, [hoje, purchases, orders]);
+
+  const funcionarios = useMemo(() => {
+    const map = new Map<number, string>();
+    orders.forEach((o) => {
+      if (o.staff_user_id && o.funcionario) map.set(o.staff_user_id, o.funcionario);
+    });
+    return Array.from(map.entries()).map(([id, nome]) => ({ id: String(id), nome }));
+  }, [orders]);
 
   const comprasFiltradas = useMemo(
     () =>
-      ADMIN_COMPRAS.filter((c) => {
-        const d = new Date(c.dataISO);
+      purchases.filter((p) => {
+        const d = new Date(p.created_at);
         return d.getMonth() === mes && d.getFullYear() === ano;
       }),
-    [mes, ano],
+    [purchases, mes, ano],
   );
 
   const pedidosFiltrados = useMemo(
     () =>
-      pedidosStore.filter((p) => {
-        const d = parsePedidoDate(p.criadoEm);
+      orders.filter((o) => {
+        if (!o.criado_em) return false;
+        const d = new Date(o.criado_em);
         if (d.getMonth() !== mes || d.getFullYear() !== ano) return false;
         if (funcionarioFiltro === "todos") return true;
-        if (funcionarioFiltro === "sem_vinculo") return !p.funcionarioId;
-        return p.funcionarioId === funcionarioFiltro;
+        if (funcionarioFiltro === "sem_vinculo") return !o.staff_user_id;
+        return String(o.staff_user_id) === funcionarioFiltro;
       }),
-    [pedidosStore, mes, ano, funcionarioFiltro],
+    [orders, mes, ano, funcionarioFiltro],
   );
 
   const stats = useMemo(() => {
-    const receitaMes = comprasFiltradas.reduce((s, c) => s + c.valor, 0);
+    const receitaMes = comprasFiltradas
+      .filter((c) => c.status === "paid")
+      .reduce((s, c) => s + c.amount_cents, 0);
     const totalCompras = comprasFiltradas.length;
-    const concluidos = pedidosFiltrados.filter((p) => p.status === "Concluído").length;
+    const concluidos = pedidosFiltrados.filter((p) => p.status === "concluido").length;
     const totalPagarFuncionario = pedidosFiltrados.reduce(
-      (s, p) => s + (p.valor * p.splitFuncionario) / 100,
+      (s, p) => s + (p.valor * (p.split_funcionario ?? 0)) / 100,
       0,
     );
     return { receitaMes, totalCompras, concluidos, totalPagarFuncionario };
@@ -113,9 +162,14 @@ export default function AdminFinancial() {
       ? "todos os funcionários"
       : funcionarioFiltro === "sem_vinculo"
         ? "pedidos sem vínculo"
-        : funcionarioFiltro === ADMIN_RESPONSAVEL_ID
-          ? "Admin Peticiona"
-          : ADMIN_FUNCIONARIOS.find((f) => f.id === funcionarioFiltro)?.nome ?? "—";
+        : funcionarios.find((f) => f.id === funcionarioFiltro)?.nome ?? "—";
+
+  const loadError =
+    summaryError instanceof Error
+      ? summaryError.message
+      : purchasesError instanceof Error
+        ? purchasesError.message
+        : null;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -156,6 +210,12 @@ export default function AdminFinancial() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           icon={<BarChart3 className="h-4 w-4" />}
@@ -195,39 +255,59 @@ export default function AdminFinancial() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Tipo</TableHead>
                     <TableHead>Produto</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Data</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {comprasFiltradas.length === 0 ? (
+                  {loadingPurchases ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        Carregando compras...
+                      </TableCell>
+                    </TableRow>
+                  ) : comprasFiltradas.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                         Nenhuma compra registrada neste período.
                       </TableCell>
                     </TableRow>
                   ) : (
                     comprasFiltradas.map((c) => (
                       <TableRow key={c.id}>
-                        <TableCell>{c.cliente}</TableCell>
+                        <TableCell>{c.user_name ?? c.user_email ?? "—"}</TableCell>
+                        <TableCell className="font-medium">{c.package_name}</TableCell>
                         <TableCell>
                           <span
                             className={cn(
                               "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium capitalize",
-                              tipoBadge[c.tipo],
+                              purchaseStatusBadge[c.status] ??
+                                "bg-secondary text-foreground border border-border",
                             )}
                           >
-                            {c.tipo === "plano" ? "Plano" : "Avulso"}
+                            {c.status}
                           </span>
                         </TableCell>
-                        <TableCell className="font-medium">{c.produto}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {formatCompraData(c.dataISO)}
+                          {formatDateTime(c.created_at)}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
-                          {formatBRL(c.valor)}
+                        <TableCell className="text-right font-medium">{c.amount_brl}</TableCell>
+                        <TableCell className="text-right">
+                          {c.status === "paid" && c.pagarme_charge_id && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setRefundTarget(c)}
+                              className="gap-1 text-destructive hover:bg-destructive/10"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                              Estornar
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -235,11 +315,12 @@ export default function AdminFinancial() {
                   {comprasFiltradas.length > 0 && (
                     <TableRow className="bg-secondary/40 hover:bg-secondary/40">
                       <TableCell colSpan={4} className="text-right font-semibold">
-                        Receita do mês
+                        Receita do mês (compras pagas)
                       </TableCell>
                       <TableCell className="text-right font-semibold text-primary">
                         {formatBRL(stats.receitaMes)}
                       </TableCell>
+                      <TableCell />
                     </TableRow>
                   )}
                 </TableBody>
@@ -259,8 +340,7 @@ export default function AdminFinancial() {
                 <SelectContent>
                   <SelectItem value="todos">Todos os funcionários</SelectItem>
                   <SelectItem value="sem_vinculo">Sem vínculo</SelectItem>
-                  <SelectItem value={ADMIN_RESPONSAVEL_ID}>Admin Peticiona</SelectItem>
-                  {ADMIN_FUNCIONARIOS.map((f) => (
+                  {funcionarios.map((f) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.nome}
                     </SelectItem>
@@ -270,8 +350,12 @@ export default function AdminFinancial() {
             </div>
             {funcionarioFiltro !== "todos" && (
               <div className="rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">A pagar a {filtroFuncionarioLabel} em {MESES[mes]}/{ano}: </span>
-                <span className="font-semibold text-accent">{formatBRL(stats.totalPagarFuncionario)}</span>
+                <span className="text-muted-foreground">
+                  A pagar a {filtroFuncionarioLabel} em {MESES[mes]}/{ano}:{" "}
+                </span>
+                <span className="font-semibold text-accent">
+                  {formatBRL(stats.totalPagarFuncionario)}
+                </span>
               </div>
             )}
           </div>
@@ -297,7 +381,13 @@ export default function AdminFinancial() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pedidosFiltrados.length === 0 ? (
+                  {loadingSummary ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                        Carregando pedidos...
+                      </TableCell>
+                    </TableRow>
+                  ) : pedidosFiltrados.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
                         Nenhum pedido neste período.
@@ -315,23 +405,24 @@ export default function AdminFinancial() {
                           <span
                             className={cn(
                               "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
-                              statusBadge[p.status],
+                              statusBadge[p.status] ??
+                                "bg-secondary text-foreground border border-border",
                             )}
                           >
-                            {p.status}
+                            {p.status_label}
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {p.criadoEm}
+                          {formatDateTime(p.criado_em)}
                         </TableCell>
-                        <TableCell>
-                          <SplitEditor pedido={p} />
+                        <TableCell className="text-center text-xs">
+                          {p.split_plataforma ?? 100} / {p.split_funcionario ?? 0}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatBRL(p.valor)}
+                          {p.valor_brl}
                         </TableCell>
                         <TableCell className="text-right font-medium text-accent">
-                          {formatBRL((p.valor * p.splitFuncionario) / 100)}
+                          {formatBRL((p.valor * (p.split_funcionario ?? 0)) / 100)}
                         </TableCell>
                       </TableRow>
                     ))
@@ -352,10 +443,39 @@ export default function AdminFinancial() {
           </Card>
           <p className="mt-3 text-center text-xs text-muted-foreground">
             Os valores de pedidos refletem o consumo de saldo já adquirido — a receita do mês é
-            contabilizada no momento da compra de saldo (planos ou avulsos).
+            contabilizada no momento da compra de saldo (planos ou avulsos). Edição de split por
+            pedido em <span className="font-medium">Pedidos &rarr; detalhes do pedido</span>.
           </p>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={!!refundTarget}
+        onOpenChange={(open) => !open && setRefundTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Estornar esta compra?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A compra <span className="font-semibold">{refundTarget?.package_name}</span> de{" "}
+              <span className="font-semibold">
+                {refundTarget?.user_name ?? refundTarget?.user_email}
+              </span>{" "}
+              será cancelada via Pagar.me e os créditos do cliente revertidos. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={refundMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => refundTarget && refundMutation.mutate(refundTarget)}
+              disabled={refundMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {refundMutation.isPending ? "Estornando..." : "Confirmar estorno"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -398,53 +518,5 @@ function StatCard({
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function SplitEditor({ pedido }: { pedido: AdminPedidoMock }) {
-  const [plat, setPlat] = useState<string>(String(pedido.splitPlataforma));
-  const [editing, setEditing] = useState(false);
-
-  const commit = () => {
-    setEditing(false);
-    const n = Number(plat);
-    if (Number.isNaN(n) || n < 0 || n > 100) {
-      setPlat(String(pedido.splitPlataforma));
-      return;
-    }
-    const sp = Math.round(n);
-    atualizarSplit(pedido.id, sp, 100 - sp);
-    setPlat(String(sp));
-  };
-
-  return (
-    <div className="flex items-center justify-center gap-1 text-xs">
-      <Input
-        type="number"
-        min={0}
-        max={100}
-        value={editing ? plat : String(pedido.splitPlataforma)}
-        onChange={(e) => {
-          setEditing(true);
-          setPlat(e.target.value);
-        }}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          if (e.key === "Escape") {
-            setPlat(String(pedido.splitPlataforma));
-            setEditing(false);
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-        className="h-8 w-14 text-center text-xs"
-        aria-label="Split plataforma %"
-      />
-      <span className="text-muted-foreground">/</span>
-      <span className="w-10 text-center font-medium text-foreground">
-        {100 - (Number(editing ? plat : pedido.splitPlataforma) || 0)}
-      </span>
-      <span className="text-muted-foreground">%</span>
-    </div>
   );
 }

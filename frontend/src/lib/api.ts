@@ -255,10 +255,16 @@ export interface AdminServiceCatalogItem {
 export interface AdminClient {
   id: number;
   nome: string;
+  full_name: string;
   oab: string;
+  oab_number: string | null;
+  oab_uf: string | null;
   email: string;
   telefone: string;
+  telefone_formatado: string;
+  phone: string | null;
   cpf: string | null;
+  cpf_formatado: string;
   role_title: string | null;
   employee_code: string | null;
   zip_code: string | null;
@@ -271,7 +277,46 @@ export interface AdminClient {
   active_plan_id: number | null;
   plano: string;
   cadastrado_em: string;
+  cadastrado_em_iso: string | null;
   ativo: boolean;
+}
+
+export interface AdminFinancialEntry {
+  id: number;
+  description: string;
+  kind: "credit" | "debit";
+  amount_cents: number;
+  amount_brl: string;
+  occurred_at: string;
+  occurred_at_label: string;
+  order_id: number | null;
+  is_active: boolean;
+}
+
+export interface AdminFinancialSummary {
+  stats: {
+    receita_mes: number;
+    receita_mes_brl: string;
+    concluidos: number;
+    abertos: number;
+  };
+  orders: AdminOrder[];
+  entries: AdminFinancialEntry[];
+}
+
+export interface AdminCreditPurchase {
+  id: number;
+  code: string;
+  user_email: string | null;
+  user_name: string | null;
+  package_name: string;
+  amount_cents: number;
+  amount_brl: string;
+  status: string;
+  pagarme_charge_id: string | null;
+  pagarme_order_id: string | null;
+  credited_at: string | null;
+  created_at: string;
 }
 
 export interface AdminStaffMember {
@@ -426,6 +471,11 @@ export const api = {
       request<AuthUser>("/me", { method: "PUT", body: JSON.stringify(data) }),
     balance: () => request<BalanceData>("/me/balance"),
     documents: () => request<{ documents: UploadedDocument[] }>("/me/documents"),
+    changePassword: (payload: { current_password: string; new_password: string }) =>
+      request<{ ok: boolean }>("/me/password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
     terms: {
       get: () => request<TermsAcceptanceResponse>("/me/terms"),
       accept: () => request<TermsAcceptanceResponse>("/me/terms", { method: "POST" }),
@@ -466,6 +516,45 @@ export const api = {
   clientArea: {
     catalog: () => request<{ catalog: CatalogSection[] }>("/client-area/catalog"),
     orders: () => request<{ orders: ClientOrder[] }>("/client-area/orders"),
+    getOrder: (id: number) =>
+      request<{ order: ClientOrder }>(`/client-area/orders/${id}`),
+    createOrder: (data: {
+      items?: { code: string; quantity: number }[];
+      tipo_peticao?: string;
+      area_direito?: string;
+      service_code?: string;
+      service_title?: string;
+      petition_id?: number | null;
+      deadline_at?: string | null;
+    }) =>
+      request<{ message: string; order: ClientOrder }>("/client-area/orders", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    updateOrder: (id: number, data: {
+      deadline_at?: string;
+      area_direito?: string;
+      tipo_peticao?: string;
+      numero_processo?: string;
+      data_publicacao?: string;
+      advogado_subscritor?: string;
+      resumo_caso?: string;
+      detalhes?: string;
+      justica_gratuita?: boolean;
+      tutela_urgencia?: boolean;
+    }) => request<{ order: ClientOrder }>(`/client-area/orders/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+    cancelOrder: (id: number) =>
+      request<{ deleted: boolean; order: ClientOrder }>(
+        `/client-area/orders/${id}`,
+        { method: "DELETE" },
+      ),
+    deleteDocument: (documentId: number) =>
+      request<{ deleted: boolean }>(`/client-area/documents/${documentId}`, {
+        method: "DELETE",
+      }),
   },
 
   staff: {
@@ -506,6 +595,21 @@ export const api = {
     },
     clients: {
       list: () => request<{ clients: AdminClient[] }>("/admin/clients"),
+      get: (id: number) =>
+        request<{ client: AdminClient }>(`/admin/clients/${id}`),
+      create: (payload: {
+        full_name: string;
+        email: string;
+        password: string;
+        oab_number?: string | null;
+        cpf?: string | null;
+        phone?: string | null;
+        active_plan_id?: number | null;
+      }) =>
+        request<{ client: AdminClient }>("/admin/clients", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
       update: (
         id: number,
         payload: Partial<{
@@ -531,6 +635,8 @@ export const api = {
           method: "PATCH",
           body: JSON.stringify(payload),
         }),
+      delete: (id: number) =>
+        request<null>(`/admin/clients/${id}`, { method: "DELETE" }),
     },
     staff: {
       list: () => request<{ staff: AdminStaffMember[] }>("/admin/staff"),
@@ -568,9 +674,31 @@ export const api = {
           method: "PATCH",
           body: JSON.stringify(payload),
         }),
+      delete: (id: number) =>
+        request<null>(`/admin/staff/${id}`, { method: "DELETE" }),
     },
     orders: {
       list: () => request<{ orders: AdminOrder[] }>("/admin/orders"),
+      get: (id: number) =>
+        request<{ order: AdminOrder }>(`/admin/orders/${id}`),
+      create: (payload: {
+        user_id: number;
+        tipo_servico: string;
+        valor: number;
+        status?: AdminOrderStatus;
+        numero?: string;
+        staff_user_id?: number | null;
+        split_plataforma?: number;
+        split_funcionario?: number;
+        prazo_cliente?: string | null;
+        finalizado_em?: string | null;
+      }) =>
+        request<{ order: AdminOrder }>("/admin/orders", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
+      delete: (id: number) =>
+        request<null>(`/admin/orders/${id}`, { method: "DELETE" }),
       update: (
         id: number,
         payload: {
@@ -637,6 +765,22 @@ export const api = {
         request<{ plans: AdminPlan[]; single_services: AdminServiceCatalogItem[] }>(
           "/admin/plans",
         ),
+      createPlan: (
+        payload: Pick<
+          AdminPlan,
+          "code" | "name" | "monthly_price_cents" | "monthly_credits_cents"
+        > &
+          Partial<
+            Pick<
+              AdminPlan,
+              "description" | "petition_limit_monthly" | "price_per_service_cents" | "features" | "is_active"
+            >
+          >,
+      ) =>
+        request<{ plan: AdminPlan }>("/admin/plans", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
       updatePlan: (
         id: number,
         payload: Partial<
@@ -650,6 +794,16 @@ export const api = {
           method: "PUT",
           body: JSON.stringify(payload),
         }),
+      deletePlan: (id: number) =>
+        request<null>(`/admin/plans/${id}`, { method: "DELETE" }),
+      createService: (
+        payload: Pick<AdminServiceCatalogItem, "code" | "section" | "title" | "unit_price"> &
+          Partial<Pick<AdminServiceCatalogItem, "description" | "is_active">>,
+      ) =>
+        request<{ service: AdminServiceCatalogItem }>("/admin/services", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        }),
       updateService: (
         id: number,
         payload: Partial<
@@ -660,6 +814,20 @@ export const api = {
           method: "PUT",
           body: JSON.stringify(payload),
         }),
+      deleteService: (id: number) =>
+        request<null>(`/admin/services/${id}`, { method: "DELETE" }),
+    },
+    financial: {
+      summary: () => request<AdminFinancialSummary>("/admin/financial"),
+      entries: () =>
+        request<{ entries: AdminFinancialEntry[] }>("/admin/financial/entries"),
+      creditPurchases: () =>
+        request<{ purchases: AdminCreditPurchase[] }>("/admin/credit-purchases"),
+      refundPurchase: (id: number) =>
+        request<{ message?: string; credit_purchase?: AdminCreditPurchase }>(
+          `/admin/credit-purchases/${id}/refund`,
+          { method: "POST" },
+        ),
     },
   },
 };

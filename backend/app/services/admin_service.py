@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
-from app.models import CreditPurchase, CreditTransaction, FinancialEntry, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
+from app.models import CreditPurchase, CreditTransaction, FinancialEntry, PetitionParty, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
 from app.services.audit_service import log_action
 from app.services.pagarme_service import PagarmeClient
 from app.services.serializers import format_brl_from_cents, serialize_petition
@@ -174,6 +174,16 @@ def _serialize_client(user: User) -> dict:
         "phone": user.phone,
         "cpf": user.cpf,
         "cpf_formatado": _format_cpf(user.cpf) or "—",
+        "role_title": user.role_title,
+        "employee_code": user.employee_code,
+        "zip_code": user.zip_code,
+        "street": user.street,
+        "street_number": user.street_number,
+        "address_complement": user.address_complement,
+        "neighborhood": user.neighborhood,
+        "city": user.city,
+        "state": user.state,
+        "active_plan_id": user.active_plan_id,
         "plano": user.active_plan.name if user.active_plan else "Sem plano",
         "cadastrado_em": _format_date(user.created_at),
         "cadastrado_em_iso": user.created_at.isoformat() if user.created_at else None,
@@ -185,8 +195,22 @@ def _serialize_staff(user: User, *, active_orders: int, completed_orders: int) -
     return {
         "id": user.id,
         "nome": user.full_name,
+        "full_name": user.full_name,
         "email": user.email,
         "telefone": user.phone or "—",
+        "telefone_formatado": _format_phone(user.phone) or "—",
+        "phone": user.phone,
+        "oab": user.oab_number,
+        "cpf": user.cpf,
+        "role_title": user.role_title,
+        "employee_code": user.employee_code,
+        "zip_code": user.zip_code,
+        "street": user.street,
+        "street_number": user.street_number,
+        "address_complement": user.address_complement,
+        "neighborhood": user.neighborhood,
+        "city": user.city,
+        "state": user.state,
         "pedidos_ativos": active_orders,
         "pedidos_concluidos": completed_orders,
         "ativo": user.is_active,
@@ -387,8 +411,87 @@ def create_admin_order(actor, payload: dict) -> dict:
     return {"order": _serialize_order(order)}
 
 
+def _update_order_petition(actor, order: ServiceOrder, payload: dict) -> None:
+    petition_payload = payload.get("petition")
+    if not isinstance(petition_payload, dict):
+        return
+
+    petition = order.petition
+    if petition is None:
+        raise ValidationError("Pedido não possui petição vinculada para edição.")
+
+    if "area_direito" in petition_payload:
+        area = str(petition_payload.get("area_direito") or "").strip()
+        if not area:
+            raise ValidationError("Campo 'petition.area_direito' é obrigatório.")
+        petition.area_direito = area
+
+    for field in (
+        "tipo_peticao",
+        "numero_processo",
+        "data_publicacao",
+        "advogado_subscritor",
+        "resumo_caso",
+        "detalhes",
+    ):
+        if field in petition_payload:
+            petition_value = petition_payload.get(field)
+            petition_value = str(petition_value).strip() if petition_value is not None else ""
+            setattr(petition, field, petition_value or None)
+
+    for field in ("justica_gratuita", "tutela_urgencia"):
+        if field in petition_payload:
+            setattr(petition, field, bool(petition_payload.get(field)))
+
+    if "partes" in petition_payload:
+        parties = petition_payload.get("partes") or []
+        if not isinstance(parties, list):
+            raise ValidationError("Campo 'petition.partes' inválido.")
+
+        petition.parties.clear()
+        for raw_party in parties:
+            if not isinstance(raw_party, dict):
+                raise ValidationError("Cada parte deve ser um objeto.")
+            nome = str(raw_party.get("nome") or "").strip()
+            tipo = str(raw_party.get("tipo") or "").strip()
+            if not nome or not tipo:
+                raise ValidationError("Cada parte precisa de 'nome' e 'tipo'.")
+            petition.parties.append(
+                PetitionParty(
+                    nome=nome,
+                    tipo=tipo,
+                    company_id=order.company_id or getattr(actor, "company_id", None),
+                )
+            )
+
+
 def update_admin_order(actor, order_id: object, payload: dict) -> dict:
+    payload = dict(payload or {})
+    if "deadline_at" in payload and "prazo_cliente" not in payload:
+        payload["prazo_cliente"] = payload.get("deadline_at")
+
     order = _scoped_order(actor, order_id)
+
+    if "numero" in payload:
+        reference = str(payload.get("numero") or "").strip()
+        if not reference:
+            raise ValidationError("Campo 'numero' inválido.")
+        existing = ServiceOrder.query.filter(ServiceOrder.reference == reference, ServiceOrder.id != order.id).first()
+        if existing is not None:
+            raise ConflictError("Já existe pedido com esta referência.")
+        order.reference = reference
+
+    if "user_id" in payload:
+        user_id = payload.get("user_id")
+        if user_id is None:
+            order.user_id = None
+        else:
+            client = _scoped_user(actor, user_id, role="client")
+            order.user_id = client.id
+            order.company_id = client.company_id
+            if order.petition is not None:
+                order.petition.user_id = client.id
+                order.petition.company_id = client.company_id
 
     if "status" in payload:
         status = str(payload.get("status") or "").strip()
@@ -441,6 +544,8 @@ def update_admin_order(actor, order_id: object, payload: dict) -> dict:
                     line_total=order.total_amount,
                 )
             )
+
+    _update_order_petition(actor, order, payload)
 
     log_action(
         action="admin.order_updated",
@@ -513,10 +618,32 @@ def _create_or_update_user(actor, payload: dict, *, role: str, user: User | None
                     raise ValidationError("Senha deve ter pelo menos 8 caracteres.")
                 user.password_hash = generate_password_hash(password)
 
-    for field in ("phone", "cpf", "role_title", "employee_code"):
+    for field in (
+        "phone",
+        "cpf",
+        "role_title",
+        "employee_code",
+        "zip_code",
+        "street",
+        "street_number",
+        "address_complement",
+        "neighborhood",
+        "city",
+        "state",
+    ):
         value = _normalize_optional(payload, field)
         if value is not None:
-            setattr(user, field, value or None)
+            setattr(user, field, value.upper()[:2] if field == "state" and value else value or None)
+
+    if "active_plan_id" in payload:
+        active_plan_id = payload.get("active_plan_id")
+        if active_plan_id is None or str(active_plan_id).strip() == "":
+            user.active_plan_id = None
+        else:
+            parsed_plan_id = _to_int(active_plan_id, field_name="active_plan_id")
+            if db.session.get(Plan, parsed_plan_id) is None:
+                raise NotFoundError("Plano não encontrado.")
+            user.active_plan_id = parsed_plan_id
 
     # Aceita "oab_number" combinado ("12345/SP") ou separado ("oab" + "oab_uf").
     if "oab_number" in payload:

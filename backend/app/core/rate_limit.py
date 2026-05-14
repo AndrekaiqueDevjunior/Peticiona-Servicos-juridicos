@@ -24,6 +24,10 @@ def limit_requests(bucket: str, limit: int | None = None, window: int | None = N
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
+            # Verifica se rate limiting está ativado globalmente
+            if not current_app.config.get("RATE_LIMIT_ENABLED", False):
+                return func(*args, **kwargs)
+                
             _limit = limit if limit is not None else current_app.config["AUTH_RATE_LIMIT"]
             _window = window if window is not None else current_app.config["AUTH_RATE_WINDOW_SECONDS"]
             now = time.monotonic()
