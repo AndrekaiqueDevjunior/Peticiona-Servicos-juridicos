@@ -15,6 +15,7 @@ from app.services.client_area_service import (
     update_order,
     upload_documents,
 )
+from app.services.checkout_service import list_checkout_orders
 
 client_area_bp = Blueprint("client_area", __name__, url_prefix="/api/client-area")
 
@@ -41,6 +42,12 @@ def create_client_order():
 @roles_required("client")
 def list_client_orders():
     return jsonify(list_orders(current_actor()))
+
+
+@client_area_bp.get("/checkout-orders")
+@roles_required("client")
+def list_client_checkout_orders():
+    return jsonify(list_checkout_orders(current_actor()))
 
 
 @client_area_bp.post("/orders/preview")

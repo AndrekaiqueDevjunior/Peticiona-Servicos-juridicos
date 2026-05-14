@@ -1,21 +1,12 @@
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, FileText, Filter, Search, Trash2 } from "lucide-react";
-import { EditOrderDialog } from "@/components/client/EditOrderDialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { CalendarIcon, FileText, Filter } from "lucide-react";
 
 import { api, type ClientOrder } from "@/lib/api";
+import type { CheckoutOrderType } from "@/lib/api";
+import { STATUS_LABEL, STATUS_TONE } from "@/lib/checkoutApi";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,56 +25,22 @@ import {
 } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
-
-const statusTone: Record<string, string> = {
-  pendente: "bg-accent-soft text-primary",
-  em_andamento: "bg-secondary text-foreground",
-  concluido: "bg-emerald-100 text-emerald-900",
-};
 
 export default function Orders() {
-  const queryClient = useQueryClient();
   const { data: ordersData, isLoading } = useQuery({
-    queryKey: ["client-orders"],
-    queryFn: () => api.clientArea.orders(),
-  });
-
-  const updateOrderMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: any }) =>
-      api.clientArea.updateOrder(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-orders"] });
-      toast.success("Pedido atualizado com sucesso!");
-    },
-    onError: (error: any) => {
-      toast.error(error.message || "Erro ao atualizar pedido");
-    },
-  });
-
-  const cancelOrderMutation = useMutation({
-    mutationFn: (id: number) => api.clientArea.cancelOrder(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["client-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["balance"] });
-      toast.success("Pedido cancelado. Créditos estornados quando aplicável.");
-    },
-    onError: (error: any) => {
-      toast.error(error?.message || "Não foi possível cancelar este pedido.");
-    },
+    queryKey: ["client-checkout-orders"],
+    queryFn: () => api.clientArea.checkoutOrders(),
   });
 
   const orders = useMemo(() => ordersData?.orders ?? [], [ordersData?.orders]);
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [dataInicio, setDataInicio] = useState<Date | undefined>();
   const [dataFim, setDataFim] = useState<Date | undefined>();
-  const [pedidoParaCancelar, setPedidoParaCancelar] = useState<ClientOrder | null>(null);
-  const [pedidoParaEditar, setPedidoParaEditar] = useState<ClientOrder | null>(null);
 
   const statusOptions = useMemo(() => {
     const map = new Map<string, string>();
     orders.forEach((o) => {
-      if (!map.has(o.status)) map.set(o.status, o.status_label);
+      if (!map.has(o.status)) map.set(o.status, STATUS_LABEL[o.status] || o.status);
     });
     return [{ value: "todos", label: "Todos os status" }].concat(
       Array.from(map.entries()).map(([value, label]) => ({ value, label })),
@@ -198,16 +155,13 @@ export default function Orders() {
                       <FileText className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">{order.service_type}</p>
+                      <p className="font-medium text-foreground">{order.service_name || order.service_id}</p>
                       <p className="text-xs text-muted-foreground">
-                        {order.reference}
-                        {order.deadline_at
-                          ? ` · Prazo: ${format(parseISO(order.deadline_at), "dd/MM/yyyy", { locale: ptBR })}`
-                          : ""}
+                        ID: {order.id}
                         {" · "}
                         {format(parseISO(order.created_at), "dd/MM/yyyy", { locale: ptBR })}
                         {" · "}
-                        {order.total_brl}
+                        {(order.amount / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
                       </p>
                     </div>
                   </div>
@@ -215,30 +169,11 @@ export default function Orders() {
                     <span
                       className={cn(
                         "inline-flex w-fit items-center rounded-full px-3 py-1 text-xs font-medium",
-                        statusTone[order.status] ?? "bg-secondary text-foreground",
+                        STATUS_TONE[order.status] ? `bg-${STATUS_TONE[order.status] === "success" ? "emerald-100 text-emerald-900" : STATUS_TONE[order.status] === "warning" ? "bg-yellow-100 text-yellow-900" : "bg-gray-100 text-gray-900"}` : "bg-secondary text-foreground",
                       )}
                     >
-                      {order.status_label}
+                      {STATUS_LABEL[order.status]}
                     </span>
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setPedidoParaEditar(order)}
-                        aria-label={`Ver detalhes do pedido ${order.reference}`}
-                      >
-                        <Search className="h-4 w-4" />
-                      </Button>
-                    {order.status === "pendente" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setPedidoParaCancelar(order)}
-                        aria-label={`Cancelar pedido ${order.reference}`}
-                        disabled={cancelOrderMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
                   </div>
                 </li>
               ))}
@@ -246,51 +181,6 @@ export default function Orders() {
           )}
         </CardContent>
       </Card>
-
-      <EditOrderDialog
-        order={pedidoParaEditar}
-        open={!!pedidoParaEditar}
-        onOpenChange={(open) => !open && setPedidoParaEditar(null)}
-        onSave={(data) => {
-          if (pedidoParaEditar) {
-            updateOrderMutation.mutate({ id: pedidoParaEditar.id, data });
-            setPedidoParaEditar(null);
-          }
-        }}
-        isSubmitting={updateOrderMutation.isPending}
-      />
-
-      <AlertDialog
-        open={!!pedidoParaCancelar}
-        onOpenChange={(open) => !open && setPedidoParaCancelar(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar este pedido?</AlertDialogTitle>
-            <AlertDialogDescription>
-              O pedido {pedidoParaCancelar?.reference} será cancelado e os créditos
-              utilizados serão estornados automaticamente. Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={cancelOrderMutation.isPending}>
-              Voltar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pedidoParaCancelar) {
-                  cancelOrderMutation.mutate(pedidoParaCancelar.id);
-                  setPedidoParaCancelar(null);
-                }
-              }}
-              disabled={cancelOrderMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {cancelOrderMutation.isPending ? "Cancelando..." : "Cancelar pedido"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

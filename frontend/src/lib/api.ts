@@ -356,6 +356,22 @@ function getToken(): string | null {
   return sessionStorage.getItem("auth_token") || localStorage.getItem("auth_token");
 }
 
+import {
+  CheckoutApiError,
+  STATUS_LABEL,
+  STATUS_TONE,
+  checkoutApi,
+  fetchCheckoutConfig,
+  formatAmountFromCents,
+  isTerminalStatus,
+  tokenizeCard,
+  type CheckoutPaymentMethod,
+  type PaymentNextAction,
+} from "@/lib/checkoutApi";
+import type { CheckoutOrder as CheckoutOrderType } from "@/lib/checkoutApi";
+
+export type { CheckoutOrderType };
+
 export class ApiError extends Error {
   status: number;
 
@@ -531,6 +547,7 @@ export const api = {
   clientArea: {
     catalog: () => request<{ catalog: CatalogSection[] }>("/client-area/catalog"),
     orders: () => request<{ orders: ClientOrder[] }>("/client-area/orders"),
+    checkoutOrders: () => request<{ orders: CheckoutOrderType[] }>("/client-area/checkout-orders"),
     getOrder: (id: number) =>
       request<{ order: ClientOrder }>(`/client-area/orders/${id}`),
     createOrder: (data: {

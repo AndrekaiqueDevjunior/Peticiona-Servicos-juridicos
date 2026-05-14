@@ -75,51 +75,30 @@ def _service_name(service_id: str) -> str | None:
 
 
 def serialize_checkout_order(order: Order) -> dict:
-    result = {
+    return {
         "id": str(order.id),
         "user_id": order.user_id,
         "service_id": order.service_id,
-        "service_name": _service_name(order.service_id),
+        "service_name": _catalog_entry(order.service_id)[2],
         "amount": order.amount,
         "currency": order.currency,
         "status": order.status,
         "pagarme_order_id": order.pagarme_order_id,
         "pagarme_charge_id": order.pagarme_charge_id,
-        "created_at": order.created_at.isoformat() if order.created_at else None,
-        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+        "created_at": order.created_at.isoformat(),
+        "updated_at": order.updated_at.isoformat(),
         "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+        "released_at": order.released_at.isoformat() if order.released_at else None,
     }
-    
-    # Incluir dados de cobrança ativa para PIX/boleto
-    if order.status in ("pending", "processing", "waiting_payment") and order.pagarme_order_id:
-        try:
-            pagarme_order = PagarmeClient().get_order(order.pagarme_order_id)
-            charges = pagarme_order.get("charges", [])
-            if charges:
-                charge = charges[0]
-                last_transaction = charge.get("last_transaction", {})
-                payment_method = charge.get("payment_method")
-                
-                if payment_method == "pix":
-                    result["active_payment"] = {
-                        "type": "pix",
-                        "qr_code": last_transaction.get("qr_code"),
-                        "qr_code_url": last_transaction.get("qr_code_url"),
-                        "expires_at": charge.get("expires_at"),
-                    }
-                elif payment_method == "boleto":
-                    result["active_payment"] = {
-                        "type": "boleto",
-                        "boleto_url": last_transaction.get("url"),
-                        "line": last_transaction.get("line"),
-                        "due_at": charge.get("due_at"),
-                        "expires_at": charge.get("expires_at"),
-                    }
-        except Exception:
-            # Se falhar ao buscar dados do Pagar.me, não quebra o fluxo
-            pass
-    
-    return result
+
+
+def list_checkout_orders(user) -> dict:
+    orders = (
+        Order.query.filter_by(user_id=user.id)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+    return {"orders": [serialize_checkout_order(order) for order in orders]}
 
 
 def _sanitize_payload(payload: dict) -> dict:
