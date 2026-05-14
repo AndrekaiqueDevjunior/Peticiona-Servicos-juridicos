@@ -87,6 +87,7 @@ def register_user(payload: dict) -> dict:
 def login_user(payload: dict) -> dict:
     email = (payload.get("email") or "").strip().lower()
     password = payload.get("password") or ""
+    remember = bool(payload.get("remember", True))
 
     if not email or not password:
         raise ValidationError("Informe e-mail e senha.")
@@ -97,12 +98,19 @@ def login_user(payload: dict) -> dict:
     if not user.is_active:
         raise AuthError("Conta inativa.")
 
+    # Expiração do token: 30 dias se "lembrar", 24h caso contrário
+    from flask import current_app
+    if remember:
+        expires = int(current_app.config.get("JWT_EXPIRATION_LONG", 30 * 24 * 3600))  # 30 dias
+    else:
+        expires = int(current_app.config.get("JWT_EXPIRATION_SHORT", 24 * 3600))  # 24h
+
     log_action(
         action="user.logged_in",
         entity_type="user",
         entity_id=user.id,
         user=user,
-        metadata={"email": user.email},
+        metadata={"email": user.email, "remember": remember},
     )
     db.session.commit()
-    return {"token": create_access_token(user_id=user.id), "user": serialize_user(user)}
+    return {"token": create_access_token(user_id=user.id, expires_seconds=expires), "user": serialize_user(user)}

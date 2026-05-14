@@ -12,4 +12,5 @@ def load_register_payload(payload: dict | None) -> dict:
 def load_login_payload(payload: dict | None) -> dict:
     if not isinstance(payload, dict):
         raise ValidationError("Corpo JSON inválido.")
-    return payload
+    remember = bool(payload.get("remember", True))
+    return {**(payload or {}), "remember": remember}

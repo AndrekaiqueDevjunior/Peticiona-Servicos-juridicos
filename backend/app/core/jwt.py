@@ -12,12 +12,14 @@ def _jwt_secret() -> str:
     return current_app.config.get("JWT_SECRET") or current_app.config["SECRET_KEY"]
 
 
-def create_access_token(*, user_id: int) -> str:
+def create_access_token(*, user_id: int, expires_seconds: int | None = None) -> str:
     now = datetime.now(timezone.utc)
+    if expires_seconds is None:
+        expires_seconds = int(current_app.config["JWT_EXPIRATION"])
     payload = {
         "sub": str(user_id),
         "iat": now,
-        "exp": now + timedelta(seconds=current_app.config["JWT_EXPIRATION"]),
+        "exp": now + timedelta(seconds=expires_seconds),
     }
     return jwt.encode(
         payload,

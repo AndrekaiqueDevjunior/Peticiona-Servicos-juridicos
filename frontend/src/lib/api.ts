@@ -458,10 +458,10 @@ export const api = {
   },
 
   auth: {
-    login: (email: string, password: string) =>
+    login: (email: string, password: string, remember = true) =>
       request<{ token: string; user: AuthUser }>("/auth/login", {
         method: "POST",
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, remember }),
       }),
     register: (payload: RegisterPayload) =>
       request<{ token: string; user: AuthUser }>("/auth/register", {

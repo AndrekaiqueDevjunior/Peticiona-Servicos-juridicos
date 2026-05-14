@@ -60,8 +60,10 @@ class Config:
         raise ValueError("SECRET_KEY muito curta para produção. Use pelo menos 32 caracteres.")
 
     JWT_SECRET = os.getenv("JWT_SECRET") or SECRET_KEY
-    
+
     JWT_EXPIRATION = int(os.getenv("JWT_EXPIRATION", "3600"))  # Reduzido para 1 hora em produção
+    JWT_EXPIRATION_SHORT = int(os.getenv("JWT_EXPIRATION_SHORT", "86400"))  # 24h (não lembrar)
+    JWT_EXPIRATION_LONG = int(os.getenv("JWT_EXPIRATION_LONG", "2592000"))  # 30 dias (lembrar)
 
     SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL") or f"sqlite:///{DEFAULT_SQLITE_PATH}"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
