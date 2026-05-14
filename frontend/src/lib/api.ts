@@ -441,7 +441,22 @@ async function downloadDocumentFile(file: UploadedDocument): Promise<void> {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+export interface ContactPayload {
+  name: string;
+  whatsapp: string;
+  email: string;
+  message: string;
+}
+
 export const api = {
+  public: {
+    sendContact: (payload: ContactPayload) =>
+      request<{ message: string }>("/contact", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+  },
+
   auth: {
     login: (email: string, password: string) =>
       request<{ token: string; user: AuthUser }>("/auth/login", {

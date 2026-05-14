@@ -1,4 +1,5 @@
 from app.models.audit import AuditLog
+from app.models.email_event import EmailEvent
 from app.models.credits import CreditTransaction
 from app.models.documents import Document
 from app.models.financial import FinancialEntry
@@ -10,6 +11,7 @@ from app.models.terms import TermsAcceptance
 from app.models.users import Company, User
 
 __all__ = [
+    "EmailEvent",
     "AuditLog",
     "Company",
     "CreditPurchase",
@@ -29,3 +31,4 @@ __all__ = [
     "TermsAcceptance",
     "User",
 ]
+

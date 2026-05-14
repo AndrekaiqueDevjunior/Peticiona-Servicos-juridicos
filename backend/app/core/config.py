@@ -92,8 +92,18 @@ class Config:
     SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
     SENDGRID_FROM = os.getenv("SENDGRID_FROM", "")
 
+    # ── Resend ──────────────────────────────────────────────────────────────
+    RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+    RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "no-reply@peticiona.app.br")
+    # Endereço administrativo que recebe os formulários de contato do site
+    RESEND_CONTACT_TO_EMAIL = os.getenv("RESEND_CONTACT_TO_EMAIL", os.getenv("NOTIFICATION_EMAIL", ""))
+    # Segredo HMAC para validar webhooks do Resend (formato: whsec_...)
+    RESEND_WEBHOOK_SECRET = os.getenv("RESEND_WEBHOOK_SECRET", "")
+
     NOTIFICATION_EMAIL = os.getenv("NOTIFICATION_EMAIL", "")
-    FRONTEND_URL = os.getenv("FRONTEND_URL", "")
+    FRONTEND_URL = os.getenv("FRONTEND_URL", os.getenv("FRONTEND_PUBLIC_URL", ""))
+    FRONTEND_PUBLIC_URL = os.getenv("FRONTEND_PUBLIC_URL", os.getenv("FRONTEND_URL", ""))
+    BACKEND_PUBLIC_URL = os.getenv("BACKEND_PUBLIC_URL", "")
     PASSWORD_RESET_TOKEN_TTL_SECONDS = int(
         os.getenv("PASSWORD_RESET_TOKEN_TTL_SECONDS", "3600")
     )

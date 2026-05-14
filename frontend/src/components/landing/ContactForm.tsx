@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { useContactInfo } from "@/lib/contactInfo";
+import { api, ApiError } from "@/lib/api";
 
 const contactSchema = z.object({
   name: z
@@ -30,10 +30,11 @@ const contactSchema = z.object({
     .max(1000, { message: "Mensagem muito longa" }),
 });
 
+const EMPTY = { name: "", whatsapp: "", email: "", message: "" };
+
 const ContactForm = () => {
   const { toast } = useToast();
-  const { email: targetEmail } = useContactInfo();
-  const [values, setValues] = useState({ name: "", whatsapp: "", email: "", message: "" });
+  const [values, setValues] = useState(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -41,8 +42,10 @@ const ContactForm = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => setValues((v) => ({ ...v, [field]: e.target.value }));
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting) return;
+
     const result = contactSchema.safeParse(values);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -53,24 +56,25 @@ const ContactForm = () => {
       setErrors(fieldErrors);
       return;
     }
+
     setErrors({});
     setSubmitting(true);
-    // Contato direto via e-mail: abre o cliente de e-mail do usuário
-    // pré-preenchido para o endereço de contato configurado pelo admin.
-    const subject = encodeURIComponent(`Contato pela landing — ${values.name}`);
-    const body = encodeURIComponent(
-      `Nome: ${values.name}\nWhatsApp: ${values.whatsapp}\nE-mail: ${values.email}\n\nMensagem:\n${values.message}`,
-    );
-    const mailto = `mailto:${targetEmail}?subject=${subject}&body=${body}`;
-    setTimeout(() => {
-      window.location.href = mailto;
+    try {
+      await api.public.sendContact(result.data);
       toast({
         title: "Mensagem enviada com sucesso",
-        description: `Encaminhada para ${targetEmail}. Em breve nossa equipe entrará em contato.`,
+        description: "Nossa equipe entrará em contato em breve.",
       });
-      setValues({ name: "", whatsapp: "", email: "", message: "" });
+      setValues(EMPTY);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.message
+          : "Não foi possível enviar a mensagem. Tente novamente.";
+      toast({ title: "Erro ao enviar", description: msg, variant: "destructive" });
+    } finally {
       setSubmitting(false);
-    }, 400);
+    }
   };
 
   return (

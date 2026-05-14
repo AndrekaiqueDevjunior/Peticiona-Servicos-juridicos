@@ -521,6 +521,38 @@ def _clear_orphan_order_debits() -> None:
         )
 
 
+def _create_email_events_table() -> None:
+    """Cria a tabela email_events para registrar eventos de webhook do Resend."""
+    if "email_events" in _table_names():
+        return
+
+    ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
+    pk = "SERIAL PRIMARY KEY" if db.engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
+    now_expr = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+
+    _execute(
+        f"""
+        CREATE TABLE email_events (
+            id {pk},
+            provider VARCHAR(40) NOT NULL DEFAULT 'resend',
+            event_id VARCHAR(255),
+            event_type VARCHAR(80) NOT NULL,
+            recipient VARCHAR(255),
+            subject VARCHAR(500),
+            status VARCHAR(40),
+            payload_json TEXT,
+            created_at {ts} NOT NULL DEFAULT {now_expr},
+            updated_at {ts} NOT NULL DEFAULT {now_expr}
+        )
+        """
+    )
+    _execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_events_event_id "
+        "ON email_events (event_id) WHERE event_id IS NOT NULL"
+    )
+    _execute("CREATE INDEX ix_email_events_event_type ON email_events (event_type)")
+
+
 def run_runtime_migrations() -> None:
     _acquire_runtime_migrations_lock()
     _add_user_columns()
@@ -537,4 +569,5 @@ def run_runtime_migrations() -> None:
     _clear_orphan_order_debits()
     _backfill_missing_order_debits()
     _audit_users_missing_admin_fields()
+    _create_email_events_table()
     db.session.commit()

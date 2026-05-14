@@ -7,7 +7,7 @@ from app.core.errors import AppError, ValidationError
 from app.core.extensions import db
 from app.core.security import hash_password
 from app.models import User
-from app.services.email_service import send_email
+from app.services.email_service import build_password_reset_html, send_email
 
 
 class EmailDeliveryError(AppError):
@@ -87,12 +87,21 @@ def _email_body(user: User, token: str) -> str:
             f"Olá, {user.full_name}.",
             "",
             "Recebemos uma solicitação para redefinir a senha da sua conta na Peticiona.",
-            "Se foi você, use o link abaixo para criar uma nova senha:",
+            "Se foi você, acesse o link abaixo para criar uma nova senha:",
             link,
             "",
-            "Este link expira em 1 hora.",
+            "Este link expira em 60 minutos.",
             "Se você não pediu a redefinição, pode ignorar esta mensagem com segurança.",
         ]
+    )
+
+
+def _email_html(user: User, token: str) -> str:
+    ttl = int(current_app.config.get("PASSWORD_RESET_TOKEN_TTL_SECONDS", 3600)) // 60
+    return build_password_reset_html(
+        user_name=user.full_name,
+        reset_link=_reset_link(token),
+        expires_minutes=ttl,
     )
 
 
@@ -108,10 +117,11 @@ def request_password_reset(email: str) -> dict:
         to=user.email,
         subject="Redefinição de senha - Peticiona",
         body=_email_body(user, token),
+        html=_email_html(user, token),
     )
     if not delivered:
         raise EmailDeliveryError(
-            "Não foi possível enviar o e-mail de redefinição agora. Verifique a configuração do SendGrid ou SMTP."
+            "Não foi possível enviar o e-mail de redefinição agora. Tente novamente em alguns instantes."
         )
 
     return {"message": "Se o e-mail estiver cadastrado, enviaremos as instruções."}

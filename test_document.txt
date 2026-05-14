@@ -1,0 +1,5 @@
+Este é um documento de teste para upload.
+Conteúdo de exemplo para testar a funcionalidade de upload de documentos do cliente.
+Criado em: 12/05/2026
+Tipo: Documento de teste
+Formato: TXT
