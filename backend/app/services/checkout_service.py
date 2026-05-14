@@ -435,6 +435,25 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     code, amount, _name = _catalog_entry(service_id)
     if amount < 0:
         raise ValidationError("Valor do serviço inválido.")
+    # Validar preço esperado enviado pelo frontend (proteção contra preços desatualizados)
+    expected_amount = (payload or {}).get("expected_amount")
+    if expected_amount is not None:
+        try:
+            expected_int = int(expected_amount)
+        except (ValueError, TypeError):
+            expected_int = None
+        if expected_int is not None and expected_int != amount:
+            logger.warning(
+                "checkout_price_mismatch user_id=%s service_id=%s expected=%s actual=%s",
+                user.id,
+                code,
+                expected_int,
+                amount,
+            )
+            raise ValidationError(
+                f"Preço do serviço foi atualizado. Atualize a página e tente novamente. "
+                f"Valor atual: {format_brl_from_cents(amount)}"
+            )
     existing = (
         Order.query.filter(
             Order.user_id == user.id,
