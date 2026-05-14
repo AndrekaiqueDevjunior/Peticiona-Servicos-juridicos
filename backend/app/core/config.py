@@ -50,21 +50,16 @@ DEFAULT_UPLOAD_FOLDER = BACKEND_ROOT / "app" / "uploads"
 
 class Config:
     BACKEND_DIR = str(BACKEND_ROOT)
-    
-    @property
-    def SECRET_KEY(self):
-        key = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY")
-        if not key:
-            raise ValueError("SECRET_KEY não configurada. Configure FLASK_SECRET_KEY ou SECRET_KEY.")
-        # Em produção, exige chave forte
-        is_production = os.getenv("FLASK_ENV") == "production" or not os.getenv("DEBUG", "true").lower() in {"true", "1", "yes"}
-        if is_production and len(key) < 32:
-            raise ValueError("SECRET_KEY muito curta para produção. Use pelo menos 32 caracteres.")
-        return key
-    
-    @property
-    def JWT_SECRET(self):
-        return os.getenv("JWT_SECRET") or self.SECRET_KEY
+
+    SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or os.getenv("SECRET_KEY")
+    if not SECRET_KEY:
+        raise ValueError("SECRET_KEY não configurada. Configure FLASK_SECRET_KEY ou SECRET_KEY.")
+    # Em produção, exige chave forte
+    is_production = os.getenv("FLASK_ENV") == "production" or not os.getenv("DEBUG", "true").lower() in {"true", "1", "yes"}
+    if is_production and len(SECRET_KEY) < 32:
+        raise ValueError("SECRET_KEY muito curta para produção. Use pelo menos 32 caracteres.")
+
+    JWT_SECRET = os.getenv("JWT_SECRET") or SECRET_KEY
     
     JWT_EXPIRATION = int(os.getenv("JWT_EXPIRATION", "3600"))  # Reduzido para 1 hora em produção
 
