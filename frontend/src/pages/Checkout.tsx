@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import {
   ArrowLeft,
@@ -26,6 +27,7 @@ import { toast } from "@/hooks/use-toast";
 
 import { useAuth } from "@/lib/auth";
 import { useClientProfile } from "@/lib/clientProfile";
+import { api } from "@/lib/api";
 import {
   CheckoutApiError,
   STATUS_LABEL,
@@ -157,6 +159,44 @@ export default function Checkout() {
   const [nextAction, setNextAction] = useState<PaymentNextAction | null>(null);
   const [pollingStopped, setPollingStopped] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Buscar dados do serviço/plano da API pública para exibir no resumo
+  // antes de criar a ordem (evita discrepância entre modal e checkout).
+  const { data: plansData } = useQuery({
+    queryKey: ["public-plans"],
+    queryFn: () => api.content.plans(),
+    enabled: !!serviceFromQuery && !orderIdParam,
+  });
+  const { data: catalogData } = useQuery({
+    queryKey: ["public-catalog"],
+    queryFn: () => api.content.catalog(),
+    enabled: !!serviceFromQuery && !orderIdParam,
+  });
+
+  const servicePreview = useMemo(() => {
+    if (!serviceFromQuery) return null;
+    const plan = plansData?.plans.find((p) => p.code === serviceFromQuery);
+    if (plan) {
+      return {
+        id: serviceFromQuery,
+        name: plan.name,
+        amount: plan.monthly_price_cents,
+        type: "plan" as const,
+      };
+    }
+    const service = catalogData?.catalog
+      .flatMap((s) => s.items)
+      .find((i) => i.code === serviceFromQuery);
+    if (service) {
+      return {
+        id: serviceFromQuery,
+        name: service.title,
+        amount: service.unit_price,
+        type: "service" as const,
+      };
+    }
+    return null;
+  }, [serviceFromQuery, plansData, catalogData]);
 
   const [buyer, setBuyer] = useState<BuyerForm>({
     fullName: profile.fullName || user?.full_name || "",
@@ -552,6 +592,25 @@ export default function Checkout() {
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
               Nenhum serviço selecionado. Volte para a tela de saldos e escolha um plano ou crédito.
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Pré-visualização do serviço antes de criar a ordem */}
+        {!loadingOrder && !creatingOrder && !order && !errorMsg && servicePreview && (
+          <Card className="mb-6 border-accent/30 bg-accent/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-4 py-5">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Serviço selecionado</p>
+                <p className="text-lg font-semibold text-foreground">{servicePreview.name}</p>
+                <p className="text-xs text-muted-foreground">Código: {servicePreview.id}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total</p>
+                <p className="font-display text-2xl font-semibold text-primary">
+                  {formatAmountFromCents(servicePreview.amount)}
+                </p>
+              </div>
             </CardContent>
           </Card>
         )}
