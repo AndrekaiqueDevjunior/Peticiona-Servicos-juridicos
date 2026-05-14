@@ -523,12 +523,12 @@ def _clear_orphan_order_debits() -> None:
 
 def _create_email_events_table() -> None:
     """Cria a tabela email_events para registrar eventos de webhook do Resend."""
-    if "email_events" in _table_names():
-        return
-
     ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
     pk = "SERIAL PRIMARY KEY" if db.engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
     now_expr = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+
+    # Drop tabela se existir para evitar conflitos com tipos PostgreSQL
+    _execute("DROP TABLE IF EXISTS email_events CASCADE")
 
     _execute(
         f"""
