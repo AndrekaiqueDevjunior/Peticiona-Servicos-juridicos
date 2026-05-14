@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarIcon, FileText, Filter, Search, Pencil, Trash2 } from "lucide-react";
+import { CalendarIcon, FileText, Filter, Search, Trash2 } from "lucide-react";
 import { EditOrderDialog } from "@/components/client/EditOrderDialog";
 import {
   AlertDialog,
@@ -77,7 +77,6 @@ export default function Orders() {
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [dataInicio, setDataInicio] = useState<Date | undefined>();
   const [dataFim, setDataFim] = useState<Date | undefined>();
-  const [pedidoSelecionado, setPedidoSelecionado] = useState<ClientOrder | null>(null);
   const [pedidoParaCancelar, setPedidoParaCancelar] = useState<ClientOrder | null>(null);
   const [pedidoParaEditar, setPedidoParaEditar] = useState<ClientOrder | null>(null);
 
@@ -221,27 +220,14 @@ export default function Orders() {
                     >
                       {order.status_label}
                     </span>
-                    {order.petition && (
-                      <Button
+                    <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setPedidoSelecionado(order)}
+                        onClick={() => setPedidoParaEditar(order)}
                         aria-label={`Ver detalhes do pedido ${order.reference}`}
                       >
                         <Search className="h-4 w-4" />
                       </Button>
-                    )}
-                    {order.status === "pendente" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setPedidoParaEditar(order)}
-                        aria-label={`Editar pedido ${order.reference}`}
-                        disabled={updateOrderMutation.isPending}
-                      >
-                        <Pencil className="h-4 w-4 text-primary" />
-                      </Button>
-                    )}
                     {order.status === "pendente" && (
                       <Button
                         variant="ghost"
