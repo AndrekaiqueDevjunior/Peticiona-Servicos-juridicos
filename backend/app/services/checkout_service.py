@@ -101,6 +101,67 @@ def list_checkout_orders(user) -> dict:
     return {"orders": [serialize_checkout_order(order) for order in orders]}
 
 
+def get_user_checkout_order(user, order_id: object) -> dict:
+    order = _get_user_order(user, order_id)
+    return {"order": serialize_checkout_order(order)}
+
+
+def update_user_checkout_order(user, order_id: object, payload: dict) -> dict:
+    order = _get_user_order(user, order_id)
+    if order.status not in {"pending", "failed"}:
+        raise ValidationError("Apenas pedidos pendentes ou falhados podem ser editados.")
+
+    data = payload or {}
+    changed = []
+    if "service_id" in data:
+        new_service_id = _text(data.get("service_id"), max_length=80)
+        if not new_service_id:
+            raise ValidationError("service_id obrigatório.")
+        code, amount, _name = _catalog_entry(new_service_id)
+        if code != order.service_id:
+            order.service_id = code
+            order.amount = amount
+            changed.append("service_id")
+    elif "amount" in data:
+        # Permite ajustar quantidade somente quando service_id NÃO muda — derivado do catálogo.
+        raise ValidationError("Para alterar valor, envie service_id (preço deriva do catálogo).")
+
+    if not changed:
+        raise ValidationError("Nenhum campo editável foi enviado.")
+
+    log_action(
+        action="checkout_order_updated_by_client",
+        entity_type="order",
+        entity_id=order.id,
+        user=user,
+        company_id=order.company_id,
+        metadata={"changed": changed, "service_id": order.service_id, "amount": order.amount},
+    )
+    db.session.commit()
+    return {"order": serialize_checkout_order(order)}
+
+
+def cancel_user_checkout_order(user, order_id: object) -> dict:
+    order = _get_user_order(user, order_id)
+    if order.status == "paid":
+        raise ValidationError("Pedidos pagos não podem ser cancelados (solicite reembolso).")
+    if order.status in {"canceled", "refunded"}:
+        return {"deleted": True, "order": serialize_checkout_order(order)}
+    if order.status not in {"pending", "failed", "processing"}:
+        raise ValidationError("Pedido em estado que não permite cancelamento.")
+    order.status = "canceled"
+    log_action(
+        action="checkout_order_canceled_by_client",
+        entity_type="order",
+        entity_id=order.id,
+        user=user,
+        company_id=order.company_id,
+        metadata={"previous_status": order.status},
+    )
+    db.session.commit()
+    return {"deleted": True, "order": serialize_checkout_order(order)}
+
+
 def _sanitize_payload(payload: dict) -> dict:
     """Remove sensitive data from payload before logging - PCI-DSS compliance."""
     if not isinstance(payload, dict):

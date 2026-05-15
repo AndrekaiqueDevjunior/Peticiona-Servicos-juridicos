@@ -15,7 +15,12 @@ from app.services.client_area_service import (
     update_order,
     upload_documents,
 )
-from app.services.checkout_service import list_checkout_orders
+from app.services.checkout_service import (
+    cancel_user_checkout_order,
+    get_user_checkout_order,
+    list_checkout_orders,
+    update_user_checkout_order,
+)
 
 client_area_bp = Blueprint("client_area", __name__, url_prefix="/api/client-area")
 
@@ -48,6 +53,27 @@ def list_client_orders():
 @roles_required("client")
 def list_client_checkout_orders():
     return jsonify(list_checkout_orders(current_actor()))
+
+
+@client_area_bp.get("/checkout-orders/<int:order_id>")
+@roles_required("client")
+def get_client_checkout_order(order_id: int):
+    return jsonify(get_user_checkout_order(current_actor(), order_id))
+
+
+@client_area_bp.put("/checkout-orders/<int:order_id>")
+@client_area_bp.patch("/checkout-orders/<int:order_id>")
+@roles_required("client")
+def update_client_checkout_order(order_id: int):
+    return jsonify(
+        update_user_checkout_order(current_actor(), order_id, request.get_json(silent=True) or {})
+    )
+
+
+@client_area_bp.delete("/checkout-orders/<int:order_id>")
+@roles_required("client")
+def delete_client_checkout_order(order_id: int):
+    return jsonify(cancel_user_checkout_order(current_actor(), order_id))
 
 
 @client_area_bp.post("/orders/preview")

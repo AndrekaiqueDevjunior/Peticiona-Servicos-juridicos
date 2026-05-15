@@ -548,6 +548,18 @@ export const api = {
     catalog: () => request<{ catalog: CatalogSection[] }>("/client-area/catalog"),
     orders: () => request<{ orders: ClientOrder[] }>("/client-area/orders"),
     checkoutOrders: () => request<{ orders: CheckoutOrderType[] }>("/client-area/checkout-orders"),
+    getCheckoutOrder: (id: number | string) =>
+      request<{ order: CheckoutOrderType }>(`/client-area/checkout-orders/${id}`),
+    updateCheckoutOrder: (id: number | string, data: { service_id?: string }) =>
+      request<{ order: CheckoutOrderType }>(`/client-area/checkout-orders/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    cancelCheckoutOrder: (id: number | string) =>
+      request<{ deleted: boolean; order: CheckoutOrderType }>(
+        `/client-area/checkout-orders/${id}`,
+        { method: "DELETE" },
+      ),
     getOrder: (id: number) =>
       request<{ order: ClientOrder }>(`/client-area/orders/${id}`),
     createOrder: (data: {
@@ -828,6 +840,10 @@ export const api = {
         }),
       deletePlan: (id: number) =>
         request<null>(`/admin/plans/${id}`, { method: "DELETE" }),
+      listServices: () =>
+        request<{ services: AdminServiceCatalogItem[] }>("/admin/services"),
+      getService: (id: number) =>
+        request<{ service: AdminServiceCatalogItem }>(`/admin/services/${id}`),
       createService: (
         payload: Pick<AdminServiceCatalogItem, "code" | "section" | "title" | "unit_price"> &
           Partial<Pick<AdminServiceCatalogItem, "description" | "is_active">>,

@@ -953,6 +953,16 @@ def list_admin_plans(actor) -> dict:
     }
 
 
+def list_admin_services(actor) -> dict:
+    del actor
+    services = (
+        ServiceCatalogItem.query
+        .order_by(ServiceCatalogItem.section.asc(), ServiceCatalogItem.title.asc())
+        .all()
+    )
+    return {"services": [_serialize_service(service) for service in services]}
+
+
 def get_admin_service(service_id: object) -> dict:
     parsed_id = _to_int(service_id, field_name="id")
     service = db.session.get(ServiceCatalogItem, parsed_id)

@@ -29,6 +29,7 @@ from app.services.admin_service import (
     list_admin_clients,
     list_admin_orders,
     list_admin_plans,
+    list_admin_services,
     list_admin_staff,
     list_financial_entries,
     refund_credit_purchase,
@@ -278,6 +279,12 @@ def update_plan(plan_id: int):
 def delete_plan(plan_id: int):
     delete_admin_plan(current_actor(), plan_id)
     return "", 204
+
+
+@admin_bp.get("/services")
+@roles_required("admin")
+def services():
+    return jsonify(list_admin_services(current_actor()))
 
 
 @admin_bp.post("/services")
