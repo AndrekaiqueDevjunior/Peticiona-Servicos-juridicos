@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarIcon,
+  Download,
   Edit3,
   Eye,
+  Loader2,
   Save,
   X,
   UserRound,
@@ -19,6 +21,8 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
+import { api, ApiError, type UploadedDocument } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +48,56 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Separator } from "@/components/ui/separator";
 import { type ClientOrder } from "@/lib/api";
+
+function DocumentDownloadRow({ doc }: { doc: UploadedDocument }) {
+  const [busy, setBusy] = useState(false);
+  const handleDownload = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.documents.download(doc);
+    } catch (err) {
+      const message =
+        err instanceof ApiError
+          ? err.status === 403
+            ? "Você não tem permissão para baixar este documento."
+            : err.status === 404
+              ? "Documento não encontrado."
+              : err.message
+          : "Não foi possível baixar o documento. Tente novamente.";
+      toast({ title: "Falha no download", description: message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <li className="flex items-center gap-3 rounded-md bg-secondary/50 px-3 py-2">
+      <Paperclip className="h-4 w-4 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">{doc.file_name}</p>
+        <p className="text-xs text-muted-foreground">
+          {doc.size_label}
+          {doc.created_at ? ` · ${format(parseISO(doc.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}` : ""}
+        </p>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={handleDownload}
+        disabled={busy}
+        aria-label={`Baixar ${doc.file_name}`}
+        title={`Baixar ${doc.file_name}`}
+      >
+        {busy ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="h-4 w-4" />
+        )}
+      </Button>
+    </li>
+  );
+}
 
 const AREAS_DIREITO = [
   "Direito Civil",
@@ -425,17 +479,12 @@ export function EditOrderDialog({
                     <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Documentos enviados</h3>
                     <ul className="grid gap-2">
                       {petition.documents.map((doc) => (
-                        <li key={doc.id} className="flex items-center gap-3 rounded-md bg-secondary/50 px-3 py-2">
-                          <Paperclip className="h-4 w-4 text-primary" />
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{doc.file_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {doc.size_label}{doc.created_at ? ` · ${format(parseISO(doc.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}` : ""}
-                            </p>
-                          </div>
-                        </li>
+                        <DocumentDownloadRow key={doc.id} doc={doc} />
                       ))}
                     </ul>
+                    <p className="text-xs text-muted-foreground">
+                      Clique no ícone de download para baixar o arquivo original.
+                    </p>
                   </section>
                 </>
               )}
