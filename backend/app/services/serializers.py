@@ -119,16 +119,45 @@ def serialize_plan(plan) -> dict:
             features = _json.loads(plan.features_json)
         except Exception:
             features = []
+    unit_price_cents = getattr(plan, "price_per_service_cents", None)
     return {
         "code": plan.code,
         "name": plan.name,
         "description": plan.description,
+        "subtitle": getattr(plan, "subtitle", None),
         "monthly_price_cents": plan.monthly_price_cents,
         "monthly_price_brl": format_brl_from_cents(plan.monthly_price_cents),
+        "price_cents": plan.monthly_price_cents,
+        "price_formatted": format_brl_from_cents(plan.monthly_price_cents),
         "petition_limit_monthly": plan.petition_limit_monthly,
         "monthly_credits_cents": plan.monthly_credits_cents,
-        "price_per_service_cents": getattr(plan, "price_per_service_cents", None),
+        "price_per_service_cents": unit_price_cents,
+        "unit_price_cents": unit_price_cents,
+        "unit_price_formatted": format_brl_from_cents(unit_price_cents) if unit_price_cents is not None else None,
+        "credits_quantity": getattr(plan, "credits_quantity", None),
+        "validity_days": getattr(plan, "validity_days", None),
+        "delivery_label": getattr(plan, "delivery_label", None),
+        "badge": getattr(plan, "badge", None),
+        "sort_order": getattr(plan, "sort_order", 0) or 0,
+        "benefits": features,
         "features": features,
         "is_highlighted": bool(getattr(plan, "is_highlighted", False)),
+        "is_active": bool(getattr(plan, "is_active", True)),
         "cta_label": getattr(plan, "cta_label", None),
+    }
+
+
+def serialize_service_catalog_item(service) -> dict:
+    return {
+        "code": service.code,
+        "section": service.section,
+        "name": service.title,
+        "title": service.title,
+        "description": service.description,
+        "price_cents": service.unit_price,
+        "price_formatted": format_brl_from_cents(service.unit_price),
+        "unit_price": service.unit_price,
+        "unit_price_brl": format_brl_from_cents(service.unit_price),
+        "delivery_label": getattr(service, "delivery_label", None),
+        "is_active": bool(getattr(service, "is_active", True)),
     }

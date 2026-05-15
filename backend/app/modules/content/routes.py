@@ -3,6 +3,8 @@ from __future__ import annotations
 from flask import Blueprint, current_app, jsonify, request
 
 from app.services.content_service import (
+    get_catalog_item,
+    get_full_catalog,
     get_home_content,
     get_plans_catalog,
     get_public_catalog,
@@ -25,7 +27,21 @@ def plans():
 
 @content_bp.get("/catalog")
 def catalog():
-    return jsonify(get_public_catalog())
+    """Catálogo unificado: planos + serviços avulsos.
+
+    Mantém compatibilidade retornando também `catalog` (formato antigo
+    de seções) para clientes legados; a fonte canônica passa a ser
+    `plans` e `services` (planos completos do banco)."""
+    full = get_full_catalog()
+    legacy = get_public_catalog()
+    payload = dict(full)
+    payload["catalog"] = legacy.get("catalog", [])
+    return jsonify(payload)
+
+
+@content_bp.get("/catalog/<string:code>")
+def catalog_item(code: str):
+    return jsonify(get_catalog_item(code))
 
 
 @content_bp.get("/contact-info")

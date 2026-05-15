@@ -149,10 +149,51 @@ export interface PublicPlan {
   code: string;
   name: string;
   description: string | null;
+  subtitle: string | null;
   monthly_price_cents: number;
   monthly_price_brl: string;
+  price_cents: number;
+  price_formatted: string;
   petition_limit_monthly: number | null;
   monthly_credits_cents: number;
+  price_per_service_cents: number | null;
+  unit_price_cents: number | null;
+  unit_price_formatted: string | null;
+  credits_quantity: number | null;
+  validity_days: number | null;
+  delivery_label: string | null;
+  badge: string | null;
+  sort_order: number;
+  benefits: string[];
+  features: string[];
+  is_highlighted: boolean;
+  is_active: boolean;
+  cta_label: string | null;
+}
+
+export interface CatalogService {
+  code: string;
+  section: string;
+  name: string;
+  title: string;
+  description: string | null;
+  price_cents: number;
+  price_formatted: string;
+  unit_price: number;
+  unit_price_brl: string;
+  delivery_label: string | null;
+  is_active: boolean;
+}
+
+export interface FullCatalog {
+  plans: PublicPlan[];
+  services: CatalogService[];
+  catalog: CatalogSection[];
+}
+
+export interface CatalogItemLookup {
+  type: "plan" | "service";
+  item: PublicPlan | CatalogService;
 }
 
 export interface ClientOrder {
@@ -541,7 +582,9 @@ export const api = {
 
   content: {
     plans: () => request<{ plans: PublicPlan[] }>("/plans"),
-    catalog: () => request<{ catalog: CatalogSection[] }>("/catalog"),
+    catalog: () => request<FullCatalog>("/catalog"),
+    catalogItem: (code: string) =>
+      request<CatalogItemLookup>(`/catalog/${encodeURIComponent(code)}`),
   },
 
   clientArea: {

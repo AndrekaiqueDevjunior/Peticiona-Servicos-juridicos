@@ -367,6 +367,12 @@ def _add_plan_columns() -> None:
         "features_json": "ALTER TABLE plans ADD COLUMN features_json TEXT",
         "is_highlighted": "ALTER TABLE plans ADD COLUMN is_highlighted BOOLEAN NOT NULL DEFAULT FALSE",
         "cta_label": "ALTER TABLE plans ADD COLUMN cta_label VARCHAR(80)",
+        "subtitle": "ALTER TABLE plans ADD COLUMN subtitle VARCHAR(255)",
+        "credits_quantity": "ALTER TABLE plans ADD COLUMN credits_quantity INTEGER",
+        "validity_days": "ALTER TABLE plans ADD COLUMN validity_days INTEGER",
+        "delivery_label": "ALTER TABLE plans ADD COLUMN delivery_label VARCHAR(120)",
+        "badge": "ALTER TABLE plans ADD COLUMN badge VARCHAR(80)",
+        "sort_order": "ALTER TABLE plans ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
     }
     for column_name, sql in statements.items():
         if column_name not in plan_columns:
