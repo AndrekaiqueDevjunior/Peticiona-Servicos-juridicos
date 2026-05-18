@@ -11,6 +11,7 @@ export interface AuthUser {
   company_id: number | null;
   is_active: boolean;
   role_title: string | null;
+  employee_code: string | null;
   zip_code: string | null;
   street: string | null;
   street_number: string | null;
@@ -18,6 +19,7 @@ export interface AuthUser {
   neighborhood: string | null;
   city: string | null;
   state: string | null;
+  created_at?: string;
 }
 
 export interface RegisterPayload {
@@ -258,8 +260,6 @@ export interface StaffOrder {
   reference: string;
   status: AdminOrderStatus;
   status_label: string;
-  total_amount: number;
-  total_brl: string;
   client_name: string | null;
   user_id: number | null;
   petition_id: number | null;
@@ -270,6 +270,9 @@ export interface StaffOrder {
   created_at: string | null;
   deadline_at: string | null;
   completed_at: string | null;
+  split_funcionario: number;
+  staff_payout_cents: number;
+  staff_payout_brl: string;
   items: { code: string; title: string; quantity: number; unit_price: number; line_total: number }[];
 }
 
@@ -358,6 +361,7 @@ export interface AdminCreditPurchase {
   pagarme_order_id: string | null;
   credited_at: string | null;
   created_at: string;
+  source_kind?: "credit_purchase" | "checkout_order";
 }
 
 export interface AdminStaffMember {
@@ -645,6 +649,25 @@ export const api = {
   },
 
   staff: {
+    profile: {
+      get: () => request<AuthUser>("/staff/profile"),
+      update: (data: Partial<{
+        full_name: string | null;
+        email: string | null;
+        phone: string | null;
+        zip_code: string | null;
+        street: string | null;
+        street_number: string | null;
+        address_complement: string | null;
+        neighborhood: string | null;
+        city: string | null;
+        state: string | null;
+      }>) =>
+        request<AuthUser>("/staff/profile", {
+          method: "PUT",
+          body: JSON.stringify(data),
+        }),
+    },
     orders: {
       list: () => request<{ orders: StaffOrder[] }>("/staff/orders"),
       updateStatus: (id: number, status: StaffOrderStatus) => {

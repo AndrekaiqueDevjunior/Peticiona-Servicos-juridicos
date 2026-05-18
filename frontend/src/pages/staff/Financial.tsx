@@ -107,7 +107,7 @@ export default function StaffFinancial() {
     return Array.from(map.entries());
   }, [filtrados]);
 
-  const totalGeral = filtrados.reduce((sum, order) => sum + order.total_amount, 0);
+  const totalGeral = filtrados.reduce((sum, order) => sum + order.staff_payout_cents, 0);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -154,7 +154,7 @@ export default function StaffFinancial() {
 
           <div className="ml-auto flex items-center gap-2 rounded-md bg-secondary/40 px-3 py-2 text-sm">
             <BarChart3 className="h-4 w-4 text-primary" />
-            <span className="text-muted-foreground">Valor total filtrado:</span>
+            <span className="text-muted-foreground">Repasse total filtrado:</span>
             <span className="font-semibold text-primary">{formatBRLFromCents(totalGeral)}</span>
           </div>
         </CardContent>
@@ -176,7 +176,7 @@ export default function StaffFinancial() {
       ) : (
         grupos.map(([key, list]) => {
           const [year, month] = key === "sem-data" ? [null, null] : key.split("-").map(Number);
-          const subtotal = list.reduce((sum, order) => sum + order.total_amount, 0);
+          const subtotal = list.reduce((sum, order) => sum + order.staff_payout_cents, 0);
           return (
             <Card key={key}>
               <CardHeader>
@@ -197,7 +197,7 @@ export default function StaffFinancial() {
                       <TableHead>Criado em</TableHead>
                       <TableHead>Prazo</TableHead>
                       <TableHead>Concluído em</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="text-right">Seu repasse</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -232,7 +232,7 @@ export default function StaffFinancial() {
                             : "—"}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {order.total_brl || formatBRLFromCents(order.total_amount)}
+                          {order.staff_payout_brl}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -296,18 +296,20 @@ export default function AdminFinancial() {
                         </TableCell>
                         <TableCell className="text-right font-medium">{c.amount_brl}</TableCell>
                         <TableCell className="text-right">
-                          {c.status === "paid" && c.pagarme_charge_id && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setRefundTarget(c)}
-                              className="gap-1 text-destructive hover:bg-destructive/10"
-                            >
-                              <Undo2 className="h-3.5 w-3.5" />
-                              Estornar
-                            </Button>
-                          )}
+                          {c.status === "paid" &&
+                            c.pagarme_charge_id &&
+                            c.source_kind !== "checkout_order" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setRefundTarget(c)}
+                                className="gap-1 text-destructive hover:bg-destructive/10"
+                              >
+                                <Undo2 className="h-3.5 w-3.5" />
+                                Estornar
+                              </Button>
+                            )}
                         </TableCell>
                       </TableRow>
                     ))

@@ -18,10 +18,10 @@ export default function Balance() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          Meu Saldo
+          Meus Saldos
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Visualize seu dinheiro disponível e as movimentações registradas pela plataforma.
+          Visualize seu saldo disponível e as movimentações registradas pela plataforma.
         </p>
       </div>
 
@@ -33,7 +33,7 @@ export default function Balance() {
           >
             <div className="flex items-center gap-2 text-sm opacity-80">
               <Wallet className="h-4 w-4" />
-              Dinheiro Disponível
+              Saldo Disponível
             </div>
             {isLoading ? (
               <Skeleton className="mt-3 h-12 w-48 bg-white/20" />

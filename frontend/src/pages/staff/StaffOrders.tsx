@@ -53,9 +53,6 @@ const STATUS_DOT: Record<AdminOrderStatus, string> = {
   cancelado: "bg-muted-foreground",
 };
 
-const formatBRLFromCents = (value: number) =>
-  (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
 const formatDT = (iso: string | null | undefined, fallback = "Sem data") => {
   if (!iso) return fallback;
   try {
@@ -169,7 +166,8 @@ function StaffOrderRow({ order, onOpen }: { order: StaffOrder; onOpen: () => voi
             {order.reference} · {tipoCompleto(order)}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Cliente: {order.client_name ?? "Cliente não identificado"} · {order.total_brl}
+            Cliente: {order.client_name ?? "Cliente não identificado"} · Seu repasse:{" "}
+            {order.staff_payout_brl}
           </p>
           <p className={cn("mt-1 inline-flex items-center gap-1 text-xs", prazoTone)}>
             <CalendarClock className="h-3.5 w-3.5" />
@@ -260,7 +258,10 @@ function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClo
                   </SelectContent>
                 </Select>
               </div>
-              <ReadonlyField label="Valor" value={order.total_brl || formatBRLFromCents(order.total_amount)} />
+              <ReadonlyField
+                label="Seu repasse"
+                value={`${order.staff_payout_brl} (${order.split_funcionario}%)`}
+              />
               {statusMutation.isPending && (
                 <div className="col-span-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />

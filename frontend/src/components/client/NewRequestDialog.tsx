@@ -19,8 +19,6 @@ import {
   AlertCircle,
   CalendarIcon,
   CheckCircle2,
-  Eye,
-  EyeOff,
   FileText,
   Image as ImageIcon,
   Paperclip,
@@ -307,12 +305,12 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     return null;
   })();
 
-  // Mock: papel de quem está visualizando o modal. Trocar por contexto/auth real depois.
-  const [viewerRole, setViewerRole] = useState<CommentAuthorRole>("cliente");
-  const viewerNome = viewerRole === "cliente" ? "Você (Cliente)" : "Equipe (Redator)";
+  // Cliente sempre comenta como "cliente"; a visão de redator é exclusiva do
+  // painel interno (staff/admin), não do modal de novo pedido.
+  const viewerRole: CommentAuthorRole = "cliente";
+  const viewerNome = "Você (Cliente)";
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [novoComentario, setNovoComentario] = useState("");
-  const [mostrarDeletados, setMostrarDeletados] = useState(false);
 
   const addComentario = () => {
     const texto = novoComentario.trim();
@@ -331,24 +329,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setNovoComentario("");
   };
 
-  const deletarComentario = (id: string) => {
-    if (viewerRole !== "redator") return;
-    setComentarios((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? { ...c, deletado: true, deletadoEm: new Date(), deletadoPor: viewerNome }
-          : c,
-      ),
-    );
-  };
-
-  const comentariosVisiveis = comentarios.filter((c) => {
-    if (c.deletado) {
-      // Cliente nunca vê deletados; redator pode optar por ver no histórico interno.
-      return viewerRole === "redator" && mostrarDeletados;
-    }
-    return true;
-  });
+  // Cliente não exclui comentários — apenas visualiza os próprios e os do
+  // redator que ainda não foram removidos.
+  const comentariosVisiveis = comentarios.filter((c) => !c.deletado);
 
   const addParte = () =>
     setPartes((p) => [...p, { id: crypto.randomUUID(), nome: "", tipo: "" }]);
@@ -415,7 +398,6 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setArquivos([]);
     setComentarios([]);
     setNovoComentario("");
-    setMostrarDeletados(false);
     setSuccess(false);
   };
 
@@ -930,64 +912,15 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
           {/* 5. Comentários */}
           <section className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-base font-semibold text-foreground">
-                5. Comentários
-              </h3>
-              {/* Mock toggle de papel — substituir por contexto de auth real */}
-              <div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 p-0.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setViewerRole("cliente")}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors",
-                    viewerRole === "cliente"
-                      ? "bg-background font-medium text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Ver como Cliente
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewerRole("redator")}
-                  className={cn(
-                    "rounded px-2 py-1 transition-colors",
-                    viewerRole === "redator"
-                      ? "bg-background font-medium text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  Ver como Redator
-                </button>
-              </div>
-            </div>
+            <h3 className="text-base font-semibold text-foreground">
+              5. Comentários
+            </h3>
 
             <p className="text-xs text-muted-foreground">
-              Use este espaço para dar instruções adicionais ao redator.
-              Cliente e redator podem comentar a qualquer momento — antes,
-              durante e após a entrega da petição.
+              Use este espaço para dar instruções adicionais ao redator. Você pode
+              comentar a qualquer momento — antes, durante e após a entrega da
+              petição.
             </p>
-
-            {viewerRole === "redator" && comentarios.some((c) => c.deletado) && (
-              <button
-                type="button"
-                onClick={() => setMostrarDeletados((v) => !v)}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-              >
-                {mostrarDeletados ? (
-                  <>
-                    <EyeOff className="h-3.5 w-3.5" />
-                    Ocultar comentários excluídos
-                  </>
-                ) : (
-                  <>
-                    <Eye className="h-3.5 w-3.5" />
-                    Mostrar histórico (inclui excluídos)
-                  </>
-                )}
-              </button>
-            )}
 
             <div className="space-y-3">
               {comentariosVisiveis.length === 0 ? (
@@ -1029,18 +962,6 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                               </span>
                             )}
                           </div>
-                          {viewerRole === "redator" && !c.deletado && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => deletarComentario(c.id)}
-                              aria-label="Excluir comentário"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
                         </div>
                         <p
                           className={cn(
@@ -1068,14 +989,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             <div className="space-y-2">
               <Label htmlFor="novo-comentario" className="text-sm">
                 Adicionar comentário como{" "}
-                <span
-                  className={cn(
-                    "font-semibold",
-                    viewerRole === "cliente"
-                      ? "text-[hsl(142_70%_38%)]"
-                      : "text-foreground",
-                  )}
-                >
+                <span className="font-semibold text-[hsl(142_70%_38%)]">
                   {viewerNome}
                 </span>
               </Label>
@@ -1239,8 +1153,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
                   {mensagemBloqueio || semSaldo ? (
                     <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                      Estimativa local: {mensagemBloqueio ?? "saldo aparentemente insuficiente."}{" "}
-                      A validação final será feita no backend. Se preferir, você pode revisar seus créditos em{" "}
+                      {mensagemBloqueio ?? "Saldo aparentemente insuficiente."}{" "}
+                      Você pode revisar seus saldos em{" "}
                       <button
                         type="button"
                         onClick={() => {
@@ -1249,7 +1163,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                         }}
                         className="font-semibold underline underline-offset-2 hover:opacity-80"
                       >
-                        Comprar mais Dinheiro
+                        Comprar mais Saldo
                       </button>
                       .
                     </div>
