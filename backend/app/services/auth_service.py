@@ -11,7 +11,16 @@ from app.services.serializers import serialize_user
 
 
 def _default_plan() -> Plan:
+    # Compat com bases antigas que tinham um plano "starter" (LEGACY_PLAN_CODES).
     plan = Plan.query.filter_by(code="starter").first()
+    if plan is not None:
+        return plan
+    # Fallback: pega o plano ativo de menor `sort_order` (canonical = plano_essencial).
+    plan = (
+        Plan.query.filter(Plan.is_active.is_(True))
+        .order_by(Plan.sort_order.asc(), Plan.id.asc())
+        .first()
+    )
     if plan is None:
         raise ValidationError("Plano inicial não encontrado.")
     return plan

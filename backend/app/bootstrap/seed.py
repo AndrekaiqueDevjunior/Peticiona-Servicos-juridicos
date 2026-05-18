@@ -129,7 +129,11 @@ def _upsert_plan(payload: dict) -> None:
         "is_highlighted": bool(payload.get("is_highlighted")),
         "is_active": True,
         "petition_limit_monthly": payload.get("credits_quantity"),
-        "monthly_credits_cents": 0,
+        # Crédito que entra na carteira do cliente após o pagamento do plano.
+        # Mantemos paridade com o valor pago (1:1) para que o saldo total bata
+        # com o que ele desembolsou e permita uso de acordo com o preço por
+        # serviço.
+        "monthly_credits_cents": payload["monthly_price_cents"],
         "features_json": json.dumps(payload.get("benefits") or [], ensure_ascii=False),
         "cta_label": f"Adquirir {payload['name'].replace('Plano ', '')}",
     }

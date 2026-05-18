@@ -11,13 +11,27 @@ from app.models import User
 
 
 def current_actor(optional: bool = False):
-    if hasattr(g, "current_user"):
-        return g.current_user
-
+    # O cache em g.current_user economiza decodificação repetida do JWT
+    # dentro do mesmo request — mas só é seguro se `g` foi de fato resetado.
+    # Em produção (gunicorn/wsgi) Flask cria um app context novo por request,
+    # então `g` zera entre requests. Em setups que mantêm o app context vivo
+    # (testes com `with app.app_context()` global, alguns workers async), o
+    # cache vazaria para a próxima request — bypass silencioso de auth.
+    # Mitigação: validamos que o header atual realmente bate com o user em
+    # cache antes de reaproveitá-lo.
+    cached = getattr(g, "current_user", None)
     header = request.headers.get("Authorization", "").strip()
+    cached_header = getattr(g, "_current_user_auth_header", None)
+    if cached is not None and cached_header is not None and cached_header == header:
+        return cached
+    # Cache inválido para esta request — limpa antes de re-derivar.
+    if cached is not None:
+        g.current_user = None
+
     if not header:
         if optional:
             g.current_user = None
+            g._current_user_auth_header = ""
             return None
         raise AuthError("Token de autenticação ausente.")
 
@@ -32,6 +46,7 @@ def current_actor(optional: bool = False):
         raise AuthError("Usuário autenticado não encontrado.")
 
     g.current_user = user
+    g._current_user_auth_header = header
     return user
 
 

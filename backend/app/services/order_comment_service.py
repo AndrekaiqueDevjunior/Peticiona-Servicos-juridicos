@@ -16,7 +16,7 @@ from app.services.serializers import serialize_document
 
 
 def _get_order(order_id: int, actor) -> ServiceOrder:
-    order = ServiceOrder.query.get(order_id)
+    order = db.session.get(ServiceOrder, order_id)
     if not order:
         raise NotFoundError("Pedido não encontrado.")
     if getattr(actor, "role", None) == "client" and order.user_id != actor.id:

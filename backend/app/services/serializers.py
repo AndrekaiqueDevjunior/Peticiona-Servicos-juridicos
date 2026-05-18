@@ -81,6 +81,9 @@ def serialize_petition(petition) -> dict:
 
 def serialize_order(order) -> dict:
     item_titles = [item.title for item in order.items if item.title]
+    split_funcionario = int(getattr(order, "split_funcionario", 0) or 0)
+    split_plataforma = int(getattr(order, "split_plataforma", 100) or 0)
+    payout_cents = max(0, int(order.total_amount * split_funcionario / 100))
     return {
         "id": order.id,
         "reference": order.reference,
@@ -98,6 +101,10 @@ def serialize_order(order) -> dict:
         "created_at": order.created_at.isoformat() if order.created_at else None,
         "deadline_at": order.deadline_at.isoformat() if getattr(order, "deadline_at", None) else None,
         "completed_at": order.completed_at.isoformat() if getattr(order, "completed_at", None) else None,
+        "split_plataforma": split_plataforma,
+        "split_funcionario": split_funcionario,
+        "staff_payout_cents": payout_cents,
+        "staff_payout_brl": format_brl_from_cents(payout_cents),
         "items": [
             {
                 "code": item.code,

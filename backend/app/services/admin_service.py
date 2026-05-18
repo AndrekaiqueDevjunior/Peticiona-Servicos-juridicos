@@ -7,7 +7,7 @@ from werkzeug.security import generate_password_hash
 from app.core.errors import ConflictError, NotFoundError, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
-from app.models import CreditPurchase, CreditTransaction, FinancialEntry, PetitionParty, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
+from app.models import CreditPurchase, CreditTransaction, FinancialEntry, Order, PetitionParty, Plan, ServiceCatalogItem, ServiceOrder, ServiceOrderItem, User
 from app.services.audit_service import log_action
 from app.services.pagarme_service import PagarmeClient
 from app.services.serializers import format_brl_from_cents, serialize_petition
@@ -1058,13 +1058,26 @@ def create_admin_plan(actor, payload: dict) -> dict:
     if Plan.query.filter_by(code=code).first() is not None:
         raise ConflictError("Já existe plano com este código.")
 
+    monthly_price_cents_value = _to_int(
+        payload.get("monthly_price_cents", 0),
+        field_name="monthly_price_cents",
+        minimum=0,
+    )
+    # Quando o admin não informa explicitamente o crédito mensal, mantemos
+    # paridade 1:1 com o preço pago — caso contrário a compra do plano não
+    # gera saldo nenhum para o cliente.
+    monthly_credits_default = (
+        monthly_price_cents_value
+        if payload.get("monthly_credits_cents") in (None, "", 0, "0")
+        else payload.get("monthly_credits_cents")
+    )
     plan = Plan(
         code=code,
         name=name,
         description=str(payload.get("description") or "").strip() or None,
-        monthly_price_cents=_to_int(payload.get("monthly_price_cents", 0), field_name="monthly_price_cents", minimum=0),
+        monthly_price_cents=monthly_price_cents_value,
         monthly_credits_cents=_to_int(
-            payload.get("monthly_credits_cents", 0), field_name="monthly_credits_cents", minimum=0
+            monthly_credits_default, field_name="monthly_credits_cents", minimum=0
         ),
         petition_limit_monthly=(
             _to_int(payload.get("petition_limit_monthly"), field_name="petition_limit_monthly", minimum=0)
@@ -1159,6 +1172,49 @@ def _serialize_credit_purchase(cp: CreditPurchase) -> dict:
         "pagarme_order_id": cp.pagarme_order_id,
         "credited_at": cp.credited_at.isoformat() if cp.credited_at else None,
         "created_at": cp.created_at.isoformat(),
+        "source_kind": "credit_purchase",
+    }
+
+
+def _checkout_order_package_name(order: Order) -> str:
+    plan = Plan.query.filter_by(code=order.service_id).first()
+    if plan:
+        return plan.name
+    service = ServiceCatalogItem.query.filter_by(code=order.service_id).first()
+    if service:
+        return service.title
+    return order.service_id
+
+
+def _serialize_checkout_order_as_purchase(order: Order) -> dict:
+    """Apresenta uma `Order` do checkout no mesmo shape de `AdminCreditPurchase`
+    para que o painel financeiro possa listar compras feitas pelos dois fluxos
+    (CreditPurchase e Order/checkout) em uma única lista."""
+    # Mapear o status do checkout para o vocabulário usado no painel.
+    status_map = {
+        "paid": "paid",
+        "processing": "processing",
+        "pending": "pending",
+        "waiting_payment": "pending",
+        "failed": "failed",
+        "canceled": "failed",
+        "refunded": "refunded",
+    }
+    mapped_status = status_map.get(order.status, order.status)
+    return {
+        "id": order.id,
+        "code": f"checkout-{order.id}",
+        "user_email": order.user.email if order.user else None,
+        "user_name": order.user.full_name if order.user else None,
+        "package_name": _checkout_order_package_name(order),
+        "amount_cents": order.amount,
+        "amount_brl": format_brl_from_cents(order.amount),
+        "status": mapped_status,
+        "pagarme_charge_id": order.pagarme_charge_id,
+        "pagarme_order_id": order.pagarme_order_id,
+        "credited_at": order.released_at.isoformat() if order.released_at else None,
+        "created_at": order.created_at.isoformat(),
+        "source_kind": "checkout_order",
     }
 
 
@@ -1168,7 +1224,19 @@ def list_admin_credit_purchases(actor) -> dict:
         .order_by(CreditPurchase.created_at.desc())
         .all()
     )
-    return {"purchases": [_serialize_credit_purchase(cp) for cp in purchases]}
+    # Inclui também as compras realizadas pelo checkout (`Order`), pois esse
+    # é o fluxo usado quando o cliente compra planos/avulsos a partir do
+    # frontend Checkout.tsx.
+    checkout_orders = (
+        scoped_query(Order, actor)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+
+    items = [_serialize_credit_purchase(cp) for cp in purchases]
+    items.extend(_serialize_checkout_order_as_purchase(o) for o in checkout_orders)
+    items.sort(key=lambda x: x["created_at"], reverse=True)
+    return {"purchases": items}
 
 
 def refund_credit_purchase(actor, purchase_id: object) -> dict:

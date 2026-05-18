@@ -16,7 +16,7 @@ documents_bp = Blueprint("documents", __name__, url_prefix="/api/documents")
 @auth_required
 def download_document(document_id: int):
     actor = current_actor()
-    doc = Document.query.get(document_id)
+    doc = db.session.get(Document, document_id)
     if not doc:
         raise NotFoundError("Documento não encontrado.")
     if actor.role not in ("admin", "staff"):

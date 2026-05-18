@@ -220,15 +220,23 @@ def _payment_event(order: Order | None, event_type: str, gateway_event_id: str, 
 def _credit_amount_for_order(order: Order) -> int:
     plan = Plan.query.filter_by(code=order.service_id).first()
     if plan:
-        return max(0, int(plan.monthly_credits_cents or 0))
+        configured = int(plan.monthly_credits_cents or 0)
+        if configured > 0:
+            return configured
+        # Plano cadastrado sem monthly_credits_cents explícito: caímos no valor
+        # pago para que o cliente receba o crédito equivalente ao que desembolsou.
     return max(0, int(order.amount or 0))
 
 
 def _release_order(order: Order) -> None:
-    if order.status != "paid" or order.released_at:
+    if order.status != "paid":
         return
     credit_amount = _credit_amount_for_order(order)
-    exists = CreditTransaction.query.filter_by(user_id=order.user_id, source="checkout", description=f"Checkout #{order.id}").first()
+    exists = CreditTransaction.query.filter_by(
+        user_id=order.user_id,
+        source="checkout",
+        description=f"Checkout #{order.id}",
+    ).first()
     if not exists and credit_amount > 0:
         db.session.add(
             CreditTransaction(
@@ -240,7 +248,12 @@ def _release_order(order: Order) -> None:
                 company_id=order.company_id,
             )
         )
-    order.released_at = utcnow()
+        order.released_at = utcnow()
+    elif exists and order.released_at is None:
+        order.released_at = utcnow()
+    elif order.amount == 0 and order.released_at is None:
+        # Pedido gratuito: nada a creditar, mas marcamos como liberado.
+        order.released_at = utcnow()
 
 
 def _reverse_released_order(order: Order, *, reason: str) -> None:
@@ -577,6 +590,12 @@ def _sync_gateway_status(order: Order) -> None:
 def get_checkout_status(user, order_id: object) -> dict:
     order = _get_user_order(user, order_id)
     _sync_gateway_status(order)
+    # Garante que pedidos já marcados como pagos mas que não tiveram crédito
+    # liberado (ex.: plano sem `monthly_credits_cents` no momento da compra)
+    # recebam o crédito ao recarregar o status.
+    if order.status == "paid":
+        _release_order(order)
+        db.session.commit()
     return {"order": serialize_checkout_order(order)}
 
 

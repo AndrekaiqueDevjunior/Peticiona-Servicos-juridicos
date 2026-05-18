@@ -10,6 +10,24 @@ from app.services.audit_service import log_action
 from app.services.serializers import format_brl_from_cents, serialize_order
 
 
+def _serialize_order_for_staff(order: ServiceOrder) -> dict:
+    """Versão da serialização do pedido sem expor o valor cheio do serviço
+    ao funcionário — apenas o repasse devido a ele."""
+    data = serialize_order(order)
+    # Funcionário não enxerga o valor bruto cobrado do cliente, somente o
+    # repasse líquido conforme o split definido pelo admin.
+    data.pop("total_amount", None)
+    data.pop("total_brl", None)
+    data.pop("split_plataforma", None)
+
+    # Calcula e injeta o repasse devido ao funcionário (split_funcionario %).
+    split_pct = order.split_funcionario or 0
+    repasse_cents = int((order.total_amount or 0) * split_pct / 100)
+    data["staff_payout_cents"] = repasse_cents
+    data["staff_payout_brl"] = format_brl_from_cents(repasse_cents)
+    return data
+
+
 def _scoped_staff_order(actor, order_id: object) -> ServiceOrder:
     try:
         parsed_id = int(order_id)
@@ -82,7 +100,7 @@ def list_staff_orders(actor) -> dict:
         .order_by(ServiceOrder.deadline_at.asc().nullslast(), ServiceOrder.created_at.desc())
         .all()
     )
-    return {"orders": [serialize_order(order) for order in orders]}
+    return {"orders": [_serialize_order_for_staff(order) for order in orders]}
 
 
 def update_staff_order(actor, order_id: object, payload: dict) -> dict:
@@ -100,7 +118,7 @@ def update_staff_order(actor, order_id: object, payload: dict) -> dict:
 
     log_action(action="staff.updated_order", entity_type="service_order", entity_id=order.id, user=actor)
     db.session.commit()
-    return {"order": serialize_order(order)}
+    return {"order": _serialize_order_for_staff(order)}
 
 
 def get_staff_financial(actor) -> dict:
@@ -119,5 +137,5 @@ def get_staff_financial(actor) -> dict:
             "estimated_payout_cents": total_repasse,
             "estimated_payout_brl": format_brl_from_cents(total_repasse),
         },
-        "orders": [serialize_order(order) for order in orders],
+        "orders": [_serialize_order_for_staff(order) for order in orders],
     }

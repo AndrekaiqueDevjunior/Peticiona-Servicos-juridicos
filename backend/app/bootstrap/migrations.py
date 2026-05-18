@@ -533,8 +533,10 @@ def _create_email_events_table() -> None:
     pk = "SERIAL PRIMARY KEY" if db.engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
     now_expr = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
 
-    # Drop tabela se existir para evitar conflitos com tipos PostgreSQL
-    _execute("DROP TABLE IF EXISTS email_events CASCADE")
+    # Drop tabela se existir para evitar conflitos com tipos PostgreSQL.
+    # SQLite não suporta CASCADE em DROP TABLE; ajustamos pelo dialect ativo.
+    cascade = " CASCADE" if db.engine.dialect.name == "postgresql" else ""
+    _execute(f"DROP TABLE IF EXISTS email_events{cascade}")
 
     _execute(
         f"""

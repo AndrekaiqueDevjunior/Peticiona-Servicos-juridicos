@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from app.core.extensions import db
 from app.permissions import auth_required, current_actor, roles_required
 from app.services.order_comment_service import (
     add_comment,
@@ -43,7 +44,7 @@ def upload_documents(order_id: int):
     actor = current_actor()
     # Clients can only upload to their own orders; admin/staff can upload to any
     if actor.role == "client":
-        order = ServiceOrder.query.get(order_id)
+        order = db.session.get(ServiceOrder, order_id)
         if not order or order.user_id != actor.id:
             raise PermissionDenied("Acesso negado ao pedido.")
         if order.status == "cancelado":

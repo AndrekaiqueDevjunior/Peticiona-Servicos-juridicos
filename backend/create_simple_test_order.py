@@ -7,13 +7,60 @@ diretamente no banco de dados para análise do modal no frontend
 import sys
 import os
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 # Adicionar o diretório app ao Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'app'))
 
 from app import create_app
-from app.models import User, ServiceOrder, ServiceOrderItem, Petition
+from app.core.security import upload_folder
+from app.models import (
+    Document,
+    Petition,
+    PetitionDocumentLink,
+    ServiceOrder,
+    ServiceOrderItem,
+    User,
+)
 from app.core.extensions import db
+
+
+SAMPLE_DOCUMENT_TEXT = (
+    "DOCUMENTO DE TESTE - PETICIONA\n"
+    "================================\n"
+    "Este é um arquivo gerado pelo script create_simple_test_order.py\n"
+    "para validar o fluxo de anexos do pedido teste.\n"
+    "Sinta-se à vontade para apagar ou substituir.\n"
+)
+
+
+def _attach_sample_document(petition: Petition, user: User) -> Document:
+    """Cria um arquivo simples em uploads/ e vincula ao pedido como anexo."""
+    folder = upload_folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    stored_name = f"sample-{uuid4().hex[:16]}.txt"
+    target = folder / stored_name
+    target.write_text(SAMPLE_DOCUMENT_TEXT, encoding="utf-8")
+
+    document = Document(
+        user_id=user.id,
+        company_id=user.company_id,
+        file_name="documento-teste.txt",
+        stored_name=stored_name,
+        mime_type="text/plain",
+        size_bytes=target.stat().st_size,
+    )
+    db.session.add(document)
+    db.session.flush()
+
+    db.session.add(
+        PetitionDocumentLink(
+            petition_id=petition.id,
+            document_id=document.id,
+            company_id=user.company_id,
+        )
+    )
+    return document
 
 def create_simple_test_order():
     """Cria um pedido de teste simples diretamente no BD"""
@@ -68,8 +115,12 @@ def create_simple_test_order():
             line_total=15000  # R$ 150,00
         )
         db.session.add(item)
-        
-        # 5. Commit das alterações
+
+        # 5. Anexar documento de exemplo para que o cliente possa testar o
+        #    download a partir da tela do pedido.
+        attached_document = _attach_sample_document(petition, user)
+
+        # 6. Commit das alterações
         db.session.commit()
         
         print("✅ Pedido criado com sucesso!")
@@ -94,6 +145,9 @@ def create_simple_test_order():
         print(f"   - Andre Kaique (Requerente)")
         print(f"   - Empresa Teste Ltda (Requerido)")
         
+        print(f"\n📎 Documento anexado:")
+        print(f"   - {attached_document.file_name} ({attached_document.size_bytes} bytes)")
+
         print(f"\n📦 Item do pedido:")
         print(f"   - {item.title}")
         print(f"     Quantidade: {item.quantity}")

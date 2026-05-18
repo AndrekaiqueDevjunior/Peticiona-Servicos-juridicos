@@ -5,6 +5,12 @@ from pathlib import Path
 
 
 def _load_dotenv() -> None:
+    # Opt-out usado em testes (ou qualquer pipeline que queira hermético).
+    # Sem isso o `.env` de produção entrava em qualquer processo que apenas
+    # importasse `app.core.config`, vazando credenciais e configs reais para
+    # ambientes que deveriam estar isolados.
+    if os.environ.get("SKIP_DOTENV", "").strip().lower() in {"1", "true", "yes", "on"}:
+        return
     repo_root = Path(__file__).resolve().parents[3]
     env_files = [repo_root / ".env", repo_root / "backend" / ".env"]
 
