@@ -1,91 +1,63 @@
+"""Testes do fluxo de recuperação de senha.
+
+Reescrito para usar a infra do conftest (app SQLite em memória + fixtures +
+spy de e-mail compatível com kwargs futuros do `send_email`).
+"""
+
 from __future__ import annotations
 
 import re
-import sys
 
-sys.path.insert(0, "backend")
+import pytest
 
 import app.services.password_reset_service as password_reset_service
-from app import create_app
-from app.core.extensions import db
-from app.core.security import hash_password, verify_password
+from app.core.security import verify_password
 from app.models import User
+from tests.utils.mocks import capture_emails
 
 
-def build_app():
-    return create_app(
-        {
-            "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-            "FRONTEND_URL": "https://peticiona.app.br",
-            "SECRET_KEY": "test-secret",
-            "UPLOAD_FOLDER": "/tmp/peticiona-uploads",
-        }
-    )
+pytestmark = pytest.mark.auth
 
 
-def test_password_reset_round_trip():
-    captured: dict[str, str] = {}
+def test_password_reset_round_trip(api_anonymous, db, monkeypatch):
+    from tests.factories import create_client
 
-    def fake_send_email(*, to: str, subject: str, body: str) -> bool:
-        captured["to"] = to
-        captured["subject"] = subject
-        captured["body"] = body
-        return True
+    user = create_client(email="andre@peticiona.app.br")
+    db.session.commit()
 
-    password_reset_service.send_email = fake_send_email
+    emails = capture_emails(monkeypatch, target_module=password_reset_service)
 
-    app = build_app()
-    with app.app_context():
-        user = User(
-            full_name="Andre Teste",
-            email="andre@peticiona.app.br",
-            password_hash=hash_password("Senha@123"),
-            role="client",
-            is_active=True,
-        )
-        db.session.add(user)
-        db.session.commit()
-
-    client = app.test_client()
-    response = client.post(
+    request_resp = api_anonymous.post(
         "/api/auth/password-reset/request",
-        json={"email": "andre@peticiona.app.br"},
+        json={"email": user.email},
     )
-    assert response.status_code == 200
-    assert captured["to"] == "andre@peticiona.app.br"
+    assert request_resp.status_code == 200
+    assert emails and emails[0]["to"] == user.email
 
-    match = re.search(r"token=([^\s]+)", captured["body"])
-    assert match is not None
+    body = emails[0].get("body") or emails[0].get("html") or ""
+    token_match = re.search(r"token=([^\s\"<>&]+)", body)
+    assert token_match is not None, f"Token não encontrado no corpo do e-mail: {body[:200]}"
 
-    confirm = client.post(
+    confirm_resp = api_anonymous.post(
         "/api/auth/password-reset/confirm",
-        json={"token": match.group(1), "password": "NovaSenha@123"},
+        json={"token": token_match.group(1), "password": "NovaSenha@123"},
     )
-    assert confirm.status_code == 200
+    assert confirm_resp.status_code == 200
 
-    with app.app_context():
-        user = User.query.filter_by(email="andre@peticiona.app.br").first()
-        assert user is not None
-        assert verify_password("NovaSenha@123", user.password_hash)
+    refreshed = db.session.get(User, user.id)
+    assert verify_password("NovaSenha@123", refreshed.password_hash)
 
 
-def test_password_reset_for_unknown_email_keeps_generic_response():
-    sent = {"called": False}
+def test_password_reset_for_unknown_email_keeps_generic_response(api_anonymous, monkeypatch):
+    emails = capture_emails(monkeypatch, target_module=password_reset_service)
 
-    def fake_send_email(*, to: str, subject: str, body: str) -> bool:
-        sent["called"] = True
-        return True
-
-    password_reset_service.send_email = fake_send_email
-
-    app = build_app()
-    client = app.test_client()
-    response = client.post(
+    response = api_anonymous.post(
         "/api/auth/password-reset/request",
         json={"email": "naoexiste@peticiona.app.br"},
     )
 
+    # Resposta genérica (200) para não vazar enumeração de e-mails,
+    # e nenhum e-mail enviado.
     assert response.status_code == 200
-    assert response.get_json()["message"]
-    assert sent["called"] is False
+    assert response.get_json().get("message")
+    assert emails == []

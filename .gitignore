@@ -12,6 +12,10 @@ frontend/.next/
 frontend/node_modules/
 
 backend/__pycache__/
+backend/venv/
+backend/.coverage
+backend/htmlcov/
+backend/.pytest_cache/
 backend/app/uploads/*
 !backend/app/uploads/.gitkeep
 reference/
