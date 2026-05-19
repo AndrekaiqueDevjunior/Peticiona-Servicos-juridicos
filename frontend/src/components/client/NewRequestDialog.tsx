@@ -4,15 +4,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   calcularPrecoPedido,
   formatBRL,
-  LABEL_PLANO,
   useUserPricingProfile,
   type Modalidade,
 } from "@/lib/pricing";
-import {
-  useBalance,
-  resolverCarteira,
-  WALLET_LABEL,
-} from "@/lib/balance";
+import { useBalance, WALLET_LABEL } from "@/lib/balance";
 import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import { api } from "@/lib/api";
 import {
@@ -258,49 +253,27 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
   const balance = useBalance();
 
-  // Carteira que será efetivamente debitada para a modalidade escolhida.
-  const carteiraResolvida = pricing.grupo
-    ? resolverCarteira(
-        balance,
-        pricing.grupo,
-        pricing.modalidadeEscolhida,
-        valorPedido,
-      )
-    : null;
-
-  // Disponibilidade por modalidade (plano cobre só padrão; express só com saldo Express).
-  const carteiraPadrao = pricing.grupo
-    ? resolverCarteira(balance, pricing.grupo, "padrao", pricing.precoPadrao ?? 0)
-    : null;
-  const padraoDisponivel =
-    !!carteiraPadrao && carteiraPadrao.saldo >= (pricing.precoPadrao ?? 0);
-  const expressDisponivel =
-    pricing.precoExpress !== null &&
-    !!carteiraResolvida &&
-    pricing.modalidadeEscolhida === "express"
-      ? carteiraResolvida.saldo >= (pricing.precoExpress ?? 0)
-      : pricing.precoExpress !== null &&
-        ((pricing.grupo === "A" && balance.saldoPeticaoExpress >= pricing.precoExpress) ||
-          (pricing.grupo === "B" && balance.saldoRecursoExpress >= pricing.precoExpress));
-
-  const saldoCarteira = carteiraResolvida?.saldo ?? 0;
+  // Saldo agregado vem do backend (única fonte de verdade). A decisão
+  // final de "pode criar pedido?" é sempre do backend em
+  // _assert_sufficient_balance — aqui só sinalizamos a UI.
+  const saldoCarteira = balance.saldoCents;
   const saldoApos = saldoCarteira - valorPedido;
-  const semSaldo =
-    tipoReconhecido && (!carteiraResolvida || carteiraResolvida.saldo < valorPedido);
+  const semSaldo = tipoReconhecido && saldoCarteira < valorPedido;
 
-  // Mensagem específica de bloqueio conforme a regra violada.
+  const padraoDisponivel = balance.saldoCents >= (pricing.precoPadrao ?? 0);
+  const expressDisponivel =
+    pricing.precoExpress !== null && balance.saldoCents >= (pricing.precoExpress ?? 0);
+
+  // Carteira é sempre "agregada" — backend não mantém separação por tipo.
+  const carteiraResolvida = pricing.grupo
+    ? { wallet: "agregado" as const, saldo: balance.saldoCents }
+    : null;
+  const carteiraPadrao = carteiraResolvida;
+
   const mensagemBloqueio = (() => {
     if (!tipoReconhecido) return null;
-    if (pricing.modalidadeEscolhida === "express") {
-      if (pricing.grupo === "A" && balance.saldoPeticaoExpress < (pricing.precoExpress ?? 0)) {
-        return "Você não possui saldo de Petição Express. Adquira esse crédito para continuar.";
-      }
-      if (pricing.grupo === "B" && balance.saldoRecursoExpress < (pricing.precoExpress ?? 0)) {
-        return "Você não possui saldo de Recurso Express. Adquira esse crédito para continuar.";
-      }
-    } else if (semSaldo) {
-      // Padrão sem saldo: distinguir cliente só com plano tentando express vs sem saldo geral.
-      return "Saldo insuficiente para esse serviço. Adquira o crédito correspondente para continuar.";
+    if (semSaldo) {
+      return "Saldo insuficiente. Adicione créditos para continuar.";
     }
     return null;
   })();
@@ -1063,7 +1036,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                             </div>
                             {carteiraPadrao && (
                               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                                Debita do {carteiraPadrao.plano ? `saldo do ${LABEL_PLANO[carteiraPadrao.plano.tipo]}` : WALLET_LABEL[carteiraPadrao.wallet]}
+                                Debita do {WALLET_LABEL[carteiraPadrao.wallet]}
                               </div>
                             )}
                             {!padraoDisponivel && (
@@ -1176,7 +1149,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                             Será debitado do
                           </span>
                           <span className="font-medium">
-                            {carteiraResolvida.plano ? `saldo do ${LABEL_PLANO[carteiraResolvida.plano.tipo]}` : WALLET_LABEL[carteiraResolvida.wallet]}
+                            {WALLET_LABEL[carteiraResolvida.wallet]}
                           </span>
                         </div>
                       )}

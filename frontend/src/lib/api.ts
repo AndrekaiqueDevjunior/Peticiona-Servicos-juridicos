@@ -19,6 +19,7 @@ export interface AuthUser {
   neighborhood: string | null;
   city: string | null;
   state: string | null;
+  active_plan_id?: number | null;
   created_at?: string;
 }
 

@@ -292,19 +292,44 @@ export const calcularPrecoPedido = (
   };
 };
 
-import { useBalance, planoEmUso } from "@/lib/balance";
+import { useBalance } from "@/lib/balance";
+import { useAuth } from "@/lib/auth";
 
+/**
+ * Perfil do cliente para o cálculo de preço.
+ * - `plano`: vem do backend via /api/me (user.active_plan_id resolvido em
+ *   alias). Quando o usuário NÃO tem plano, fica null.
+ * - Disponibilidade Express: o backend não separa por carteira; a decisão
+ *   final é tomada lá em _assert_sufficient_balance ao criar o pedido.
+ *   Aqui usamos "saldo cobre o preço Express?" como pista de UI; um
+ *   eventual erro do backend (saldo insuficiente) é mostrado por toast.
+ */
 export const useUserPricingProfile = () => {
   usePricingCatalog({ includeCatalog: true });
   const balance = useBalance();
-  const ativo = planoEmUso(balance);
+  const { user } = useAuth();
+  const planoCode = resolvePlanFromUser(user?.active_plan_id ?? null);
   const profile: UserPricingProfile = {
-    plano: ativo?.tipo ?? null,
-    // Express só fica "disponível" quando há saldo Express comprado.
-    peticaoExpressDisponivel: balance.saldoPeticaoExpress > 0,
-    recursoExpressDisponivel: balance.saldoRecursoExpress > 0,
+    plano: planoCode,
+    peticaoExpressDisponivel: balance.saldoCents > 0,
+    recursoExpressDisponivel: balance.saldoCents > 0,
   };
   return { data: profile } as { data: UserPricingProfile };
+};
+
+/** Mapeia o id do plano (que é mero foreign key) para o bucket usado pelo
+ *  cálculo de preço. Como a tabela de planos canônicos hoje usa códigos
+ *  estáveis (plano_essencial / plano_profissional / plano_estrategico),
+ *  o backend retorna o id; aqui só falamos "tem plano" / "sem plano" e
+ *  caímos em "essencial" por default quando há plano (preço Express usa
+ *  esse bucket apenas como referência de UI). */
+const resolvePlanFromUser = (
+  activePlanId: number | null,
+): UserPricingProfile["plano"] => {
+  if (activePlanId == null) return null;
+  // Sem informação detalhada do plano, assumimos "essencial" como base
+  // segura — o preço final é sempre confirmado pelo backend no preview.
+  return "essencial";
 };
 
 export const formatBRL = (v: number) =>
