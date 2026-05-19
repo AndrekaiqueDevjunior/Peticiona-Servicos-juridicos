@@ -16,7 +16,8 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { ApiError, api } from "@/lib/api";
-import type { CheckoutOrderType } from "@/lib/api";
+import type { CheckoutOrderType, ClientOrder } from "@/lib/api";
+import { EditOrderDialog as PetitionOrderDialog } from "@/components/client/EditOrderDialog";
 import {
   STATUS_LABEL,
   STATUS_TONE,
@@ -95,7 +96,16 @@ export default function Orders() {
     queryFn: () => api.clientArea.checkoutOrders(),
   });
 
+  const { data: serviceOrdersData, isLoading: isLoadingServiceOrders } = useQuery({
+    queryKey: ["client-service-orders"],
+    queryFn: () => api.clientArea.orders(),
+  });
+
   const orders = useMemo(() => ordersData?.orders ?? [], [ordersData?.orders]);
+  const serviceOrders = useMemo(
+    () => serviceOrdersData?.orders ?? [],
+    [serviceOrdersData?.orders],
+  );
   const [statusFiltro, setStatusFiltro] = useState("todos");
   const [dataInicio, setDataInicio] = useState<Date | undefined>();
   const [dataFim, setDataFim] = useState<Date | undefined>();
@@ -103,6 +113,37 @@ export default function Orders() {
   const [viewOrder, setViewOrder] = useState<CheckoutOrderType | null>(null);
   const [editOrder, setEditOrder] = useState<CheckoutOrderType | null>(null);
   const [cancelOrder, setCancelOrder] = useState<CheckoutOrderType | null>(null);
+  const [petitionOrder, setPetitionOrder] = useState<ClientOrder | null>(null);
+
+  const updatePetitionMutation = useMutation({
+    mutationFn: (payload: { id: number; data: Parameters<typeof api.clientArea.updateOrder>[1] }) =>
+      api.clientArea.updateOrder(payload.id, payload.data),
+    onSuccess: ({ order }) => {
+      toast({ title: "Pedido atualizado", description: "As alterações foram salvas." });
+      setPetitionOrder(order);
+      queryClient.invalidateQueries({ queryKey: ["client-service-orders"] });
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiError ? err.message : "Não foi possível salvar.";
+      toast({ title: "Erro ao salvar", description: msg, variant: "destructive" });
+    },
+  });
+
+  const uploadDocsToOrder = async (orderId: number, files: File[]) => {
+    try {
+      const res = await api.clientArea.uploadOrderDocuments(orderId, files);
+      toast({
+        title: "Documentos anexados",
+        description: `${res.documents.length} arquivo(s) adicionado(s) ao pedido.`,
+      });
+      const refreshed = await api.clientArea.getOrder(orderId);
+      setPetitionOrder(refreshed.order);
+      queryClient.invalidateQueries({ queryKey: ["client-service-orders"] });
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : "Falha no envio.";
+      toast({ title: "Erro ao anexar", description: msg, variant: "destructive" });
+    }
+  };
 
   const statusOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -155,6 +196,67 @@ export default function Orders() {
           Meus pedidos
         </h1>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-xl">Pedidos com petição</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoadingServiceOrders ? (
+            <div className="space-y-3 p-6">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          ) : serviceOrders.length === 0 ? (
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Você ainda não tem pedidos com petição vinculada. Use o botão "Novo pedido" para começar.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {serviceOrders.map((order) => (
+                <li
+                  key={order.id}
+                  className="flex flex-col gap-3 px-6 py-4 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-md bg-secondary p-2">
+                      <FileText className="h-4 w-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">
+                        {order.petition?.tipo_peticao || order.petition?.area_direito || `Pedido #${order.id}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Ref: {order.reference}
+                        {" · "}
+                        {format(parseISO(order.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                        {" · "}
+                        {order.total_brl}
+                        {order.petition?.documents?.length
+                          ? ` · ${order.petition.documents.length} documento(s)`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
+                      {order.status_label || order.status}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPetitionOrder(order)}
+                    >
+                      <Pencil className="mr-1.5 h-4 w-4" />
+                      Abrir
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
@@ -311,6 +413,20 @@ export default function Orders() {
         order={editOrder}
         onClose={() => setEditOrder(null)}
         onUpdated={() => queryClient.invalidateQueries({ queryKey: ["client-checkout-orders"] })}
+      />
+      <PetitionOrderDialog
+        order={petitionOrder}
+        open={!!petitionOrder}
+        onOpenChange={(open) => !open && setPetitionOrder(null)}
+        isSubmitting={updatePetitionMutation.isPending}
+        onSave={(data) => {
+          if (!petitionOrder) return;
+          updatePetitionMutation.mutate({ id: petitionOrder.id, data });
+        }}
+        onUploadDocuments={async (files) => {
+          if (!petitionOrder) return;
+          await uploadDocsToOrder(petitionOrder.id, files);
+        }}
       />
       <AlertDialog open={!!cancelOrder} onOpenChange={(open) => !open && setCancelOrder(null)}>
         <AlertDialogContent>

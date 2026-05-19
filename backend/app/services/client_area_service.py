@@ -494,6 +494,54 @@ def upload_documents(user, files) -> tuple[dict, int]:
     }, 201
 
 
+def attach_order_documents(user, order_id: object, files) -> tuple[dict, int]:
+    """Faz upload de documentos e vincula à petição do pedido do cliente.
+
+    Reaproveita upload_documents para criar Document records (e gravar os
+    bytes), depois cria PetitionDocumentLink ligando cada documento à
+    petição associada ao ServiceOrder do próprio cliente.
+    """
+    if not files:
+        raise ValidationError("Envie ao menos um documento.")
+
+    order = _scoped_client_order(user, order_id)
+    if order.petition_id is None:
+        raise ValidationError("Este pedido não possui petição associada.")
+
+    payload, status = upload_documents(user, files)
+    documents = payload.get("documents", [])
+    if not documents:
+        return payload, status
+
+    document_ids = [doc["id"] for doc in documents]
+    for doc_id in document_ids:
+        existing = PetitionDocumentLink.query.filter_by(
+            petition_id=order.petition_id, document_id=doc_id
+        ).first()
+        if existing is None:
+            db.session.add(
+                PetitionDocumentLink(
+                    petition_id=order.petition_id,
+                    document_id=doc_id,
+                    company_id=getattr(user, "company_id", None),
+                )
+            )
+    log_action(
+        action="order.documents_attached_by_client",
+        entity_type="service_order",
+        entity_id=order.id,
+        user=user,
+        metadata={"order_reference": order.reference, "document_ids": document_ids},
+    )
+    db.session.commit()
+
+    return {
+        "message": "Documentos anexados ao pedido.",
+        "documents": documents,
+        "order": serialize_order(order),
+    }, 201
+
+
 def delete_document(user, document_id: object) -> dict:
     try:
         parsed_id = int(document_id)

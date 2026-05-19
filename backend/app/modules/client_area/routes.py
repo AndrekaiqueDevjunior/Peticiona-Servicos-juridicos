@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 
 from app.permissions import current_actor, roles_required
 from app.services.client_area_service import (
+    attach_order_documents,
     cancel_order,
     create_order,
     delete_document,
@@ -106,6 +107,16 @@ def delete_client_order(order_id: int):
 def upload_client_documents():
     actor = current_actor()
     payload, status = upload_documents(actor, request.files.getlist("documents"))
+    return jsonify(payload), status
+
+
+@client_area_bp.post("/orders/<int:order_id>/documents")
+@roles_required("client")
+def attach_client_order_documents(order_id: int):
+    actor = current_actor()
+    payload, status = attach_order_documents(
+        actor, order_id, request.files.getlist("documents")
+    )
     return jsonify(payload), status
 
 

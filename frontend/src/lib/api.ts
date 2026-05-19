@@ -644,6 +644,14 @@ export const api = {
         `/client-area/orders/${id}`,
         { method: "DELETE" },
       ),
+    uploadOrderDocuments: (orderId: number, files: File[]) => {
+      const form = new FormData();
+      files.forEach((file) => form.append("documents", file));
+      return request<{ message: string; documents: UploadedDocument[]; order: ClientOrder }>(
+        `/client-area/orders/${orderId}/documents`,
+        { method: "POST", body: form },
+      );
+    },
     deleteDocument: (documentId: number) =>
       request<{ deleted: boolean }>(`/client-area/documents/${documentId}`, {
         method: "DELETE",

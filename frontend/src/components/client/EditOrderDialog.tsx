@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarIcon,
   Download,
@@ -6,6 +6,7 @@ import {
   Eye,
   Loader2,
   Save,
+  UploadCloud,
   X,
   UserRound,
   Paperclip,
@@ -194,6 +195,9 @@ interface EditOrderDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (data: Record<string, unknown>) => void;
+  /** Upload de novos comprovantes para o pedido. Resolve com a lista
+   *  atualizada (ou void quando o pai vai refetch). */
+  onUploadDocuments?: (files: File[]) => Promise<void>;
   isSubmitting?: boolean;
 }
 
@@ -202,8 +206,23 @@ export function EditOrderDialog({
   open,
   onOpenChange,
   onSave,
+  onUploadDocuments,
   isSubmitting,
 }: EditOrderDialogProps) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFilesPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (event.target) event.target.value = "";
+    if (!files.length || !onUploadDocuments) return;
+    setUploading(true);
+    try {
+      await onUploadDocuments(files);
+    } finally {
+      setUploading(false);
+    }
+  };
   const petition = order?.petition ?? null;
   const canEdit = order?.status === "pendente";
   const statusCfg = order ? (STATUS_CONFIG[order.status] ?? null) : null;
@@ -419,9 +438,10 @@ export function EditOrderDialog({
                 </h3>
 
                 {canEdit && (
-                  <div className="flex gap-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <p>Os anexos não podem ser alterados aqui. Para enviar novos documentos, utilize a área de upload do pedido.</p>
+                  <div className="flex gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p>Você pode anexar comprovantes adicionais ao seu pedido na seção
+                      <strong> Documentos enviados </strong> abaixo.</p>
                   </div>
                 )}
 
@@ -472,22 +492,57 @@ export function EditOrderDialog({
               )}
 
               {/* ── Documentos ── */}
-              {!!petition.documents?.length && (
-                <>
-                  <Separator />
-                  <section className="space-y-3">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Documentos enviados</h3>
-                    <ul className="grid gap-2">
-                      {petition.documents.map((doc) => (
-                        <DocumentDownloadRow key={doc.id} doc={doc} />
-                      ))}
-                    </ul>
-                    <p className="text-xs text-muted-foreground">
-                      Clique no ícone de download para baixar o arquivo original.
-                    </p>
-                  </section>
-                </>
-              )}
+              <Separator />
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Documentos enviados
+                  </h3>
+                  {canEdit && onUploadDocuments && (
+                    <>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={handleFilesPicked}
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading || isSubmitting}
+                      >
+                        {uploading ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <UploadCloud className="mr-2 h-4 w-4" />
+                        )}
+                        {uploading ? "Enviando..." : "Adicionar comprovantes"}
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {petition.documents?.length ? (
+                  <ul className="grid gap-2">
+                    {petition.documents.map((doc) => (
+                      <DocumentDownloadRow key={doc.id} doc={doc} />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border bg-secondary/30 px-3 py-3 text-center text-xs text-muted-foreground">
+                    Nenhum documento anexado ainda.
+                    {canEdit && onUploadDocuments && " Clique em 'Adicionar comprovantes' para enviar."}
+                  </p>
+                )}
+                {petition.documents?.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    Clique no ícone de download para baixar o arquivo original.
+                  </p>
+                ) : null}
+              </section>
             </>
           )}
 
