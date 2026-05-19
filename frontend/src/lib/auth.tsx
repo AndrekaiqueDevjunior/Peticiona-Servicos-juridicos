@@ -1,5 +1,5 @@
 import { createContext, createElement, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, type AuthUser, type RegisterPayload } from "./api";
+import { api, ApiError, type AuthUser, type RegisterPayload } from "./api";
 import { mapBackendRole, setRole } from "./roles";
 
 interface AuthContextValue {
@@ -17,8 +17,10 @@ const USER_KEY = "auth_user";
 const TOKEN_KEY = "auth_token";
 
 // Onde mora o token determina a persistência:
-//  - localStorage  → "manter conectado" (sobrevive fechar o navegador, expira em 24h pela TTL do JWT)
-//  - sessionStorage → "só nesta aba" (limpa ao fechar a aba)
+//  - localStorage  → "manter conectado" (sobrevive fechar o navegador;
+//                    JWT expira em 30 dias quando login enviou remember=true)
+//  - sessionStorage → "só nesta aba" (limpa ao fechar a aba;
+//                    JWT expira em 24h quando login enviou remember=false)
 const loadStoredUser = (): AuthUser | null => {
   try {
     const raw = sessionStorage.getItem(USER_KEY) || localStorage.getItem(USER_KEY);
@@ -80,6 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRole(mapBackendRole(storedUser.role));
     }
 
+    // Importante: NÃO deslogamos por qualquer erro de /me. Só quando o backend
+    // afirma explicitamente que o token é inválido (401/403). Erros de rede,
+    // 5xx ou timeouts são tratados como transientes — o usuário continua na
+    // sessão (o token armazenado segue válido pelo TTL do JWT) e tentaremos
+    // sincronizar de novo na próxima navegação. Sem isso, qualquer 502
+    // momentâneo (ex.: deploy do backend) derruba sessões "manter conectado".
     let cancelled = false;
     void api.me
       .get()
@@ -90,9 +98,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRole(mapBackendRole(freshUser.role));
         setUser(freshUser);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return;
-        clearAuth();
+        const status = err instanceof ApiError ? err.status : null;
+        if (status === 401 || status === 403) {
+          clearAuth();
+        }
+        // Demais erros: mantém a sessão. O storedUser já está no estado.
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
