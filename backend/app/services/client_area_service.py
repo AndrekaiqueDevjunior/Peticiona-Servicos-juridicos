@@ -9,7 +9,17 @@ from app.core.errors import NotFoundError, ValidationError
 from app.core.extensions import db
 from app.core.security import ensure_allowed_document, ensure_upload_size, upload_folder
 from app.domain.permissions import scoped_query
-from app.models import Company, CreditTransaction, Document, Petition, PetitionDocumentLink, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
+from app.models import (
+    Company,
+    CreditTransaction,
+    Document,
+    Petition,
+    PetitionDocumentLink,
+    PetitionParty,
+    ServiceCatalogItem,
+    ServiceOrder,
+    ServiceOrderItem,
+)
 from app.services.audit_service import log_action
 from app.services.serializers import format_brl_from_cents, serialize_document, serialize_order
 
@@ -295,6 +305,34 @@ def update_order(user, order_id: object, payload: dict) -> dict:
             petition.justica_gratuita = bool(payload.get("justica_gratuita"))
         if "tutela_urgencia" in payload:
             petition.tutela_urgencia = bool(payload.get("tutela_urgencia"))
+
+        # Partes do processo — estratégia replace: o cliente envia o novo
+        # array completo e substituímos. Cada parte é validada (nome + tipo).
+        if "partes" in payload:
+            raw_partes = payload.get("partes")
+            if not isinstance(raw_partes, list):
+                raise ValidationError("Campo 'partes' deve ser uma lista.")
+            novas_partes: list[PetitionParty] = []
+            for idx, raw in enumerate(raw_partes, start=1):
+                if not isinstance(raw, dict):
+                    raise ValidationError(f"Parte #{idx} inválida.")
+                nome = str(raw.get("nome") or "").strip()
+                tipo = str(raw.get("tipo") or "").strip()
+                if not nome:
+                    raise ValidationError(f"Parte #{idx} sem nome.")
+                if not tipo:
+                    raise ValidationError(f"Parte #{idx} sem tipo (autor/réu/etc).")
+                novas_partes.append(
+                    PetitionParty(
+                        nome=nome[:160],
+                        tipo=tipo[:60],
+                        company_id=petition.company_id,
+                    )
+                )
+            # cascade="all, delete-orphan" no relacionamento parties cuida do
+            # delete: reatribuir a lista remove os antigos e insere os novos
+            # na mesma transação.
+            petition.parties = novas_partes
 
     log_action(
         action="order.updated_by_client",

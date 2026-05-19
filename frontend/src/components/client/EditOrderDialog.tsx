@@ -227,6 +227,8 @@ export function EditOrderDialog({
   const canEdit = order?.status === "pendente";
   const statusCfg = order ? (STATUS_CONFIG[order.status] ?? null) : null;
 
+  type PartyDraft = { nome: string; tipo: string };
+
   const initialForm = useMemo(() => ({
     deadline_at: order?.deadline_at ? parseISO(order.deadline_at) : undefined as Date | undefined,
     area_direito: petition?.area_direito || "",
@@ -238,6 +240,7 @@ export function EditOrderDialog({
     detalhes: petition?.detalhes || "",
     justica_gratuita: petition?.justica_gratuita ? "sim" : "nao",
     tutela_urgencia: petition?.tutela_urgencia ? "sim" : "nao",
+    partes: (petition?.partes ?? []).map((p) => ({ nome: p.nome, tipo: p.tipo })) as PartyDraft[],
   }), [petition, order]);
 
   const [formData, setFormData] = useState(initialForm);
@@ -248,6 +251,32 @@ export function EditOrderDialog({
 
   const handleChange = (field: string, value: unknown) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const updateParte = (index: number, field: "nome" | "tipo", value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      partes: prev.partes.map((p, i) => (i === index ? { ...p, [field]: value } : p)),
+    }));
+  };
+
+  const addParte = () => {
+    setFormData((prev) => ({
+      ...prev,
+      partes: [...prev.partes, { nome: "", tipo: "autor" }],
+    }));
+  };
+
+  const removeParte = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      partes: prev.partes.filter((_, i) => i !== index),
+    }));
+  };
+
+  const partesMudaram = (current: PartyDraft[], original: PartyDraft[]) => {
+    if (current.length !== original.length) return true;
+    return current.some((p, i) => p.nome !== original[i].nome || p.tipo !== original[i].tipo);
   };
 
   const handleSave = () => {
@@ -267,6 +296,14 @@ export function EditOrderDialog({
       if (formData.detalhes !== (petition.detalhes || "")) data.detalhes = formData.detalhes;
       if (formData.justica_gratuita !== (petition.justica_gratuita ? "sim" : "nao")) data.justica_gratuita = formData.justica_gratuita === "sim";
       if (formData.tutela_urgencia !== (petition.tutela_urgencia ? "sim" : "nao")) data.tutela_urgencia = formData.tutela_urgencia === "sim";
+
+      const originalPartes = (petition.partes ?? []).map((p) => ({ nome: p.nome, tipo: p.tipo }));
+      const cleanPartes = formData.partes
+        .map((p) => ({ nome: p.nome.trim(), tipo: p.tipo.trim() }))
+        .filter((p) => p.nome.length > 0);
+      if (partesMudaram(cleanPartes, originalPartes)) {
+        data.partes = cleanPartes;
+      }
     }
     onSave(data);
   };
@@ -471,25 +508,90 @@ export function EditOrderDialog({
               </section>
 
               {/* ── Partes ── */}
-              {!!petition.partes?.length && (
-                <>
-                  <Separator />
-                  <section className="space-y-3">
-                    <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Partes</h3>
+              <Separator />
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                    Partes do processo
+                  </h3>
+                  {canEdit && (
+                    <Button type="button" variant="outline" size="sm" onClick={addParte}>
+                      <UserRound className="mr-2 h-4 w-4" />
+                      Adicionar parte
+                    </Button>
+                  )}
+                </div>
+                {canEdit ? (
+                  formData.partes.length === 0 ? (
+                    <p className="rounded-md border border-dashed border-border bg-secondary/30 px-3 py-3 text-center text-xs text-muted-foreground">
+                      Nenhuma parte cadastrada. Clique em "Adicionar parte".
+                    </p>
+                  ) : (
                     <ul className="grid gap-2">
-                      {petition.partes.map((parte, i) => (
-                        <li key={`${parte.nome}-${i}`} className="flex items-center gap-3 rounded-md bg-secondary/50 px-3 py-2">
-                          <UserRound className="h-4 w-4 text-primary" />
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{parte.nome}</p>
-                            <p className="text-xs text-muted-foreground">{parte.tipo}</p>
-                          </div>
+                      {formData.partes.map((parte, i) => (
+                        <li
+                          key={i}
+                          className="grid grid-cols-1 items-center gap-2 rounded-md border border-border bg-card px-3 py-2 sm:grid-cols-[1fr_180px_auto]"
+                        >
+                          <Input
+                            placeholder="Nome completo da parte"
+                            value={parte.nome}
+                            onChange={(e) => updateParte(i, "nome", e.target.value)}
+                          />
+                          <Select
+                            value={parte.tipo}
+                            onValueChange={(v) => updateParte(i, "tipo", v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Tipo" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="autor">Autor</SelectItem>
+                              <SelectItem value="reu">Réu</SelectItem>
+                              <SelectItem value="terceiro_interessado">Terceiro interessado</SelectItem>
+                              <SelectItem value="litisconsorte">Litisconsorte</SelectItem>
+                              <SelectItem value="assistente">Assistente</SelectItem>
+                              <SelectItem value="opoente">Opoente</SelectItem>
+                              <SelectItem value="agravante">Agravante</SelectItem>
+                              <SelectItem value="agravado">Agravado</SelectItem>
+                              <SelectItem value="apelante">Apelante</SelectItem>
+                              <SelectItem value="apelado">Apelado</SelectItem>
+                              <SelectItem value="recorrente">Recorrente</SelectItem>
+                              <SelectItem value="recorrido">Recorrido</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeParte(i)}
+                            aria-label={`Remover parte ${i + 1}`}
+                            title="Remover parte"
+                          >
+                            <X className="h-4 w-4 text-destructive" />
+                          </Button>
                         </li>
                       ))}
                     </ul>
-                  </section>
-                </>
-              )}
+                  )
+                ) : !petition.partes?.length ? (
+                  <p className="rounded-md border border-dashed border-border bg-secondary/30 px-3 py-3 text-center text-xs text-muted-foreground">
+                    Nenhuma parte cadastrada.
+                  </p>
+                ) : (
+                  <ul className="grid gap-2">
+                    {petition.partes.map((parte, i) => (
+                      <li key={`${parte.nome}-${i}`} className="flex items-center gap-3 rounded-md bg-secondary/50 px-3 py-2">
+                        <UserRound className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{parte.nome}</p>
+                          <p className="text-xs text-muted-foreground">{parte.tipo}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
               {/* ── Documentos ── */}
               <Separator />
@@ -531,11 +633,45 @@ export function EditOrderDialog({
                       <DocumentDownloadRow key={doc.id} doc={doc} />
                     ))}
                   </ul>
-                ) : (
-                  <p className="rounded-md border border-dashed border-border bg-secondary/30 px-3 py-3 text-center text-xs text-muted-foreground">
-                    Nenhum documento anexado ainda.
-                    {canEdit && onUploadDocuments && " Clique em 'Adicionar comprovantes' para enviar."}
-                  </p>
+                ) : null}
+                {canEdit && onUploadDocuments && (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => !uploading && fileInputRef.current?.click()}
+                    onKeyDown={(e) => {
+                      if ((e.key === "Enter" || e.key === " ") && !uploading) {
+                        fileInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const files = Array.from(e.dataTransfer.files ?? []);
+                      if (!files.length || uploading || !onUploadDocuments) return;
+                      setUploading(true);
+                      onUploadDocuments(files).finally(() => setUploading(false));
+                    }}
+                    className={cn(
+                      "flex cursor-pointer flex-col items-center gap-2 rounded-md border-2 border-dashed border-border bg-secondary/30 p-6 text-center text-sm transition-colors",
+                      uploading ? "opacity-60" : "hover:border-primary hover:bg-secondary/50",
+                    )}
+                  >
+                    {uploading ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    ) : (
+                      <UploadCloud className="h-6 w-6 text-primary" />
+                    )}
+                    <p className="font-medium text-foreground">
+                      {uploading ? "Enviando arquivos..." : "Clique para anexar ou arraste os arquivos"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      PDF, DOCX e imagens · até 50 MB por arquivo · múltiplos arquivos
+                    </p>
+                  </div>
                 )}
                 {petition.documents?.length ? (
                   <p className="text-xs text-muted-foreground">
