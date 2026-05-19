@@ -13,6 +13,17 @@ const statusColor: Record<string, string> = {
   concluido: "bg-secondary text-foreground",
 };
 
+/** Saldo apresentado ao cliente: negativo vira R$ 0,00 (a divida ainda
+ *  existe no backend e fica visivel para a equipe administrativa). */
+const formatSaldoExibicao = (cents: number): string => {
+  const safe = Math.max(0, cents);
+  return (safe / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
+};
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { data, isLoading } = useQuery({
@@ -39,7 +50,11 @@ export default function Dashboard() {
     },
     {
       label: "Saldo Disponível",
-      value: `R$ ${balance?.credits_available ?? 0}`,
+      // Backend devolve credits_available em centavos e credits_available_brl
+      // já formatado em R$. Saldo negativo é exibido como R$ 0,00 para o
+      // cliente (decisão de UI) — o valor real continua acessível pelo admin
+      // via /admin/financial e por /api/me/balance no campo cents.
+      value: formatSaldoExibicao(balance?.credits_available_cents ?? balance?.credits_available ?? 0),
       icon: Wallet,
       color: "text-accent",
     },

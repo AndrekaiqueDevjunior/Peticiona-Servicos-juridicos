@@ -7,12 +7,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { BuyCreditsDialog } from "@/components/client/BuyCreditsDialog";
 import { api } from "@/lib/api";
 
+/** Saldo apresentado ao cliente: negativo vira R$ 0,00. A divida ainda
+ *  existe no backend (credits_available_cents) e fica visivel ao admin. */
+const formatSaldoExibicao = (cents: number | undefined): string => {
+  const safe = Math.max(0, cents ?? 0);
+  return (safe / 100).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
+};
+
 export default function Balance() {
   const [openBuy, setOpenBuy] = useState(false);
   const { data: balance, isLoading } = useQuery({
     queryKey: ["balance"],
     queryFn: () => api.me.balance(),
   });
+
+  const saldoExibido = formatSaldoExibicao(balance?.credits_available_cents);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -39,7 +52,7 @@ export default function Balance() {
               <Skeleton className="mt-3 h-12 w-48 bg-white/20" />
             ) : (
               <p className="mt-3 font-display text-5xl font-semibold">
-                {balance?.credits_available_brl ?? "R$ 0,00"}
+                {saldoExibido}
               </p>
             )}
             <p className="mt-1 text-sm opacity-80">
@@ -62,7 +75,7 @@ export default function Balance() {
           <CardContent className="space-y-3 text-sm">
             <SummaryRow
               label="Disponível"
-              value={balance?.credits_available_brl}
+              value={saldoExibido}
               isLoading={isLoading}
             />
             <SummaryRow
