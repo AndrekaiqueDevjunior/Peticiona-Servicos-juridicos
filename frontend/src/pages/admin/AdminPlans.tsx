@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { api, type AdminPlan, type AdminServiceCatalogItem } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { PriceInput } from "@/components/admin/PriceInput";
 
 export default function AdminPlans() {
   const { toast } = useToast();
@@ -293,33 +294,21 @@ export default function AdminPlans() {
                   value={plan.description ?? ""}
                   onChange={(value) => updatePlan(plan.id, "description", value)}
                 />
-                <Field
-                  label="Preco mensal (centavos)"
-                  type="number"
-                  value={String(plan.monthly_price_cents)}
-                  onChange={(value) => updatePlan(plan.id, "monthly_price_cents", Number(value) || 0)}
+                <PriceInput
+                  label="Preço mensal"
+                  valueCents={plan.monthly_price_cents}
+                  onChangeCents={(cents) => updatePlan(plan.id, "monthly_price_cents", cents)}
                 />
-                <Field
-                  label="Creditos mensais (centavos)"
-                  type="number"
-                  value={String(plan.monthly_credits_cents)}
-                  onChange={(value) => updatePlan(plan.id, "monthly_credits_cents", Number(value) || 0)}
+                <PriceInput
+                  label="Créditos mensais"
+                  valueCents={plan.monthly_credits_cents}
+                  onChangeCents={(cents) => updatePlan(plan.id, "monthly_credits_cents", cents)}
                 />
-                <Field
-                  label="Preco por servico (centavos)"
-                  type="number"
-                  value={
-                    plan.price_per_service_cents == null
-                      ? ""
-                      : String(plan.price_per_service_cents)
-                  }
-                  onChange={(value) =>
-                    updatePlan(
-                      plan.id,
-                      "price_per_service_cents",
-                      value === "" ? null : Number(value) || 0,
-                    )
-                  }
+                <PriceInput
+                  label="Preço por serviço"
+                  valueCents={plan.price_per_service_cents}
+                  onChangeCents={(cents) => updatePlan(plan.id, "price_per_service_cents", cents)}
+                  allowEmpty
                 />
                 <Field
                   label="Limite mensal de peticoes"
@@ -516,16 +505,16 @@ function CreatePlanDialog({
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [monthlyPrice, setMonthlyPrice] = useState("0");
-  const [monthlyCredits, setMonthlyCredits] = useState("0");
+  const [monthlyPriceCents, setMonthlyPriceCents] = useState(0);
+  const [monthlyCreditsCents, setMonthlyCreditsCents] = useState(0);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const reset = () => {
     setCode("");
     setName("");
-    setMonthlyPrice("0");
-    setMonthlyCredits("0");
+    setMonthlyPriceCents(0);
+    setMonthlyCreditsCents(0);
     setDescription("");
   };
 
@@ -539,13 +528,21 @@ function CreatePlanDialog({
       });
       return;
     }
+    if (monthlyPriceCents <= 0) {
+      toast({
+        title: "Preço inválido",
+        description: "Informe um preço maior que zero (ex.: 10 para R$ 10,00).",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       await api.admin.pricing.createPlan({
         code: code.trim(),
         name: name.trim(),
-        monthly_price_cents: Number(monthlyPrice) || 0,
-        monthly_credits_cents: Number(monthlyCredits) || 0,
+        monthly_price_cents: monthlyPriceCents,
+        monthly_credits_cents: monthlyCreditsCents > 0 ? monthlyCreditsCents : monthlyPriceCents,
         description: description.trim() || null,
         is_active: true,
       });
@@ -576,7 +573,8 @@ function CreatePlanDialog({
         <DialogHeader>
           <DialogTitle>Novo plano</DialogTitle>
           <DialogDescription>
-            Adicione um novo plano ao catálogo. Valores em centavos.
+            Adicione um novo plano ao catálogo. Informe os valores em reais
+            (ex.: 10 = R$ 10,00; 1500 = R$ 1.500,00).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
@@ -602,28 +600,22 @@ function CreatePlanDialog({
               />
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="new-plan-price">Preço mensal (centavos) *</Label>
-              <Input
-                id="new-plan-price"
-                type="number"
-                min="0"
-                value={monthlyPrice}
-                onChange={(e) => setMonthlyPrice(e.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="new-plan-credits">Créditos mensais (centavos)</Label>
-              <Input
-                id="new-plan-credits"
-                type="number"
-                min="0"
-                value={monthlyCredits}
-                onChange={(e) => setMonthlyCredits(e.target.value)}
-              />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PriceInput
+              id="new-plan-price"
+              label="Preço mensal"
+              valueCents={monthlyPriceCents}
+              onChangeCents={setMonthlyPriceCents}
+              required
+            />
+            <PriceInput
+              id="new-plan-credits"
+              label="Créditos mensais"
+              valueCents={monthlyCreditsCents}
+              onChangeCents={setMonthlyCreditsCents}
+              hint="Quanto vai entrar na carteira do cliente. Em branco = igual ao preço pago."
+              allowEmpty
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="new-plan-description">Descrição</Label>
@@ -666,7 +658,7 @@ function CreateServiceDialog({
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
   const [section, setSection] = useState("");
-  const [unitPrice, setUnitPrice] = useState("0");
+  const [unitPriceCents, setUnitPriceCents] = useState(0);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -674,7 +666,7 @@ function CreateServiceDialog({
     setCode("");
     setTitle("");
     setSection("");
-    setUnitPrice("0");
+    setUnitPriceCents(0);
     setDescription("");
   };
 
@@ -688,13 +680,21 @@ function CreateServiceDialog({
       });
       return;
     }
+    if (unitPriceCents <= 0) {
+      toast({
+        title: "Preço inválido",
+        description: "Informe um preço maior que zero (ex.: 10 para R$ 10,00).",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
     try {
       await api.admin.pricing.createService({
         code: code.trim(),
         title: title.trim(),
         section: section.trim(),
-        unit_price: Number(unitPrice) || 0,
+        unit_price: unitPriceCents,
         description: description.trim() || null,
         is_active: true,
       });
@@ -725,7 +725,8 @@ function CreateServiceDialog({
         <DialogHeader>
           <DialogTitle>Novo serviço avulso</DialogTitle>
           <DialogDescription>
-            Adicione um novo serviço avulso. Preço em centavos.
+            Adicione um novo serviço avulso. Informe o preço em reais
+            (ex.: 10 = R$ 10,00).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
@@ -761,18 +762,14 @@ function CreateServiceDialog({
               maxLength={120}
             />
           </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="new-svc-price">Preço unitário (centavos) *</Label>
-              <Input
-                id="new-svc-price"
-                type="number"
-                min="0"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
-                required
-              />
-            </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PriceInput
+              id="new-svc-price"
+              label="Preço unitário"
+              valueCents={unitPriceCents}
+              onChangeCents={setUnitPriceCents}
+              required
+            />
             <div className="grid gap-2">
               <Label htmlFor="new-svc-description">Descrição</Label>
               <Input

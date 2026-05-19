@@ -292,6 +292,7 @@ export interface AdminServiceCatalogItem {
   description: string | null;
   unit_price: number;
   unit_price_brl: string;
+  delivery_label: string | null;
   is_active: boolean;
 }
 
@@ -390,6 +391,7 @@ export interface CatalogItem {
   title: string;
   description: string | null;
   unit_price: number;
+  delivery_label?: string | null;
 }
 
 export interface CatalogSection {
@@ -896,7 +898,7 @@ export const api = {
         payload: Partial<
           Pick<
             AdminPlan,
-            "code" | "name" | "description" | "monthly_price_cents" | "monthly_credits_cents" | "petition_limit_monthly" | "price_per_service_cents" | "features" | "is_active"
+            "code" | "name" | "description" | "subtitle" | "monthly_price_cents" | "monthly_credits_cents" | "petition_limit_monthly" | "price_per_service_cents" | "features" | "benefits" | "is_active" | "is_highlighted" | "cta_label" | "delivery_label" | "badge" | "sort_order" | "credits_quantity" | "validity_days"
           >
         >,
       ) =>
@@ -921,7 +923,7 @@ export const api = {
       updateService: (
         id: number,
         payload: Partial<
-          Pick<AdminServiceCatalogItem, "code" | "section" | "title" | "description" | "unit_price" | "is_active">
+          Pick<AdminServiceCatalogItem, "code" | "section" | "title" | "description" | "unit_price" | "delivery_label" | "is_active">
         >,
       ) =>
         request<{ service: AdminServiceCatalogItem }>(`/admin/services/${id}`, {
