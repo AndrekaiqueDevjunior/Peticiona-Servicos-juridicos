@@ -201,8 +201,11 @@ export default function Checkout() {
   const [buyer, setBuyer] = useState<BuyerForm>({
     fullName: profile.fullName || user?.full_name || "",
     email: profile.email || user?.email || "",
-    cpf: profile.cpf || "",
-    phone: profile.phone || "",
+    // Fallback para user.cpf/phone (vindos do /api/me): o profile local é um
+    // mock keyed por id fixo "c1" — sem isso CPF/telefone ficam vazios mesmo
+    // quando o backend já tem esses dados do cliente.
+    cpf: profile.cpf || user?.cpf || "",
+    phone: profile.phone || user?.phone || "",
   });
   const [buyerErrors, setBuyerErrors] = useState<Partial<Record<keyof BuyerForm, string>>>({});
   const [billingAddress, setBillingAddress] = useState<BillingAddressForm>({
@@ -240,10 +243,26 @@ export default function Checkout() {
     setBuyer((prev) => ({
       fullName: prev.fullName || profile.fullName || user?.full_name || "",
       email: prev.email || profile.email || user?.email || "",
-      cpf: prev.cpf || profile.cpf || "",
-      phone: prev.phone || profile.phone || "",
+      cpf: prev.cpf || profile.cpf || user?.cpf || "",
+      phone: prev.phone || profile.phone || user?.phone || "",
     }));
   }, [profile, user]);
+
+  // Pré-preenche endereço de cobrança a partir do user (vem do /api/me).
+  // Pagar.me exige billing_address em pagamentos de cartão; melhor já trazer
+  // o cadastro para evitar que o usuário precise digitar tudo de novo.
+  useEffect(() => {
+    if (!user) return;
+    setBillingAddress((prev) => ({
+      zip_code: prev.zip_code || user.zip_code || "",
+      street: prev.street || user.street || "",
+      street_number: prev.street_number || user.street_number || "",
+      complement: prev.complement || user.address_complement || "",
+      neighborhood: prev.neighborhood || user.neighborhood || "",
+      city: prev.city || user.city || "",
+      state: prev.state || user.state || "",
+    }));
+  }, [user]);
 
   // ---------- Carregar/criar pedido ----------------------------------------
 
@@ -385,6 +404,16 @@ export default function Checkout() {
         errs[k] = issue.message;
       }
       setBuyerErrors(errs);
+      const missing = Object.entries(errs)
+        .map(([_field, msg]) => msg)
+        .filter(Boolean);
+      toast({
+        title: "Preencha os dados do comprador",
+        description: missing.length
+          ? missing.join(" · ")
+          : "Confira nome, e-mail, CPF e telefone.",
+        variant: "destructive",
+      });
       submittingRef.current = false;
       return;
     }
@@ -401,6 +430,12 @@ export default function Checkout() {
           nextBillingErrors[k] = issue.message;
         }
         setBillingErrors(nextBillingErrors);
+        const missing = Object.values(nextBillingErrors).filter(Boolean);
+        toast({
+          title: "Endereço de cobrança incompleto",
+          description: missing.length ? missing.join(" · ") : "Confira CEP, rua, número, bairro, cidade e UF.",
+          variant: "destructive",
+        });
         submittingRef.current = false;
         return;
       }
@@ -419,6 +454,12 @@ export default function Checkout() {
           nextCardErrors[k] = issue.message;
         }
         setCardErrors(nextCardErrors);
+        const missing = Object.values(nextCardErrors).filter(Boolean);
+        toast({
+          title: "Dados do cartão inválidos",
+          description: missing.length ? missing.join(" · ") : "Confira número, validade, CVV e nome do titular.",
+          variant: "destructive",
+        });
         submittingRef.current = false;
         return;
       }
