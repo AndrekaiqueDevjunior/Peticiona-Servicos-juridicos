@@ -75,11 +75,16 @@ def _service_name(service_id: str) -> str | None:
 
 
 def serialize_checkout_order(order: Order) -> dict:
+    # Usa _service_name (tolerante a is_active=False) com fallback para o
+    # próprio service_id. Importante para pedidos históricos que apontam
+    # para planos/serviços que foram desativados depois — antes a
+    # serialização quebrava com NotFoundError e o endpoint inteiro
+    # retornava 404, escondendo o histórico de pedidos do cliente.
     return {
         "id": str(order.id),
         "user_id": order.user_id,
         "service_id": order.service_id,
-        "service_name": _catalog_entry(order.service_id)[2],
+        "service_name": _service_name(order.service_id) or order.service_id,
         "amount": order.amount,
         "currency": order.currency,
         "status": order.status,
