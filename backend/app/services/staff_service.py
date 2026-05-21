@@ -44,6 +44,8 @@ def _scoped_staff_order(actor, order_id: object) -> ServiceOrder:
 
 
 def get_staff_profile(actor) -> dict:
+    # Inclui active_plan_id (sempre None pra staff) pra manter paridade
+    # com `serialize_user` e o tipo `AuthUser` do frontend.
     return {
         "id": actor.id,
         "full_name": actor.full_name,
@@ -61,6 +63,7 @@ def get_staff_profile(actor) -> dict:
         "neighborhood": actor.neighborhood,
         "city": actor.city,
         "state": actor.state,
+        "active_plan_id": getattr(actor, "active_plan_id", None),
         "is_active": actor.is_active,
         "created_at": actor.created_at.isoformat(),
     }

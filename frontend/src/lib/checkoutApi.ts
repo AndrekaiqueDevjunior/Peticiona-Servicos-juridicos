@@ -55,7 +55,12 @@ export interface CheckoutOrder {
   created_at: string;
   updated_at: string;
   paid_at: string | null;
-  /** Dados da cobrança ativa (PIX/boleto) para restaurar após refresh */
+  /** ISO de quando o crédito foi liberado ao saldo do cliente. Preenchido
+   *  pelo _release_order após o pagamento ser confirmado. */
+  released_at: string | null;
+  /** Dados da cobrança ativa (PIX/boleto) para restaurar após refresh.
+   *  Não é devolvido pelo backend atual — o frontend deriva localmente
+   *  quando refaz a cobrança. */
   active_payment?: ActivePayment | null;
 }
 

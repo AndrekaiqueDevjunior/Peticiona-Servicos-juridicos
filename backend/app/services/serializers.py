@@ -17,6 +17,14 @@ def format_brl_from_cents(value: int) -> str:
 
 
 def serialize_user(user) -> dict:
+    # active_plan_id é o que o frontend usa em useUserPricingProfile
+    # (lib/pricing.ts) pra decidir se o cliente tem plano ativo e qual
+    # preço aplicar. Antes este serializer não devolvia o campo, então
+    # o frontend SEMPRE tratava o cliente como "sem plano", caindo no
+    # preço de avulso mesmo quando o admin tinha vinculado plano via
+    # /admin/clients (que serializa por _serialize_client). O painel admin
+    # via "Plano Profissional ativo" e o cliente via "sem plano" — fonte
+    # silenciosa de mismatch.
     return {
         "id": user.id,
         "full_name": user.full_name,
@@ -35,6 +43,7 @@ def serialize_user(user) -> dict:
         "state": user.state,
         "role": user.role,
         "company_id": user.company_id,
+        "active_plan_id": getattr(user, "active_plan_id", None),
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat(),
         "created_at_label": user.created_at.strftime("%d/%m/%Y"),

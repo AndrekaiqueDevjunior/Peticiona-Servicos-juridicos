@@ -281,6 +281,10 @@ def _serialize_entry(entry: FinancialEntry) -> dict:
 
 
 def get_admin_profile(actor) -> dict:
+    # Mantém paridade com `serialize_user` (frontend tipa todo perfil
+    # de usuário como `AuthUser`, que inclui active_plan_id opcional).
+    # Para admin/staff o campo é sempre None mas precisa existir pra
+    # evitar undefined no consumidor.
     return {
         "id": actor.id,
         "full_name": actor.full_name,
@@ -298,6 +302,7 @@ def get_admin_profile(actor) -> dict:
         "neighborhood": actor.neighborhood,
         "city": actor.city,
         "state": actor.state,
+        "active_plan_id": getattr(actor, "active_plan_id", None),
         "is_active": actor.is_active,
         "created_at": actor.created_at.isoformat(),
         "created_at_label": _format_date(actor.created_at),
