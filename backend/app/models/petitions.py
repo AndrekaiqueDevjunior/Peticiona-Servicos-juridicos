@@ -15,6 +15,8 @@ class Petition(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     tipo_peticao = db.Column(db.String(160), nullable=True)
     numero_processo = db.Column(db.String(60), nullable=True)
     data_publicacao = db.Column(db.String(40), nullable=True)
+    competencia = db.Column(db.String(160), nullable=True)
+    comarca_uf = db.Column(db.String(120), nullable=True)
     justica_gratuita = db.Column(db.Boolean, nullable=False, default=False)
     tutela_urgencia = db.Column(db.Boolean, nullable=False, default=False)
     advogado_subscritor = db.Column(db.String(160), nullable=True)

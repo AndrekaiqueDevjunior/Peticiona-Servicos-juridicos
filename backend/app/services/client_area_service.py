@@ -162,8 +162,17 @@ def _public_company() -> Company:
     return company
 
 
-def _next_reference() -> str:
-    return f"ORD-{ServiceOrder.query.count() + 1:06d}"
+def _placeholder_order_reference() -> str:
+    """Placeholder único pra reference enquanto o INSERT acontece.
+
+    A reference humana definitiva (``ORD-NNNNNN``) é atribuída
+    *depois* do flush, derivada do ``order.id`` (atômico no banco).
+    Substitui o antigo ``_next_reference`` que usava
+    ``ServiceOrder.query.count() + 1`` e colidia sob concorrência.
+    """
+    from app.core.references import temporary_reference
+
+    return temporary_reference("ORD")
 
 
 def _parse_datetime(value: object, *, field_name: str) -> datetime | None:
@@ -291,6 +300,8 @@ def update_order(user, order_id: object, payload: dict) -> dict:
             "tipo_peticao",
             "numero_processo",
             "data_publicacao",
+            "competencia",
+            "comarca_uf",
             "advogado_subscritor",
             "resumo_caso",
             "detalhes",
@@ -346,12 +357,18 @@ def update_order(user, order_id: object, payload: dict) -> dict:
 
 
 def cancel_order(user, order_id: object) -> dict:
+    from app.services import credit_ledger
+
     order = _scoped_client_order(user, order_id)
     if order.status == "concluido":
         raise ValidationError("Pedidos concluídos não podem ser cancelados pelo cliente.")
     if order.status != "cancelado":
         order.status = "cancelado"
-        # Estornar créditos se houver débito associado ao pedido
+        # Estornar créditos se houver débito associado ao pedido.
+        # A idempotência do credit_ledger (chave estável por referência
+        # do pedido) substitui o LIKE %order.reference% por
+        # description que existia antes — agora o motor garante que
+        # cancelamentos duplicados não duplicam o estorno.
         if order.total_amount > 0:
             debit = (
                 CreditTransaction.query
@@ -359,29 +376,29 @@ def cancel_order(user, order_id: object) -> dict:
                     CreditTransaction.user_id == user.id,
                     CreditTransaction.source == "client_order",
                     CreditTransaction.type == "out",
-                    CreditTransaction.description.like(f"%{order.reference}%"),
+                    CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
                 )
                 .first()
             )
-            already_refunded = (
-                CreditTransaction.query
-                .filter(
-                    CreditTransaction.user_id == user.id,
-                    CreditTransaction.source == "client_order_refund",
-                    CreditTransaction.description.like(f"%{order.reference}%"),
-                )
-                .first()
-            )
-            if debit and not already_refunded:
-                db.session.add(
-                    CreditTransaction(
-                        user_id=user.id,
-                        company_id=getattr(user, "company_id", None),
-                        type="in",
-                        source="client_order_refund",
-                        amount=order.total_amount,
-                        description=f"Estorno — {order.reference}",
+            if debit is None:
+                # Fallback para pedidos legacy criados antes da migração
+                # pra credit_ledger — não tinham idempotency_key.
+                debit = (
+                    CreditTransaction.query
+                    .filter(
+                        CreditTransaction.user_id == user.id,
+                        CreditTransaction.source == "client_order",
+                        CreditTransaction.type == "out",
+                        CreditTransaction.description.like(f"%{order.reference}%"),
                     )
+                    .first()
+                )
+            if debit is not None:
+                credit_ledger.refund(
+                    debit,
+                    source="client_order_refund",
+                    description=f"Estorno — {order.reference}",
+                    idempotency_key=f"order-refund-{order.reference}",
                 )
         log_action(
             action="order.cancelled_by_client",
@@ -394,21 +411,15 @@ def cancel_order(user, order_id: object) -> dict:
     return {"deleted": True, "order": serialize_order(order)}
 
 
-def _assert_sufficient_balance(user, amount: int) -> None:
-    rows = (
-        db.session.query(CreditTransaction)
-        .filter(
-            CreditTransaction.user_id == user.id,
-        )
-        .with_for_update()
-        .all()
-    )
-    balance = sum(t.amount if t.type in ("in", "credit") else -t.amount for t in rows)
-    if balance < amount:
-        raise ValidationError(
-            f"Saldo insuficiente. Disponível: {format_brl_from_cents(max(0, balance))}. "
-            f"Necessário: {format_brl_from_cents(amount)}."
-        )
+# NOTA: _assert_sufficient_balance foi removido. O gate de saldo agora
+# vive em credit_ledger.debit() — único caminho garantido com:
+#   * advisory lock por user_id (Postgres) — sem race em débitos paralelos
+#   * leitura via compute_balance() (mesma regra que get_balance) — sem
+#     mais divergência de interpretação de 'type'
+#   * idempotência por idempotency_key — sem débito duplicado em replay
+# Toda a tradução de InsufficientBalance -> ValidationError fica no
+# callsite (create_order, _create_service_order_for_petition) porque a
+# camada de domínio do livro-razão não precisa conhecer ValidationError.
 
 
 def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
@@ -434,14 +445,13 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
 
     total_amount = preview["total_amount"]
 
-    if user is not None and total_amount > 0:
-        _assert_sufficient_balance(user, total_amount)
+    from app.core.references import human_reference
 
     order = ServiceOrder(
         user_id=getattr(user, "id", None),
         petition_id=petition_id,
         company_id=company_id,
-        reference=_next_reference(),
+        reference=_placeholder_order_reference(),
         status="pendente",
         total_amount=total_amount,
     )
@@ -450,6 +460,8 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
         order.deadline_at = _parse_datetime(deadline_at, field_name="deadline_at")
 
     db.session.add(order)
+    db.session.flush()
+    order.reference = human_reference("ORD", order.id)
     db.session.flush()
 
     for item in preview["items"]:
@@ -466,17 +478,22 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
         )
 
     if user is not None and total_amount > 0:
+        from app.services import credit_ledger
+
         service_title = preview["items"][0]["title"] if preview["items"] else "Serviço"
-        db.session.add(
-            CreditTransaction(
-                user_id=user.id,
-                company_id=getattr(user, "company_id", None),
-                type="out",
-                source="client_order",
+        try:
+            credit_ledger.debit(
+                user,
                 amount=total_amount,
+                source="client_order",
                 description=f"Débito — {order.reference} ({service_title})",
+                idempotency_key=f"order-debit-{order.reference}",
             )
-        )
+        except credit_ledger.InsufficientBalance as exc:
+            raise ValidationError(
+                f"Saldo insuficiente. Disponível: {format_brl_from_cents(max(0, exc.available))}. "
+                f"Necessário: {format_brl_from_cents(exc.required)}."
+            ) from exc
 
     log_action(
         action="order.created",

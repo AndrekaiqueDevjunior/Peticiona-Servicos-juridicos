@@ -256,17 +256,19 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   // Saldo agregado vem do backend (única fonte de verdade). A decisão
   // final de "pode criar pedido?" é sempre do backend em
   // _assert_sufficient_balance — aqui só sinalizamos a UI.
-  const saldoCarteira = balance.saldoCents;
+  // balance.saldoCents está em centavos; pricing.* trabalha em reais
+  // (ver roundCurrency em lib/pricing.ts), então normalizamos para reais.
+  const saldoCarteira = balance.saldoCents / 100;
   const saldoApos = saldoCarteira - valorPedido;
   const semSaldo = tipoReconhecido && saldoCarteira < valorPedido;
 
-  const padraoDisponivel = balance.saldoCents >= (pricing.precoPadrao ?? 0);
+  const padraoDisponivel = saldoCarteira >= (pricing.precoPadrao ?? 0);
   const expressDisponivel =
-    pricing.precoExpress !== null && balance.saldoCents >= (pricing.precoExpress ?? 0);
+    pricing.precoExpress !== null && saldoCarteira >= (pricing.precoExpress ?? 0);
 
   // Carteira é sempre "agregada" — backend não mantém separação por tipo.
   const carteiraResolvida = pricing.grupo
-    ? { wallet: "agregado" as const, saldo: balance.saldoCents }
+    ? { wallet: "agregado" as const, saldo: saldoCarteira }
     : null;
   const carteiraPadrao = carteiraResolvida;
 

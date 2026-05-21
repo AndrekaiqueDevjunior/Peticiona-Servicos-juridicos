@@ -11,8 +11,16 @@ from app.services.audit_service import log_action
 from app.services.serializers import serialize_order, serialize_petition
 
 
-def _next_reference() -> str:
-    return f"PET-{Petition.query.count() + 1:06d}"
+def _placeholder_reference() -> str:
+    """Placeholder único pra reference enquanto o INSERT acontece.
+
+    A reference humana definitiva (``PET-NNNNNN``) é atribuída
+    *depois* do flush, derivada do ``petition.id`` (atômico no banco).
+    Ver app.core.references e o fluxo em ``create_petition``.
+    """
+    from app.core.references import temporary_reference
+
+    return temporary_reference("PET")
 
 
 def _validate_document_ids(user, document_ids: list[int]) -> list[Document]:
@@ -37,14 +45,18 @@ def create_petition(user, payload: dict) -> dict:
     ensure_plan_allows_new_petition(user)
     documents = _validate_document_ids(user, [int(item) for item in payload.get("document_ids", [])])
 
+    from app.core.references import human_reference
+
     petition = Petition(
         user_id=user.id,
         company_id=user.company_id,
-        reference=_next_reference(),
+        reference=_placeholder_reference(),
         area_direito=area_direito,
         tipo_peticao=(payload.get("tipo_peticao") or "").strip() or None,
         numero_processo=(payload.get("numero_processo") or "").strip() or None,
         data_publicacao=(payload.get("data_publicacao") or "").strip() or None,
+        competencia=(payload.get("competencia") or "").strip() or None,
+        comarca_uf=(payload.get("comarca_uf") or "").strip() or None,
         justica_gratuita=bool(payload.get("justica_gratuita")),
         tutela_urgencia=bool(payload.get("tutela_urgencia")),
         advogado_subscritor=(payload.get("advogado_subscritor") or "").strip() or None,
@@ -53,6 +65,10 @@ def create_petition(user, payload: dict) -> dict:
         status="pendente",
     )
     db.session.add(petition)
+    db.session.flush()
+    # Reference definitiva derivada do `id` atômico do banco — só agora
+    # é seguro montar a string humana sem race com requisições paralelas.
+    petition.reference = human_reference("PET", petition.id)
     db.session.flush()
 
     for party in parties:
@@ -101,12 +117,14 @@ def list_petitions(user) -> dict:
 
 
 def _create_service_order_for_petition(user, petition: Petition, payload: dict) -> ServiceOrder:
-    from app.models import CreditTransaction
+    from app.core.errors import ValidationError
+    from app.core.references import human_reference
+    from app.services import credit_ledger
     from app.services.client_area_service import (
-        _next_reference as next_order_reference,
+        _placeholder_order_reference,
         _preview_service_request,
-        _assert_sufficient_balance,
     )
+    from app.services.serializers import format_brl_from_cents
 
     preview = _preview_service_request(
         {
@@ -117,20 +135,18 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
         }
     )
 
-    # Validar saldo antes de criar o pedido
-    if preview["total_amount"] > 0 and user is not None:
-        _assert_sufficient_balance(user, preview["total_amount"])
-
     order = ServiceOrder(
         user_id=user.id,
         petition=petition,
         company_id=user.company_id,
-        reference=next_order_reference(),
+        reference=_placeholder_order_reference(),
         status="pendente",
         total_amount=preview["total_amount"],
         deadline_at=_parse_deadline(payload.get("deadline_at")),
     )
     db.session.add(order)
+    db.session.flush()
+    order.reference = human_reference("ORD", order.id)
     db.session.flush()
 
     for item in preview["items"]:
@@ -146,19 +162,26 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
             )
         )
 
-    # Debitar créditos do cliente
+    # Débito via credit_ledger: o gate de saldo, o advisory lock por
+    # usuário e a idempotência por (order.reference) são responsabilidade
+    # do módulo. Mantém a ordem antiga (sem cobrança em pedidos de valor
+    # zero) e converte InsufficientBalance em ValidationError com a
+    # mesma mensagem que a UI já estava acostumada a tratar.
     if preview["total_amount"] > 0 and user is not None:
         service_title = petition.tipo_peticao or petition.area_direito or "Serviço jurídico"
-        db.session.add(
-            CreditTransaction(
-                user_id=user.id,
-                company_id=getattr(user, "company_id", None),
-                type="out",
-                source="client_order",
+        try:
+            credit_ledger.debit(
+                user,
                 amount=preview["total_amount"],
+                source="client_order",
                 description=f"Débito — {order.reference} ({service_title})",
+                idempotency_key=f"order-debit-{order.reference}",
             )
-        )
+        except credit_ledger.InsufficientBalance as exc:
+            raise ValidationError(
+                f"Saldo insuficiente. Disponível: {format_brl_from_cents(max(0, exc.available))}. "
+                f"Necessário: {format_brl_from_cents(exc.required)}."
+            ) from exc
 
     log_action(
         action="order.created_from_petition",

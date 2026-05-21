@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ConflictError, NotFoundError, PaymentGatewayError, ValidationError
 from app.core.extensions import db
-from app.models import CreditTransaction, Order, PaymentEvent, Plan, ServiceCatalogItem
+from app.models import CreditTransaction, Order, PaymentEvent, Plan, ServiceCatalogItem, User
 from app.services.audit_service import log_action
 from app.services.pagarme_service import PagarmeClient
 
@@ -234,54 +234,64 @@ def _credit_amount_for_order(order: Order) -> int:
 
 
 def _release_order(order: Order) -> None:
+    """Quando um Order vira `paid`, libera o crédito ao saldo do cliente.
+
+    Usa `credit_ledger.credit` com `idempotency_key=f"checkout-{order.id}"`
+    — replay (ex.: webhook do Pagar.me chegando duas vezes) devolve a mesma
+    transação sem duplicar. Ordem com `amount=0` (pedido gratuito) só marca
+    `released_at` sem inserir nada no livro-razão.
+    """
+    from app.services import credit_ledger
+
     if order.status != "paid":
         return
     credit_amount = _credit_amount_for_order(order)
-    exists = CreditTransaction.query.filter_by(
-        user_id=order.user_id,
-        source="checkout",
-        description=f"Checkout #{order.id}",
-    ).first()
-    if not exists and credit_amount > 0:
-        db.session.add(
-            CreditTransaction(
-                user_id=order.user_id,
-                type="in",
-                source="checkout",
-                amount=credit_amount,
-                description=f"Checkout #{order.id}",
-                company_id=order.company_id,
-            )
+    if credit_amount > 0:
+        owner = order.user or db.session.get(User, order.user_id)
+        if owner is None:
+            logger.warning("release_order_owner_missing order_id=%s", order.id)
+            return
+        credit_ledger.credit(
+            owner,
+            amount=credit_amount,
+            source="checkout",
+            description=f"Checkout #{order.id}",
+            idempotency_key=f"checkout-{order.id}",
+            company_id=order.company_id,
         )
-        order.released_at = utcnow()
-    elif exists and order.released_at is None:
-        order.released_at = utcnow()
-    elif order.amount == 0 and order.released_at is None:
-        # Pedido gratuito: nada a creditar, mas marcamos como liberado.
-        order.released_at = utcnow()
+    order.released_at = order.released_at or utcnow()
 
 
 def _reverse_released_order(order: Order, *, reason: str) -> None:
+    """Estorna o crédito quando o gateway reembolsa um Order já liberado.
+
+    `allow_negative_balance=True`: se o cliente já gastou o crédito,
+    o saldo fica negativo e isso é registrado como dívida — não há
+    como o sistema recusar o estorno porque o dinheiro saiu da conta
+    da empresa, não do saldo interno.
+
+    Idempotência por `(order.id, reason)`: o mesmo motivo de estorno
+    chamado duas vezes não duplica; razões diferentes (refund parcial
+    seguido de cancelamento, por exemplo) geram registros distintos.
+    """
+    from app.services import credit_ledger
+
     credit_amount = _credit_amount_for_order(order)
     if not order.released_at or credit_amount <= 0:
         return
+    owner = order.user or db.session.get(User, order.user_id)
+    if owner is None:
+        logger.warning("reverse_released_order_owner_missing order_id=%s", order.id)
+        return
     description = f"Estorno Checkout #{order.id} ({reason})"
-    exists = CreditTransaction.query.filter_by(
-        user_id=order.user_id,
+    credit_ledger.debit(
+        owner,
+        amount=credit_amount,
         source="checkout_refund",
         description=description,
-    ).first()
-    if exists:
-        return
-    db.session.add(
-        CreditTransaction(
-            user_id=order.user_id,
-            type="out",
-            source="checkout_refund",
-            amount=credit_amount,
-            description=description,
-            company_id=order.company_id,
-        )
+        idempotency_key=f"checkout-refund-{order.id}-{reason}",
+        company_id=order.company_id,
+        allow_negative_balance=True,
     )
     order.released_at = None
 

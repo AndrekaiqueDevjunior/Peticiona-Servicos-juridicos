@@ -379,6 +379,20 @@ def _add_plan_columns() -> None:
             _execute(sql)
 
 
+def _add_petition_columns() -> None:
+    """Garante colunas opcionais (competencia/comarca_uf) na tabela petitions."""
+    if "petitions" not in _table_names():
+        return
+    columns = _column_names("petitions")
+    statements = {
+        "competencia": "ALTER TABLE petitions ADD COLUMN competencia VARCHAR(160)",
+        "comarca_uf": "ALTER TABLE petitions ADD COLUMN comarca_uf VARCHAR(120)",
+    }
+    for name, sql in statements.items():
+        if name not in columns:
+            _execute(sql)
+
+
 def _fix_petition_document_links_timestamps() -> None:
     """Corrige created_at e updated_at null em petition_document_links."""
     if "petition_document_links" not in _table_names():
@@ -415,6 +429,82 @@ def _normalize_credit_transaction_types() -> None:
         return
     _execute("UPDATE credit_transactions SET type = 'in' WHERE type = 'credit'")
     _execute("UPDATE credit_transactions SET type = 'out' WHERE type = 'debit'")
+
+
+def _harden_credit_transactions_schema() -> None:
+    """Reforça o schema de credit_transactions com idempotency_key + CHECKs.
+
+    Ordem importa:
+      1. Normaliza tipos legados (já feito por _normalize_credit_transaction_types).
+      2. Adiciona coluna idempotency_key (nullable; chaves só preenchidas em
+         escritas via credit_ledger).
+      3. Cria UNIQUE PARCIAL em idempotency_key (Postgres) ou UNIQUE comum
+         (SQLite — NULLs continuam distintos por padrão).
+      4. Adiciona CHECK constraints (Postgres apenas; SQLite só aceita CHECK
+         no CREATE TABLE, então depende do model em ambientes de teste).
+
+    É idempotente — pode rodar várias vezes sem efeito.
+    """
+    if "credit_transactions" not in _table_names():
+        return
+
+    cols = _column_names("credit_transactions")
+    if "idempotency_key" not in cols:
+        _execute("ALTER TABLE credit_transactions ADD COLUMN idempotency_key VARCHAR(128)")
+
+    if db.engine.dialect.name != "postgresql":
+        # SQLite (testes): a tabela é recriada por db.create_all() já com a
+        # CheckConstraint do modelo aplicada no CREATE TABLE — nada a fazer
+        # em runtime, já que SQLite não permite ALTER ... ADD CONSTRAINT.
+        return
+
+    # UNIQUE parcial para idempotency_key — só não-nulos
+    index_exists = db.session.execute(text(
+        "SELECT 1 FROM pg_indexes WHERE indexname = 'uq_credit_transactions_idempotency'"
+    )).fetchone()
+    if not index_exists:
+        _execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_credit_transactions_idempotency "
+            "ON credit_transactions (idempotency_key) "
+            "WHERE idempotency_key IS NOT NULL"
+        )
+
+    # CHECK constraints — somente Postgres. NOT VALID inicial pra não
+    # bloquear caso haja linha legacy fora do whitelist (apesar de termos
+    # acabado de normalizar). Validação plena pode ser feita por job de
+    # limpeza em outro momento.
+    type_check_exists = db.session.execute(text(
+        "SELECT 1 FROM pg_constraint WHERE conname = 'ck_credit_transactions_type'"
+    )).fetchone()
+    if not type_check_exists:
+        _execute(
+            "ALTER TABLE credit_transactions "
+            "ADD CONSTRAINT ck_credit_transactions_type "
+            "CHECK (type IN ('in','out')) NOT VALID"
+        )
+
+    amount_check_exists = db.session.execute(text(
+        "SELECT 1 FROM pg_constraint WHERE conname = 'ck_credit_transactions_amount_positive'"
+    )).fetchone()
+    if not amount_check_exists:
+        # Verifica primeiro se existe alguma linha com amount <= 0 antes de
+        # tentar VALIDATE — se houver, adiciona apenas como NOT VALID e loga
+        # alerta para limpeza manual.
+        bad_amount = db.session.execute(text(
+            "SELECT COUNT(*) FROM credit_transactions WHERE amount <= 0"
+        )).scalar() or 0
+        _execute(
+            "ALTER TABLE credit_transactions "
+            "ADD CONSTRAINT ck_credit_transactions_amount_positive "
+            "CHECK (amount > 0) NOT VALID"
+        )
+        if bad_amount:
+            logger.warning(
+                "credit_transactions tem %d linhas com amount <= 0 — "
+                "ck_credit_transactions_amount_positive ficou NOT VALID. "
+                "Limpe os registros antes de rodar VALIDATE.",
+                bad_amount,
+            )
 
 
 def _audit_users_missing_admin_fields() -> None:
@@ -572,8 +662,10 @@ def run_runtime_migrations() -> None:
     _add_credit_transaction_unique_constraint()
     _create_order_comments_table()
     _add_plan_columns()
+    _add_petition_columns()
     _fix_petition_document_links_timestamps()
     _normalize_credit_transaction_types()
+    _harden_credit_transactions_schema()
     _clear_orphan_order_debits()
     _backfill_missing_order_debits()
     _audit_users_missing_admin_fields()

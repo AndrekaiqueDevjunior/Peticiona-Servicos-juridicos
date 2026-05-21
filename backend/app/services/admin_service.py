@@ -77,8 +77,17 @@ def _validate_split(split_plataforma: int, split_funcionario: int) -> None:
         raise ValidationError("Split plataforma + split funcionário deve totalizar 100%.")
 
 
-def _next_order_reference() -> str:
-    return f"ADM-{ServiceOrder.query.count() + 1:06d}"
+def _placeholder_admin_order_reference() -> str:
+    """Placeholder único pra reference enquanto o INSERT acontece.
+
+    A reference humana definitiva (``ADM-NNNNNN``) é atribuída
+    *depois* do flush, derivada do ``order.id`` (atômico no banco).
+    Substitui ``_next_order_reference`` que usava
+    ``ServiceOrder.query.count() + 1`` e colidia sob concorrência.
+    """
+    from app.core.references import temporary_reference
+
+    return temporary_reference("ADM")
 
 
 def _scoped_user(actor, user_id: object, *, role: str | None = None) -> User:
@@ -372,11 +381,14 @@ def create_admin_order(actor, payload: dict) -> dict:
     staff_user = _scoped_user(actor, staff_user_id, role="staff") if staff_user_id else None
     total_amount = _to_int(payload.get("valor", 0), field_name="valor", minimum=0)
 
+    from app.core.references import human_reference
+
+    admin_provided_ref = str(payload.get("numero") or "").strip()
     order = ServiceOrder(
         user_id=client.id,
         company_id=client.company_id,
         staff_user_id=getattr(staff_user, "id", None),
-        reference=str(payload.get("numero") or _next_order_reference()).strip(),
+        reference=admin_provided_ref or _placeholder_admin_order_reference(),
         status=status,
         total_amount=total_amount,
         deadline_at=_parse_datetime(payload.get("prazo_cliente"), field_name="prazo_cliente"),
@@ -386,6 +398,11 @@ def create_admin_order(actor, payload: dict) -> dict:
     )
     db.session.add(order)
     db.session.flush()
+    # Quando o admin não informa "numero", o placeholder é substituído
+    # pela reference humana derivada do id já atômico.
+    if not admin_provided_ref:
+        order.reference = human_reference("ADM", order.id)
+        db.session.flush()
 
     service_title = str(payload.get("tipo_servico") or "Serviço administrativo").strip()
     db.session.add(
@@ -870,27 +887,23 @@ def create_financial_refund(actor, payload: dict) -> dict:
     db.session.add(entry)
     db.session.flush()
     
-    # Estornar créditos para o cliente
+    # Estornar créditos para o cliente. idempotency_key inclui o id do
+    # FinancialEntry recém-criado, então o mesmo lançamento de estorno
+    # nunca duplica o crédito — substitui o filtro por LIKE %order.reference%
+    # do código antigo, que falhava em estornos parciais sucessivos
+    # (mesma referência, valores distintos).
     if order.user_id and amount_cents > 0:
-        already_refunded = (
-            CreditTransaction.query
-            .filter(
-                CreditTransaction.user_id == order.user_id,
-                CreditTransaction.source == "admin_refund",
-                CreditTransaction.description.like(f"%{order.reference}%"),
-            )
-            .first()
-        )
-        if not already_refunded:
-            db.session.add(
-                CreditTransaction(
-                    user_id=order.user_id,
-                    company_id=order.company_id,
-                    type="in",
-                    source="admin_refund",
-                    amount=amount_cents,
-                    description=f"Estorno — {order.reference} ({reason})",
-                )
+        from app.services import credit_ledger
+
+        order_owner = db.session.get(User, order.user_id)
+        if order_owner is not None:
+            credit_ledger.credit(
+                order_owner,
+                amount=amount_cents,
+                source="admin_refund",
+                description=f"Estorno — {order.reference} ({reason})",
+                idempotency_key=f"admin-refund-{entry.id}",
+                company_id=order.company_id,
             )
     
     log_action(
@@ -1274,17 +1287,24 @@ def refund_credit_purchase(actor, purchase_id: object) -> dict:
     # Atualizar status da compra
     purchase.status = "refunded"
 
-    # Reverter créditos se já foram creditados
+    # Reverter créditos se já foram creditados.
+    # allow_negative_balance=True: se o cliente já gastou o crédito, o
+    # saldo fica negativo (dívida) — o reembolso veio do gateway externo,
+    # não do livro-razão, então não podemos recusar a baixa.
     if purchase.credited_at is not None:
-        reversal = CreditTransaction(
-            user_id=purchase.user_id,
-            company_id=purchase.company_id,
-            type="out",
-            source=purchase.source,
-            amount=purchase.credit_cents,
-            description=f"Estorno Pagar.me - {purchase.package_name} (#{purchase.code})",
-        )
-        db.session.add(reversal)
+        from app.services import credit_ledger
+
+        purchase_owner = db.session.get(User, purchase.user_id)
+        if purchase_owner is not None:
+            credit_ledger.debit(
+                purchase_owner,
+                amount=purchase.credit_cents,
+                source=purchase.source,
+                description=f"Estorno Pagar.me - {purchase.package_name} (#{purchase.code})",
+                idempotency_key=f"purchase-reversal-{purchase.id}",
+                company_id=purchase.company_id,
+                allow_negative_balance=True,
+            )
 
     log_action(
         action="admin.refund_credit_purchase",

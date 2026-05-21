@@ -59,6 +59,8 @@ def serialize_petition(petition) -> dict:
         "tipo_peticao": petition.tipo_peticao,
         "numero_processo": petition.numero_processo,
         "data_publicacao": petition.data_publicacao,
+        "competencia": getattr(petition, "competencia", None),
+        "comarca_uf": getattr(petition, "comarca_uf", None),
         "justica_gratuita": petition.justica_gratuita,
         "tutela_urgencia": petition.tutela_urgencia,
         "advogado_subscritor": petition.advogado_subscritor,

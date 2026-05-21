@@ -86,6 +86,8 @@ export interface Petition {
   tipo_peticao: string | null;
   numero_processo: string | null;
   data_publicacao: string | null;
+  competencia: string | null;
+  comarca_uf: string | null;
   justica_gratuita: boolean;
   tutela_urgencia: boolean;
   advogado_subscritor: string | null;
@@ -103,6 +105,8 @@ export interface PetitionPayload {
   tipo_peticao: string;
   numero_processo: string;
   data_publicacao: string;
+  competencia?: string;
+  comarca_uf?: string;
   justica_gratuita: boolean;
   tutela_urgencia: boolean;
   advogado_subscritor: string;

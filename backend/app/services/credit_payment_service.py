@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import timedelta
 from uuid import uuid4
@@ -9,11 +10,13 @@ from sqlalchemy import or_
 
 from app.core.errors import NotFoundError, RateLimitExceeded, ValidationError
 from app.core.extensions import db
-from app.models import CreditPurchase, CreditTransaction
+from app.models import CreditPurchase, CreditTransaction, User
 from app.models.base import utcnow
 from app.services.audit_service import log_action
 from app.services.pagarme_service import PagarmeClient
 from app.services.serializers import format_brl_from_cents
+
+logger = logging.getLogger(__name__)
 
 
 CREDIT_PACKAGES: dict[str, dict] = {
@@ -409,19 +412,39 @@ def _find_purchase_from_webhook(data: dict) -> CreditPurchase | None:
 
 
 def _credit_purchase(purchase: CreditPurchase, user) -> None:
+    """Credita o saldo do cliente após confirmação de pagamento Pagar.me.
+
+    Idempotente por `idempotency_key=f"credit-purchase-{purchase.id}"`:
+    o mesmo webhook chegando duas vezes (ou retry de processamento) não
+    duplica o crédito. A flag `purchase.credited_at` é mantida como
+    sentinela legacy — se já está preenchida, retornamos sem chamar o
+    ledger (rotina antiga continua válida).
+    """
     if purchase.credited_at is not None:
         return
 
-    transaction = CreditTransaction(
-        user_id=purchase.user_id,
-        company_id=purchase.company_id,
-        type="in",
-        source=purchase.source,
+    from app.services import credit_ledger
+
+    purchase_owner = db.session.get(User, purchase.user_id) if purchase.user_id else None
+    if purchase_owner is None:
+        # Sem dono associado, não há quem creditar — registra warning
+        # mas não derruba o fluxo de processamento do webhook.
+        logger.warning(
+            "credit_purchase_owner_missing purchase_id=%s user_id=%s",
+            purchase.id,
+            purchase.user_id,
+        )
+        return
+
+    credit_ledger.credit(
+        purchase_owner,
         amount=purchase.credit_cents,
+        source=purchase.source,
         description=f"Compra Pagar.me - {purchase.package_name}",
+        idempotency_key=f"credit-purchase-{purchase.id}",
+        company_id=purchase.company_id,
     )
     purchase.credited_at = utcnow()
-    db.session.add(transaction)
 
     log_action(
         action="credit_purchase.credited",
