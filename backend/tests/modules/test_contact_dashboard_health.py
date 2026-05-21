@@ -72,8 +72,11 @@ class TestContactForm:
     }
 
     def test_valid_contact_sends_admin_email(self, client, app, monkeypatch):
-        # admin email vem de config
+        # admin email + provider configurado (sem isso o service entra no
+        # DRY-RUN que pula o send_email — comportamento intencional pra
+        # dev sem credencial; aqui forçamos o caminho real).
         app.config["NOTIFICATION_EMAIL"] = "admin@peticiona.app.br"
+        monkeypatch.setitem(app.config, "SMTP_HOST", "smtp-dummy-for-tests")
         emails = capture_emails(monkeypatch, target_module=contact_service)
 
         response = client.post("/api/contact", json=self.VALID)
@@ -114,8 +117,10 @@ class TestContactForm:
         assert response.status_code == 503
 
     def test_email_delivery_failure_returns_503(self, client, app, monkeypatch):
-        """Se o backend de e-mail devolver False, a rota deve sinalizar erro."""
+        """Provider configurado mas send_email retorna False (rate limit,
+        DNS, etc.) — a rota deve sinalizar 503 pra UI pedir retry."""
         app.config["NOTIFICATION_EMAIL"] = "admin@peticiona.app.br"
+        monkeypatch.setitem(app.config, "SMTP_HOST", "smtp-dummy-for-tests")
 
         def _fail_send(**kwargs):
             return False
@@ -124,3 +129,23 @@ class TestContactForm:
 
         response = client.post("/api/contact", json=self.VALID)
         assert response.status_code == 503
+
+    def test_dry_run_without_provider_returns_200(self, client, app, monkeypatch, caplog):
+        """Sem provider configurado (RESEND/SENDGRID/SMTP), entra em modo
+        DRY-RUN: devolve sucesso pra UI e loga o conteúdo do formulário
+        no console. Antes, qualquer ambiente dev sem credencial devolvia
+        503 e quebrava a tela de contato."""
+        app.config["NOTIFICATION_EMAIL"] = "admin@peticiona.app.br"
+        for key in ("RESEND_API_KEY", "SENDGRID_API_KEY", "SMTP_HOST"):
+            monkeypatch.setitem(app.config, key, "")
+        emails = capture_emails(monkeypatch, target_module=contact_service)
+
+        with caplog.at_level("WARNING"):
+            response = client.post("/api/contact", json=self.VALID)
+
+        assert response.status_code == 200
+        # Nenhum send_email foi chamado (entra no dry-run antes)
+        assert emails == []
+        log_text = "\n".join(r.getMessage() for r in caplog.records)
+        assert "CONTACT DRY-RUN" in log_text
+        assert "Maria Cliente" in log_text

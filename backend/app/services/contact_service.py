@@ -13,6 +13,21 @@ from app.services.email_service import (
     send_email,
 )
 
+
+def _email_provider_configured() -> bool:
+    """True se algum provider (Resend/SendGrid/SMTP) tem credencial.
+
+    Em dev/test sem provider, o formulário entra em DRY-RUN: ainda
+    devolvemos sucesso pro usuário e logamos os campos no console pro
+    desenvolvedor enxergar. Sem isso, qualquer ambiente sem e-mail
+    configurado quebraria o formulário do site.
+    """
+    cfg = current_app.config
+    return any(
+        bool((cfg.get(key) or "").strip())
+        for key in ("RESEND_API_KEY", "SENDGRID_API_KEY", "SMTP_HOST")
+    )
+
 logger = logging.getLogger(__name__)
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -90,6 +105,20 @@ def process_contact(payload: dict) -> dict:
         message=data["message"],
         received_at=received_at,
     )
+
+    # Em DEV sem provider, registramos o conteúdo no log e seguimos com
+    # sucesso pra UI não quebrar. Em prod sempre tem provider, então não
+    # cai aqui — qualquer falha vira ContactDeliveryError(503) normalmente.
+    if not _email_provider_configured():
+        logger.warning(
+            "CONTACT DRY-RUN — nenhum provider configurado. "
+            "Mensagem de %s (%s) para %s:\n%s",
+            data["name"],
+            data["email"],
+            admin_to,
+            plain_body,
+        )
+        return {"message": "Mensagem enviada com sucesso."}
 
     admin_sent = send_email(
         to=admin_to,
