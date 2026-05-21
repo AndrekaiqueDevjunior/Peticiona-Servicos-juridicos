@@ -36,6 +36,14 @@ class User(BaseModel, TimestampMixin, db.Model):
     role = db.Column(db.String(20), nullable=False, default="client", index=True)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Lockout por força bruta no login. Gerenciado por auth_service.login_user:
+    # incrementa failed_login_attempts em cada senha errada; ao atingir o limite
+    # (LOGIN_MAX_ATTEMPTS), seta locked_until = now + janela de cooldown e
+    # rejeita login até a janela expirar. Login com sucesso ou reset de senha
+    # zeram esses campos.
+    failed_login_attempts = db.Column(db.Integer, nullable=False, default=0)
+    locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+
     company_id = db.Column(db.Integer, db.ForeignKey("companies.id"), nullable=True, index=True)
     active_plan_id = db.Column(db.Integer, db.ForeignKey("plans.id"), nullable=True)
 

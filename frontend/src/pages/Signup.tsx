@@ -54,10 +54,13 @@ const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
+  // Espelha app.core.password.validate_password_strength no backend.
+  // Backend é a fonte da verdade — esses checks só guiam o UX, mas
+  // precisam bater no mínimo pra evitar 400 surpresa no submit.
   const passwordChecks = useMemo(() => {
     const p = form.password;
     return {
-      length: p.length >= 8,
+      length: p.length >= 10,
       upper: /[A-Z]/.test(p),
       lower: /[a-z]/.test(p),
       number: /[0-9]/.test(p),
@@ -366,7 +369,7 @@ const Signup = () => {
                     </div>
                     <ul className="mt-1 grid gap-1 text-xs">
                       {[
-                        { ok: passwordChecks.length, label: "Mínimo 8 caracteres" },
+                        { ok: passwordChecks.length, label: "Mínimo 10 caracteres" },
                         { ok: passwordChecks.upper, label: "Pelo menos 1 letra maiúscula" },
                         { ok: passwordChecks.lower, label: "Pelo menos 1 letra minúscula" },
                         { ok: passwordChecks.number, label: "Pelo menos 1 número" },

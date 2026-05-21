@@ -19,9 +19,13 @@ const ResetPassword = () => {
   const [show, setShow] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Espelha app.core.password.validate_password_strength no backend.
+  // Mín 10 chars + mai/min/num/símbolo. Backend ainda valida blocklist
+  // de senhas comuns e similaridade com e-mail (não duplicamos aqui pra
+  // não sincronizar a lista; backend é a fonte da verdade).
   const checks = useMemo(
     () => ({
-      length: password.length >= 8,
+      length: password.length >= 10,
       upper: /[A-Z]/.test(password),
       lower: /[a-z]/.test(password),
       number: /[0-9]/.test(password),
@@ -137,7 +141,7 @@ const ResetPassword = () => {
                 {password.length > 0 && (
                   <ul className="grid gap-1 rounded-lg border border-border bg-muted/30 p-3 text-xs">
                     {[
-                      { ok: checks.length, label: "Mínimo 8 caracteres" },
+                      { ok: checks.length, label: "Mínimo 10 caracteres" },
                       { ok: checks.upper, label: "1 letra maiúscula" },
                       { ok: checks.lower, label: "1 letra minúscula" },
                       { ok: checks.number, label: "1 número" },

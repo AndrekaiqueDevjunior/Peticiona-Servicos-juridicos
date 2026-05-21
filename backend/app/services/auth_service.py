@@ -48,10 +48,13 @@ def register_user(payload: dict) -> dict:
         raise ValidationError("Nome completo é obrigatório.")
     if not email:
         raise ValidationError("E-mail é obrigatório.")
-    if len(password) < 8:
-        raise ValidationError("Senha deve ter pelo menos 8 caracteres.")
     if password != confirm_password:
         raise ValidationError("Confirmação de senha não confere.")
+    # Política unificada — mesmo padrão usado no reset de senha. Antes
+    # este caminho só checava `len >= 8` e permitia `12345678`, `password`,
+    # `peticiona123`. Agora ambos os caminhos vão pela mesma porta.
+    from app.core.password import validate_password_strength
+    validate_password_strength(password, email=email)
     if User.query.filter_by(email=email).first():
         raise ConflictError("Já existe uma conta com este e-mail.")
 
@@ -93,7 +96,18 @@ def register_user(payload: dict) -> dict:
     return {"token": create_access_token(user_id=user.id), "user": serialize_user(user)}
 
 
+# Brute-force lockout: após N falhas consecutivas em qualquer janela,
+# a conta fica congelada por LOCK_DURATION antes de aceitar novo login.
+# Reset de senha (via /forgot-password) é o bypass legítimo — quem
+# esqueceu a senha não fica preso eternamente.
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCK_DURATION_MINUTES = 30
+
+
 def login_user(payload: dict) -> dict:
+    from datetime import datetime, timedelta, timezone
+    from flask import current_app
+
     email = (payload.get("email") or "").strip().lower()
     password = payload.get("password") or ""
     remember = bool(payload.get("remember", True))
@@ -102,13 +116,49 @@ def login_user(payload: dict) -> dict:
         raise ValidationError("Informe e-mail e senha.")
 
     user = User.query.filter_by(email=email).first()
+
+    # Se a conta existe e está dentro de uma janela de lockout, recusa
+    # antes mesmo de checar a senha — evita ataque de timing que
+    # poderia diferenciar "senha errada" de "conta bloqueada".
+    now = datetime.now(timezone.utc)
+    if user is not None and user.locked_until is not None and user.locked_until > now:
+        remaining = int((user.locked_until - now).total_seconds() // 60) + 1
+        raise AuthError(
+            f"Conta temporariamente bloqueada por excesso de tentativas. "
+            f"Tente novamente em {remaining} minuto(s) ou use 'esqueci minha senha'."
+        )
+
     if user is None or not verify_password(password, user.password_hash):
+        # Conta inexistente OU senha errada: incrementa o contador da
+        # conta existente (se houver) e devolve a MESMA mensagem genérica
+        # — sem distinção pra atacante diferenciar e-mail válido de inválido.
+        if user is not None:
+            user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+            if user.failed_login_attempts >= LOGIN_MAX_ATTEMPTS:
+                user.locked_until = now + timedelta(minutes=LOGIN_LOCK_DURATION_MINUTES)
+                log_action(
+                    action="user.locked_brute_force",
+                    entity_type="user",
+                    entity_id=user.id,
+                    user=user,
+                    metadata={
+                        "email": user.email,
+                        "attempts": user.failed_login_attempts,
+                        "locked_until": user.locked_until.isoformat(),
+                    },
+                )
+            db.session.commit()
         raise AuthError("Credenciais inválidas.")
+
     if not user.is_active:
         raise AuthError("Conta inativa.")
 
+    # Sucesso: zera contadores de tentativa (se havia).
+    if user.failed_login_attempts or user.locked_until:
+        user.failed_login_attempts = 0
+        user.locked_until = None
+
     # Expiração do token: 30 dias se "lembrar", 24h caso contrário
-    from flask import current_app
     if remember:
         expires = int(current_app.config.get("JWT_EXPIRATION_LONG", 30 * 24 * 3600))  # 30 dias
     else:
