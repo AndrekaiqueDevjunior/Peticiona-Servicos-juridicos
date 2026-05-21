@@ -13,8 +13,10 @@ pytestmark = pytest.mark.auth
 VALID_PAYLOAD = {
     "full_name": "Joana Cliente",
     "email": "joana@example.com",
-    "password": "Senha@123",
-    "confirm_password": "Senha@123",
+    # Atende política unificada (app.core.password): >= 10 chars, mai/min/num/sim,
+    # não está na blocklist, não contém parte local do e-mail.
+    "password": "Senha_Forte_47!",
+    "confirm_password": "Senha_Forte_47!",
     "oab_number": "SP/123456",
     "cpf": "111.222.333-44",
     "phone": "+5511988887777",
@@ -59,10 +61,12 @@ class TestRegisterValidation:
         assert message.lower() in body["message"].lower()
 
     def test_short_password_is_400(self, api_anonymous):
+        # Política unificada (app.core.password) exige >= 10 chars. Mantemos
+        # a senha curta original; só atualizamos o texto esperado.
         payload = {**VALID_PAYLOAD, "password": "1234567", "confirm_password": "1234567"}
         response = api_anonymous.post("/api/auth/register", json=payload)
         assert response.status_code == 400
-        assert "8 caracteres" in response.get_json()["message"]
+        assert "10 caracteres" in response.get_json()["message"]
 
     def test_password_mismatch_is_400(self, api_anonymous):
         payload = {**VALID_PAYLOAD, "confirm_password": "outra@senha"}

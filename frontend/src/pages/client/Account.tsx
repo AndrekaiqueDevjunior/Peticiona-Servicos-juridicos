@@ -176,8 +176,8 @@ function PasswordSection() {
       setError("Preencha a senha atual e a nova senha.");
       return;
     }
-    if (newPassword.length < 8) {
-      setError("Nova senha deve ter pelo menos 8 caracteres.");
+    if (newPassword.length < 10) {
+      setError("Nova senha deve ter pelo menos 10 caracteres.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -228,7 +228,7 @@ function PasswordSection() {
           <div>
             <p className="font-medium text-foreground">Senha</p>
             <p className="text-sm text-muted-foreground">
-              Altere sua senha de acesso. Mínimo de 8 caracteres.
+              Altere sua senha. Mínimo 10 caracteres, com maiúscula, minúscula, número e símbolo.
             </p>
           </div>
         </div>

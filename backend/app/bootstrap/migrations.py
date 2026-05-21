@@ -44,6 +44,7 @@ def _execute(sql: str) -> None:
 
 def _add_user_columns() -> None:
     user_columns = _column_names("users")
+    ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
     statements = {
         "cpf": "ALTER TABLE users ADD COLUMN cpf VARCHAR(20)",
         "phone": "ALTER TABLE users ADD COLUMN phone VARCHAR(30)",
@@ -56,6 +57,10 @@ def _add_user_columns() -> None:
         "neighborhood": "ALTER TABLE users ADD COLUMN neighborhood VARCHAR(120)",
         "city": "ALTER TABLE users ADD COLUMN city VARCHAR(120)",
         "state": "ALTER TABLE users ADD COLUMN state VARCHAR(2)",
+        # Lockout por brute-force no login. Default 0 cobre usuários
+        # legados que nunca tiveram falha registrada.
+        "failed_login_attempts": "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0",
+        "locked_until": f"ALTER TABLE users ADD COLUMN locked_until {ts}",
     }
 
     for column_name, sql in statements.items():

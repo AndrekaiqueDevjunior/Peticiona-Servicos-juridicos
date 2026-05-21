@@ -51,21 +51,13 @@ def _validate_email(email: str) -> str:
     return normalized
 
 
-def _validate_password(password: str) -> None:
-    checks = [
-        (len(password) >= 8, "A senha deve ter no mínimo 8 caracteres."),
-        (any(c.isupper() for c in password), "A senha precisa ter ao menos 1 letra maiúscula."),
-        (any(c.islower() for c in password), "A senha precisa ter ao menos 1 letra minúscula."),
-        (any(c.isdigit() for c in password), "A senha precisa ter ao menos 1 número."),
-        (
-            any(not c.isalnum() for c in password),
-            "A senha precisa ter ao menos 1 símbolo.",
-        ),
-    ]
+# Validação delegada à política única em app.core.password —
+# antes este arquivo tinha sua própria lógica, divergente de register_user.
+from app.core.password import validate_password_strength as _validate_password_strength
 
-    for ok, message in checks:
-        if not ok:
-            raise ValidationError(message)
+
+def _validate_password(password: str, *, email: str | None = None) -> None:
+    _validate_password_strength(password, email=email)
 
 
 def _password_fingerprint(user: User) -> str:
@@ -197,7 +189,11 @@ def _load_token_payload(token: str) -> dict:
 
 
 def confirm_password_reset(token: str, password: str) -> dict:
-    _validate_password(password)
+    # Carregamos o payload primeiro pra extrair o e-mail e passar à
+    # validação de senha — bloqueia variantes como "andre@x.com" trocando
+    # pra "andre123!" (parte local da senha = parte local do e-mail).
+    # Token inválido vira ValidationError genérica antes de qualquer
+    # operação no usuário.
     payload = _load_token_payload(token)
 
     user_id = payload.get("user_id")
@@ -208,6 +204,14 @@ def confirm_password_reset(token: str, password: str) -> dict:
     if payload.get("email") != user.email or payload.get("pwd") != _password_fingerprint(user):
         raise ValidationError("O link de redefinição é inválido ou expirou.")
 
+    _validate_password(password, email=user.email)
+
     user.password_hash = hash_password(password)
+    # Reset de senha é o bypass legítimo do lockout — quem esqueceu a senha
+    # e provou posse do e-mail merece a conta destravada (do contrário
+    # ficaria preso até a janela expirar). Sem isso, atacante poderia
+    # *forçar lockout* deliberado e fingir que é DoS.
+    user.failed_login_attempts = 0
+    user.locked_until = None
     db.session.commit()
     return {"message": "Senha redefinida com sucesso."}

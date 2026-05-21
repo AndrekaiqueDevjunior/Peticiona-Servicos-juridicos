@@ -91,13 +91,17 @@ def change_my_password(user, payload: dict) -> dict:
         raise ValidationError("Informe a senha atual.")
     if not new_password:
         raise ValidationError("Informe a nova senha.")
-    if len(new_password) < 8:
-        raise ValidationError("Nova senha deve ter pelo menos 8 caracteres.")
     if current == new_password:
         raise ValidationError("Nova senha deve ser diferente da atual.")
 
     if not verify_password(current, user.password_hash):
         raise ValidationError("Senha atual incorreta.")
+
+    # Política unificada — antes este caminho só checava `len >= 8`,
+    # divergente do register e do reset. Agora os 3 caminhos passam
+    # pela mesma função em app.core.password.
+    from app.core.password import validate_password_strength
+    validate_password_strength(new_password, email=user.email)
 
     user.password_hash = hash_password(new_password)
     log_action(
