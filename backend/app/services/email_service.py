@@ -95,12 +95,18 @@ def _send_via_resend(*, to: str, subject: str, body: str, html: str | None = Non
     else:
         payload["text"] = body
 
+    # User-Agent obrigatório: o WAF Cloudflare na frente da Resend devolve
+    # 403 com error code 1010 para clientes sem UA decente (urlopen do
+    # Python default vai com "Python-urllib/3.X", que é bloqueado).
+    # Accept evita problema secundário de negociação de conteúdo.
     req = Request(
         "https://api.resend.com/emails",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "peticiona-backend/1.0 (+https://peticiona.app.br)",
         },
         method="POST",
     )
@@ -151,6 +157,8 @@ def _send_via_sendgrid(*, to: str, subject: str, body: str, html: str | None = N
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "peticiona-backend/1.0 (+https://peticiona.app.br)",
         },
         method="POST",
     )

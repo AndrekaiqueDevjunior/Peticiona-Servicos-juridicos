@@ -19,8 +19,21 @@ from tests.utils.mocks import capture_emails
 pytestmark = pytest.mark.auth
 
 
-def test_password_reset_round_trip(api_anonymous, db, monkeypatch):
+def _configure_email_provider(app, monkeypatch):
+    """Habilita o ramo 'provider configurado' do password_reset_service.
+
+    Sem provider, o service entra em modo DRY-RUN e nunca chama
+    send_email — então o spy `capture_emails` jamais captura nada.
+    Setamos um SMTP_HOST fictício pra forçar o fluxo real (que aí cai
+    no spy no monkeypatch).
+    """
+    monkeypatch.setitem(app.config, "SMTP_HOST", "smtp-dummy-for-tests")
+
+
+def test_password_reset_round_trip(api_anonymous, app, db, monkeypatch):
     from tests.factories import create_client
+
+    _configure_email_provider(app, monkeypatch)
 
     user = create_client(email="andre@peticiona.app.br")
     db.session.commit()
@@ -48,7 +61,8 @@ def test_password_reset_round_trip(api_anonymous, db, monkeypatch):
     assert verify_password("NovaSenha@123", refreshed.password_hash)
 
 
-def test_password_reset_for_unknown_email_keeps_generic_response(api_anonymous, monkeypatch):
+def test_password_reset_for_unknown_email_keeps_generic_response(api_anonymous, app, monkeypatch):
+    _configure_email_provider(app, monkeypatch)
     emails = capture_emails(monkeypatch, target_module=password_reset_service)
 
     response = api_anonymous.post(
@@ -61,3 +75,35 @@ def test_password_reset_for_unknown_email_keeps_generic_response(api_anonymous, 
     assert response.status_code == 200
     assert response.get_json().get("message")
     assert emails == []
+
+
+def test_password_reset_falls_back_to_dry_run_without_provider(
+    api_anonymous, app, db, monkeypatch, caplog
+):
+    """Sem provider configurado (RESEND/SENDGRID/SMTP), o backend não pode
+    quebrar — entra em modo DRY-RUN, devolve 200 e loga o link como
+    warning pra operador pegar no console. Isso era o caso onde a tela
+    /forgot-password mostrava 503 em qualquer ambiente sem e-mail."""
+    from tests.factories import create_client
+
+    user = create_client(email="cliente@peticiona.app.br")
+    db.session.commit()
+
+    # Garante que NENHUM provider está configurado.
+    for key in ("RESEND_API_KEY", "SENDGRID_API_KEY", "SMTP_HOST"):
+        monkeypatch.setitem(app.config, key, "")
+
+    emails = capture_emails(monkeypatch, target_module=password_reset_service)
+
+    with caplog.at_level("WARNING"):
+        response = api_anonymous.post(
+            "/api/auth/password-reset/request",
+            json={"email": user.email},
+        )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    # send_email não foi chamado (entra no dry-run antes)
+    assert emails == []
+    # Mas o link aparece no log
+    log_text = "\n".join(record.getMessage() for record in caplog.records)
+    assert "reset-password?token=" in log_text

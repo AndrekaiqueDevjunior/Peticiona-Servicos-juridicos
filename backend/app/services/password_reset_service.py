@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from itsdangerous import BadSignature, BadTimeSignature, URLSafeTimedSerializer
 from flask import current_app
 
@@ -9,9 +11,27 @@ from app.core.security import hash_password
 from app.models import User
 from app.services.email_service import build_password_reset_html, send_email
 
+logger = logging.getLogger(__name__)
+
 
 class EmailDeliveryError(AppError):
     status_code = 503
+
+
+def _email_provider_configured() -> bool:
+    """True se algum provider de e-mail (Resend/SendGrid/SMTP) tem credencial.
+
+    Em DEV/test sem provider configurado, o envio vira no-op: logamos o link
+    no console pra continuar testando o fluxo, em vez de jogar 503. Em prod
+    com provider mas envio falhando (rate limit, DNS, etc.), seguimos com
+    erro silencioso pro cliente (resposta genérica 200 — não vazamos
+    enumeration), mas logamos como warning.
+    """
+    cfg = current_app.config
+    return any(
+        bool((cfg.get(key) or "").strip())
+        for key in ("RESEND_API_KEY", "SENDGRID_API_KEY", "SMTP_HOST")
+    )
 
 
 def _serializer() -> URLSafeTimedSerializer:
@@ -106,13 +126,47 @@ def _email_html(user: User, token: str) -> str:
 
 
 def request_password_reset(email: str) -> dict:
-    normalized = _validate_email(email)
-    user = User.query.filter(db.func.lower(User.email) == normalized).first()
+    """Solicita reset de senha, com proteção contra enumeração.
 
+    Sempre retorna 200 com mensagem genérica, independentemente de o
+    e-mail existir ou não, ou de o envio ter falhado. Diferenciar essas
+    respostas vazaria quais e-mails estão cadastrados no sistema (timing
+    attacks à parte). Em caso de falha real do provider, logamos como
+    warning no servidor e o cliente pode tentar novamente.
+
+    Modo DEV (nenhum provider configurado): em vez de jogar 503 e quebrar
+    a tela inteira, logamos o link gerado no console — útil pra rodar o
+    fluxo de teste localmente sem precisar de Resend/SendGrid/SMTP.
+    """
+    response = {
+        "message": "Se o e-mail estiver cadastrado, enviaremos as instruções."
+    }
+
+    try:
+        normalized = _validate_email(email)
+    except ValidationError:
+        raise
+
+    user = User.query.filter(db.func.lower(User.email) == normalized).first()
     if not user or not user.is_active:
-        return {"message": "Se o e-mail estiver cadastrado, enviaremos as instruções."}
+        # Não vaza que o e-mail não existe — resposta idêntica ao caso de
+        # sucesso. Importante pra não permitir enumeração de usuários.
+        return response
 
     token = _build_reset_token(user)
+
+    if not _email_provider_configured():
+        # DEV/teste sem provider: imprime no log e segue. Operador pega
+        # o link na saída do backend.
+        link = _reset_link(token)
+        logger.warning(
+            "EMAIL DRY-RUN — nenhum provider configurado. "
+            "Link de redefinição para %s: %s",
+            user.email,
+            link,
+        )
+        return response
+
     delivered = send_email(
         to=user.email,
         subject="Redefinição de senha - Peticiona",
@@ -120,11 +174,15 @@ def request_password_reset(email: str) -> dict:
         html=_email_html(user, token),
     )
     if not delivered:
-        raise EmailDeliveryError(
-            "Não foi possível enviar o e-mail de redefinição agora. Tente novamente em alguns instantes."
+        # Provider configurado mas envio falhou (rate limit, DNS, conta
+        # bloqueada…). Logamos pra investigação mas devolvemos a mesma
+        # mensagem genérica — não vamos diferenciar pro cliente.
+        logger.error(
+            "Falha ao enviar e-mail de reset pra user_id=%s (provider configurado).",
+            user.id,
         )
 
-    return {"message": "Se o e-mail estiver cadastrado, enviaremos as instruções."}
+    return response
 
 
 def _load_token_payload(token: str) -> dict:
