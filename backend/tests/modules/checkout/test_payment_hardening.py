@@ -74,7 +74,7 @@ class TestStableIdempotencyKey:
             "order_id": order.id,
             "payment_method": "credit_card",
             "card": {"token": "tok_test", "installments": 1},
-            "buyer": {"fullName": "X", "email": "x@y.com", "cpf": "11122233344", "phone": "11999998888"},
+            "buyer": {"fullName": "Cliente Teste", "email": "x@y.com", "cpf": "11122233344", "phone": "11999998888"},
             "billing_address": {
                 "street": "Rua X", "street_number": "1", "neighborhood": "Y",
                 "city": "São Paulo", "state": "SP", "zip_code": "01310100", "country": "BR",

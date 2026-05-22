@@ -384,6 +384,38 @@ def _add_plan_columns() -> None:
             _execute(sql)
 
 
+def _add_service_catalog_item_columns() -> None:
+    if "service_catalog_items" not in _table_names():
+        return
+    service_columns = _column_names("service_catalog_items")
+    statements = {
+        "delivery_label": "ALTER TABLE service_catalog_items ADD COLUMN delivery_label VARCHAR(80)",
+    }
+    for column_name, sql in statements.items():
+        if column_name not in service_columns:
+            _execute(sql)
+
+
+def _add_audit_log_columns() -> None:
+    if "audit_logs" not in _table_names():
+        return
+    audit_columns = _column_names("audit_logs")
+    if db.engine.dialect.name == "postgresql":
+        metadata_type = "JSONB NOT NULL DEFAULT '{}'::jsonb"
+    else:
+        metadata_type = "JSON NOT NULL DEFAULT '{}'"
+    statements = {
+        "actor_role": "ALTER TABLE audit_logs ADD COLUMN actor_role VARCHAR(20)",
+        "ip_address": "ALTER TABLE audit_logs ADD COLUMN ip_address VARCHAR(45)",
+        "user_agent": "ALTER TABLE audit_logs ADD COLUMN user_agent TEXT",
+        "status": "ALTER TABLE audit_logs ADD COLUMN status VARCHAR(20) DEFAULT 'success'",
+        "metadata_json": f"ALTER TABLE audit_logs ADD COLUMN metadata_json {metadata_type}",
+    }
+    for column_name, sql in statements.items():
+        if column_name not in audit_columns:
+            _execute(sql)
+
+
 def _add_petition_columns() -> None:
     """Garante colunas opcionais (competencia/comarca_uf) na tabela petitions."""
     if "petitions" not in _table_names():
@@ -678,37 +710,50 @@ def _clear_orphan_order_debits() -> None:
 
 
 def _create_email_events_table() -> None:
-    """Cria a tabela email_events para registrar eventos de webhook do Resend."""
+    """Cria/adapta email_events sem apagar eventos já recebidos."""
     ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
     pk = "SERIAL PRIMARY KEY" if db.engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
     now_expr = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
 
-    # Drop tabela se existir para evitar conflitos com tipos PostgreSQL.
-    # SQLite não suporta CASCADE em DROP TABLE; ajustamos pelo dialect ativo.
-    cascade = " CASCADE" if db.engine.dialect.name == "postgresql" else ""
-    _execute(f"DROP TABLE IF EXISTS email_events{cascade}")
-
-    _execute(
-        f"""
-        CREATE TABLE email_events (
-            id {pk},
-            provider VARCHAR(40) NOT NULL DEFAULT 'resend',
-            event_id VARCHAR(255),
-            event_type VARCHAR(80) NOT NULL,
-            recipient VARCHAR(255),
-            subject VARCHAR(500),
-            status VARCHAR(40),
-            payload_json TEXT,
-            created_at {ts} NOT NULL DEFAULT {now_expr},
-            updated_at {ts} NOT NULL DEFAULT {now_expr}
+    if "email_events" not in _table_names():
+        _execute(
+            f"""
+            CREATE TABLE email_events (
+                id {pk},
+                provider VARCHAR(40) NOT NULL DEFAULT 'resend',
+                event_id VARCHAR(255),
+                event_type VARCHAR(80) NOT NULL,
+                recipient VARCHAR(255),
+                subject VARCHAR(500),
+                status VARCHAR(40),
+                payload_json TEXT,
+                created_at {ts} NOT NULL DEFAULT {now_expr},
+                updated_at {ts} NOT NULL DEFAULT {now_expr}
+            )
+            """
         )
-        """
-    )
+    else:
+        columns = _column_names("email_events")
+        statements = {
+            "provider": "ALTER TABLE email_events ADD COLUMN provider VARCHAR(40) NOT NULL DEFAULT 'resend'",
+            "event_id": "ALTER TABLE email_events ADD COLUMN event_id VARCHAR(255)",
+            "event_type": "ALTER TABLE email_events ADD COLUMN event_type VARCHAR(80) NOT NULL DEFAULT 'unknown'",
+            "recipient": "ALTER TABLE email_events ADD COLUMN recipient VARCHAR(255)",
+            "subject": "ALTER TABLE email_events ADD COLUMN subject VARCHAR(500)",
+            "status": "ALTER TABLE email_events ADD COLUMN status VARCHAR(40)",
+            "payload_json": "ALTER TABLE email_events ADD COLUMN payload_json TEXT",
+            "created_at": f"ALTER TABLE email_events ADD COLUMN created_at {ts} NOT NULL DEFAULT {now_expr}",
+            "updated_at": f"ALTER TABLE email_events ADD COLUMN updated_at {ts} NOT NULL DEFAULT {now_expr}",
+        }
+        for column_name, sql in statements.items():
+            if column_name not in columns:
+                _execute(sql)
+
     _execute(
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_email_events_event_id "
         "ON email_events (event_id) WHERE event_id IS NOT NULL"
     )
-    _execute("CREATE INDEX ix_email_events_event_type ON email_events (event_type)")
+    _execute("CREATE INDEX IF NOT EXISTS ix_email_events_event_type ON email_events (event_type)")
 
 
 def run_runtime_migrations() -> None:
@@ -722,6 +767,8 @@ def run_runtime_migrations() -> None:
     _add_credit_transaction_unique_constraint()
     _create_order_comments_table()
     _add_plan_columns()
+    _add_service_catalog_item_columns()
+    _add_audit_log_columns()
     _add_petition_columns()
     _fix_petition_document_links_timestamps()
     _add_orders_payment_attempts()

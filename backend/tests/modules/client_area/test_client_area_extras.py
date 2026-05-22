@@ -100,6 +100,75 @@ class TestServiceRequestPreview:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/client-area/orders  (cria pedido debitando saldo)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateClientOrderWithBalance:
+    def test_create_order_debits_credit_and_balance_endpoint_reflects(
+        self, api_client, client_user, db
+    ):
+        from tests.factories import create_credit_transaction
+
+        create_credit_transaction(
+            user=client_user,
+            amount=50_000,
+            type="in",
+            source="checkout",
+            description="Compra de saldo",
+        )
+        db.session.commit()
+
+        response = api_client.post(
+            "/api/client-area/orders",
+            json={"service_code": "servico_peticao", "tipo_peticao": "Petição inicial comum"},
+        )
+
+        assert response.status_code == 201, response.get_json()
+        order = response.get_json()["order"]
+        assert order["total_amount"] == 18_000
+
+        balance = api_client.get("/api/me/balance")
+        assert balance.status_code == 200
+        body = balance.get_json()
+        assert body["credits_total_cents"] == 50_000
+        assert body["credits_used_cents"] == 18_000
+        assert body["credits_available_cents"] == 32_000
+        assert any(
+            movement["type"] == "out"
+            and movement["source"] == "client_order"
+            and movement["amount_cents"] == 18_000
+            and order["reference"] in movement["description"]
+            for movement in body["movements"]
+        )
+
+    def test_create_order_without_enough_balance_is_400_and_does_not_debit(
+        self, api_client, client_user, db
+    ):
+        from tests.factories import create_credit_transaction
+
+        create_credit_transaction(
+            user=client_user,
+            amount=10_000,
+            type="in",
+            source="checkout",
+            description="Compra insuficiente",
+        )
+        db.session.commit()
+
+        response = api_client.post(
+            "/api/client-area/orders",
+            json={"service_code": "servico_peticao", "tipo_peticao": "Petição inicial comum"},
+        )
+
+        assert response.status_code == 400
+        assert "Saldo insuficiente" in response.get_json()["message"]
+        balance = api_client.get("/api/me/balance").get_json()
+        assert balance["credits_available_cents"] == 10_000
+        assert balance["credits_used_cents"] == 0
+
+
+# ---------------------------------------------------------------------------
 # DELETE /api/client-area/orders/<id>  (cancel)
 # ---------------------------------------------------------------------------
 

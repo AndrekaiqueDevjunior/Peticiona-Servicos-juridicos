@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -12,6 +13,8 @@ from flask import current_app
 
 logger = logging.getLogger(__name__)
 
+_EMAIL_RE = re.compile(r"[^<>\s]+@[^<>\s]+")
+
 # ── helpers ─────────────────────────────────────────────────────────────────
 
 def _config(name: str, default=None):
@@ -19,13 +22,20 @@ def _config(name: str, default=None):
 
 
 def _resolve_from_address() -> str:
-    return (
+    configured = (
         _config("RESEND_FROM_EMAIL", "").strip()
         or _config("SENDGRID_FROM", "").strip()
         or _config("SMTP_FROM", "").strip()
         or _config("NOTIFICATION_EMAIL", "").strip()
         or "no-reply@peticiona.app.br"
     )
+    if "<" in configured and ">" in configured:
+        return configured
+    if " " in configured:
+        match = _EMAIL_RE.search(configured)
+        if match:
+            return match.group(0)
+    return configured
 
 
 # ── HTML base template ───────────────────────────────────────────────────────

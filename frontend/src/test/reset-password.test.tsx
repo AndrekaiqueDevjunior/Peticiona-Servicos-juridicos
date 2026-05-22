@@ -11,7 +11,7 @@ describe("ResetPassword", () => {
       expect(init?.body).toBe(
         JSON.stringify({
           token: "token-real",
-          password: "Senha@123",
+          password: "Senha@1234",
         }),
       );
       return new Response(JSON.stringify({ message: "ok" }), { status: 200 });
@@ -22,10 +22,10 @@ describe("ResetPassword", () => {
     renderWithQueryClient(<ResetPassword />, { route: "/reset-password?token=token-real" });
 
     fireEvent.change(screen.getByLabelText(/^Nova senha$/i), {
-      target: { value: "Senha@123" },
+      target: { value: "Senha@1234" },
     });
     fireEvent.change(screen.getByLabelText(/^Confirmar nova senha$/i), {
-      target: { value: "Senha@123" },
+      target: { value: "Senha@1234" },
     });
     fireEvent.click(screen.getByRole("button", { name: /redefinir senha/i }));
 

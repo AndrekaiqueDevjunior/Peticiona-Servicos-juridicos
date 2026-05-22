@@ -599,7 +599,7 @@ export const api = {
   },
 
   clientArea: {
-    catalog: () => request<{ catalog: CatalogSection[] }>("/client-area/catalog"),
+    catalog: () => request<{ catalog: CatalogSection[] }>("/client-area"),
     orders: () => request<{ orders: ClientOrder[] }>("/client-area/orders"),
     checkoutOrders: () => request<{ orders: CheckoutOrderType[] }>("/client-area/checkout-orders"),
     getCheckoutOrder: (id: number | string) =>
@@ -635,11 +635,14 @@ export const api = {
       tipo_peticao?: string;
       numero_processo?: string;
       data_publicacao?: string;
+      competencia?: string;
+      comarca_uf?: string;
       advogado_subscritor?: string;
       resumo_caso?: string;
       detalhes?: string;
       justica_gratuita?: boolean;
       tutela_urgencia?: boolean;
+      partes?: PetitionParty[];
     }) => request<{ order: ClientOrder }>(`/client-area/orders/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),

@@ -118,6 +118,49 @@ class TestClientCanEditOrder:
         assert petition["resumo_caso"] == "Resumo atualizado pelo cliente"
         assert petition["justica_gratuita"] is True
 
+    def test_patch_updates_all_client_editable_order_fields(self, api, client_with_pending_order):
+        me, order = client_with_pending_order
+        payload = {
+            "deadline_at": "2026-06-01T15:30:00Z",
+            "area_direito": "Direito Previdenciário",
+            "tipo_peticao": "Recurso ordinário",
+            "numero_processo": "1001234-55.2026.8.26.0100",
+            "data_publicacao": "22/05/2026",
+            "competencia": "Justiça Estadual",
+            "comarca_uf": "São Paulo / SP",
+            "advogado_subscritor": "Cliente Teste — OAB/SP 123456",
+            "resumo_caso": "Resumo totalmente atualizado pelo cliente.",
+            "detalhes": "Detalhes, pedidos e documentos necessários atualizados.",
+            "justica_gratuita": True,
+            "tutela_urgencia": True,
+            "partes": [
+                {"nome": "Maria Autora", "tipo": "Autora"},
+                {"nome": "Empresa Ré", "tipo": "Ré"},
+            ],
+        }
+
+        response = api(me).patch(f"/api/client-area/orders/{order.id}", json=payload)
+
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()["order"]
+        petition = body["petition"]
+        assert body["deadline_at"].startswith("2026-06-01T15:30:00")
+        for field in (
+            "area_direito",
+            "tipo_peticao",
+            "numero_processo",
+            "data_publicacao",
+            "competencia",
+            "comarca_uf",
+            "advogado_subscritor",
+            "resumo_caso",
+            "detalhes",
+        ):
+            assert petition[field] == payload[field]
+        assert petition["justica_gratuita"] is True
+        assert petition["tutela_urgencia"] is True
+        assert petition["partes"] == payload["partes"]
+
     def test_cannot_edit_order_after_started(self, api, db, client_with_pending_order):
         me, order = client_with_pending_order
         order.status = "em_andamento"

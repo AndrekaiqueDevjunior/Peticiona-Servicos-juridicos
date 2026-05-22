@@ -400,10 +400,10 @@ def _phone(value: str) -> dict | None:
 
 def _customer(user, buyer: dict | None) -> dict:
     data = buyer or {}
-    name = _text(getattr(user, "full_name", "") or data.get("fullName") or data.get("name"), max_length=120)
-    email = _text(getattr(user, "email", "") or data.get("email"), max_length=255).lower()
-    document = _digits(getattr(user, "cpf", "") or data.get("cpf") or data.get("document"))
-    phone = _phone(getattr(user, "phone", "") or data.get("phone"))
+    name = _text(data.get("fullName") or data.get("name") or getattr(user, "full_name", ""), max_length=120)
+    email = _text(data.get("email") or getattr(user, "email", ""), max_length=255).lower()
+    document = _digits(data.get("cpf") or data.get("document") or getattr(user, "cpf", ""))
+    phone = _phone(data.get("phone") or getattr(user, "phone", ""))
     if len(name) < 3:
         raise ValidationError("Nome do comprador obrigatório.")
     if "@" not in email:

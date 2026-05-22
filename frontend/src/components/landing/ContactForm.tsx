@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type ContactPayload } from "@/lib/api";
 
 const contactSchema = z.object({
   name: z
@@ -60,7 +60,13 @@ const ContactForm = () => {
     setErrors({});
     setSubmitting(true);
     try {
-      await api.public.sendContact(result.data);
+      const payload: ContactPayload = {
+        name: result.data.name,
+        whatsapp: result.data.whatsapp,
+        email: result.data.email,
+        message: result.data.message,
+      };
+      await api.public.sendContact(payload);
       toast({
         title: "Mensagem enviada com sucesso",
         description: "Nossa equipe entrará em contato em breve.",

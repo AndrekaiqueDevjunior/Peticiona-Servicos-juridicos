@@ -124,6 +124,93 @@ class TestCreateCheckoutPayment:
         )
         return resp.get_json()["order"]
 
+    def test_pix_payload_uses_checkout_form_buyer_and_server_amount(
+        self, api_client, client_user, fake_pagarme, db
+    ):
+        client_user.cpf = "000"
+        client_user.phone = ""
+        db.session.commit()
+        order = self._create_order(api_client)
+
+        response = api_client.post(
+            "/api/checkout/create-payment",
+            json={
+                "order_id": int(order["id"]),
+                "payment_method": "pix",
+                "buyer": {
+                    "fullName": "Comprador Checkout",
+                    "email": "comprador@example.com",
+                    "cpf": "111.222.333-44",
+                    "phone": "(11) 98888-7777",
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.get_json()
+        call = next(c for c in fake_pagarme.calls if c["action"] == "create_order")
+        payload = call["payload"]["payload"]
+        assert payload["customer"]["name"] == "Comprador Checkout"
+        assert payload["customer"]["email"] == "comprador@example.com"
+        assert payload["customer"]["document"] == "11122233344"
+        assert payload["customer"]["phones"]["mobile_phone"] == {
+            "country_code": "55",
+            "area_code": "11",
+            "number": "988887777",
+        }
+        assert payload["items"][0]["amount"] == order["amount"]
+        assert payload["items"][0]["code"] == order["service_id"]
+        assert payload["payments"][0] == {"payment_method": "pix", "pix": {"expires_in": 3600}}
+        assert payload["metadata"]["local_order_id"] == order["id"]
+        assert call["payload"]["idempotency_key"] == f"checkout-payment-{order['id']}-1"
+
+    def test_credit_card_payload_uses_token_and_billing_address(
+        self, api_client, fake_pagarme
+    ):
+        order = self._create_order(api_client)
+
+        response = api_client.post(
+            "/api/checkout/create-payment",
+            json={
+                "order_id": int(order["id"]),
+                "payment_method": "credit_card",
+                "buyer": {
+                    "fullName": "Comprador Cartao",
+                    "email": "cartao@example.com",
+                    "cpf": "11122233344",
+                    "phone": "11988887777",
+                },
+                "card": {"token": "tok_test_123", "installments": 3},
+                "billing_address": {
+                    "zip_code": "01310-000",
+                    "street": "Avenida Paulista",
+                    "street_number": "1000",
+                    "complement": "Sala 12",
+                    "neighborhood": "Bela Vista",
+                    "city": "Sao Paulo",
+                    "state": "SP",
+                    "country": "BR",
+                },
+            },
+        )
+
+        assert response.status_code == 200, response.get_json()
+        call = next(c for c in fake_pagarme.calls if c["action"] == "create_order")
+        payload = call["payload"]["payload"]
+        credit_card = payload["payments"][0]["credit_card"]
+        assert payload["items"][0]["amount"] == order["amount"]
+        assert credit_card["card_token"] == "tok_test_123"
+        assert credit_card["installments"] == 3
+        assert credit_card["card"]["billing_address"] == {
+            "line_1": "1000, Avenida Paulista, Bela Vista",
+            "line_2": "Sala 12",
+            "zip_code": "01310000",
+            "city": "Sao Paulo",
+            "state": "SP",
+            "country": "BR",
+        }
+        assert "4111111111111111" not in str(payload)
+        assert "cvv" not in str(payload).lower()
+
     def test_pix_payment_marks_order_paid_when_gateway_confirms(
         self, api_client, fake_pagarme
     ):
