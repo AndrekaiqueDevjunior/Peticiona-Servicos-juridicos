@@ -226,3 +226,56 @@ class TestNotifyEmail:
     def test_anonymous_blocked(self, api_anonymous):
         response = api_anonymous.post("/api/notify-email", json=self.VALID)
         assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Sino admin: GET /api/admin/notifications
+# ---------------------------------------------------------------------------
+
+
+class TestAdminNotifications:
+    def test_admin_lists_webhook_notifications(self, api_admin, db, app):
+        from app.models import PaymentEvent
+        from app.models.email_event import EmailEvent
+
+        app.config["RESEND_WEBHOOK_SECRET"] = "whsec_" + base64.b64encode(_SECRET_BYTES).decode("ascii")
+        db.session.add(
+            PaymentEvent(
+                gateway="pagarme",
+                gateway_event_id="evt_paid_admin_bell",
+                event_type="order.paid",
+                payload_json={"status": "paid"},
+            )
+        )
+        db.session.add(
+            EmailEvent(
+                provider="resend",
+                event_id="email_admin_bell",
+                event_type="email.bounced",
+                recipient="cliente@example.com",
+                subject="Reset de senha",
+                status="bounced",
+                payload_json="{}",
+            )
+        )
+        db.session.commit()
+
+        response = api_admin.get("/api/admin/notifications")
+
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["channels"]["pagarme_webhook_configured"] is True
+        assert body["channels"]["resend_webhook_configured"] is True
+        ids = {item["id"] for item in body["notifications"]}
+        assert any(item["source"] == "pagarme" and item["title"] == "Pagamento confirmado" for item in body["notifications"])
+        assert any(item["source"] == "resend" and item["title"] == "Atenção no e-mail" for item in body["notifications"])
+        assert any(id_.startswith("payment:") for id_ in ids)
+        assert any(id_.startswith("email:") for id_ in ids)
+
+    def test_staff_is_blocked(self, api_staff):
+        response = api_staff.get("/api/admin/notifications")
+        assert response.status_code == 403
+
+    def test_anonymous_is_blocked(self, api_anonymous):
+        response = api_anonymous.get("/api/admin/notifications")
+        assert response.status_code == 401

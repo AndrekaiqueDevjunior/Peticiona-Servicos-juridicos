@@ -370,6 +370,24 @@ export interface AdminCreditPurchase {
   source_kind?: "credit_purchase" | "checkout_order";
 }
 
+export interface AdminNotification {
+  id: string;
+  source: "pagarme" | "resend" | string;
+  kind: "payment" | "email" | string;
+  severity: "success" | "warning" | "danger" | "info" | string;
+  title: string;
+  description: string;
+  created_at: string;
+  event_type: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface AdminNotificationChannels {
+  pagarme_webhook_configured: boolean;
+  resend_webhook_configured: boolean;
+  notification_email_configured: boolean;
+}
+
 export interface AdminStaffMember {
   id: number;
   nome: string;
@@ -703,6 +721,11 @@ export const api = {
   },
 
   admin: {
+    notifications: () =>
+      request<{
+        notifications: AdminNotification[];
+        channels: AdminNotificationChannels;
+      }>("/admin/notifications"),
     profile: {
       get: () => request<AuthUser>("/admin/profile"),
       update: (data: Partial<{

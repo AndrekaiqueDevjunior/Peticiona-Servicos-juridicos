@@ -1,8 +1,8 @@
 import { Outlet } from "react-router-dom";
-import { Bell, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AdminNotificationsBell } from "@/components/admin/AdminNotificationsBell";
 
 const AdminLayout = () => {
   return (
@@ -21,9 +21,7 @@ const AdminLayout = () => {
             </div>
 
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" aria-label="Notificações">
-                <Bell className="h-5 w-5" />
-              </Button>
+              <AdminNotificationsBell />
             </div>
           </header>
 
