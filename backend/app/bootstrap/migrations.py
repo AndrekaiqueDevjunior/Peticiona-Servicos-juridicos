@@ -429,6 +429,61 @@ def _fix_petition_document_links_timestamps() -> None:
         """)
 
 
+def _add_orders_payment_attempts() -> None:
+    """Adiciona contador estável de tentativas de pagamento em `orders`.
+
+    Necessário pro idempotency_key da Pagar.me ser determinístico
+    (não-aleatório), evitando que retry martelado de cliente nervoso
+    polua o painel do gateway com várias Pagar.me orders separadas.
+    Default 0 cobre Orders pré-existentes — passa a contar do zero
+    na próxima tentativa.
+    """
+    if "orders" not in _table_names():
+        return
+    if "payment_attempts" in _column_names("orders"):
+        return
+    _execute(
+        "ALTER TABLE orders ADD COLUMN payment_attempts INTEGER NOT NULL DEFAULT 0"
+    )
+
+
+def _reset_orphan_processing_orders() -> None:
+    """Detecta e reverte Orders presas em `processing` sem pagarme_order_id.
+
+    Cenário: cliente clica Pagar; backend faz `order.status='processing';
+    commit;` e em seguida `PagarmeClient().create_order(...)`. Se o
+    backend crashar nesse intervalo (OOM/SIGKILL/deploy), Order fica
+    `processing` para sempre porque `_sync_gateway_status` faz
+    `if not order.pagarme_order_id: return` e nunca tenta de novo.
+
+    Critério conservador: só reverte Orders sem pagarme_order_id E que
+    não tiveram atualização nos últimos 15 minutos. Roda no boot do
+    backend (idempotente — se 0 Orders no estado órfão, no-op).
+    """
+    if "orders" not in _table_names():
+        return
+
+    if db.engine.dialect.name == "postgresql":
+        interval = "NOW() - INTERVAL '15 minutes'"
+    else:
+        interval = "datetime('now', '-15 minutes')"
+
+    result = db.session.execute(text(f"""
+        UPDATE orders
+        SET status = 'pending'
+        WHERE status = 'processing'
+          AND pagarme_order_id IS NULL
+          AND updated_at < {interval}
+    """))
+    rowcount = getattr(result, "rowcount", 0) or 0
+    if rowcount > 0:
+        logger.warning(
+            "Revertidas %d Orders presas em 'processing' sem pagarme_order_id "
+            "(boot recovery).",
+            rowcount,
+        )
+
+
 def _normalize_credit_transaction_types() -> None:
     if "credit_transactions" not in _table_names():
         return
@@ -669,10 +724,12 @@ def run_runtime_migrations() -> None:
     _add_plan_columns()
     _add_petition_columns()
     _fix_petition_document_links_timestamps()
+    _add_orders_payment_attempts()
     _normalize_credit_transaction_types()
     _harden_credit_transactions_schema()
     _clear_orphan_order_debits()
     _backfill_missing_order_debits()
     _audit_users_missing_admin_fields()
     _create_email_events_table()
+    _reset_orphan_processing_orders()
     db.session.commit()

@@ -140,6 +140,7 @@ const TONE_CLASS: Record<string, string> = {
 };
 
 const POLL_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutos
+const RETRY_COOLDOWN_S = 5; // segundos de bloqueio após falha de pagamento
 
 export default function Checkout() {
   const navigate = useNavigate();
@@ -155,6 +156,11 @@ export default function Checkout() {
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [creatingPayment, setCreatingPayment] = useState(false);
   const submittingRef = useRef(false);
+  // Cooldown UI após pagamento falhar: bloqueia o botão "Tentar" por
+  // RETRY_COOLDOWN_S segundos. Sem isso o cliente nervoso clica em
+  // sequência e bate no rate-limit do backend (5/120s), gerando toast
+  // feio. Aqui damos o feedback visual ("Aguarde 4s") antes de permitir.
+  const [retryCooldownLeft, setRetryCooldownLeft] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>("credit_card");
   const [nextAction, setNextAction] = useState<PaymentNextAction | null>(null);
   const [pollingStopped, setPollingStopped] = useState(false);
@@ -237,6 +243,17 @@ export default function Checkout() {
       .then(({ public_key }) => setPagarmePublicKey(public_key))
       .catch(() => {});
   }, []);
+
+  // Countdown do cooldown de retry: decrementa 1 segundo até zero.
+  // Dispara cleanup do timer no unmount pra não vazar.
+  useEffect(() => {
+    if (retryCooldownLeft <= 0) return;
+    const timer = window.setTimeout(
+      () => setRetryCooldownLeft((s) => Math.max(0, s - 1)),
+      1000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [retryCooldownLeft]);
 
   // Sincroniza com perfil quando ele carregar.
   useEffect(() => {
@@ -530,11 +547,15 @@ export default function Checkout() {
           res.failure_reason ||
             "Pagamento recusado pela operadora. Verifique os dados do cartão ou tente outro método."
         );
+        // Dispara cooldown de retry — bloqueia o botão por 5s pra evitar
+        // cliente martelar e bater rate-limit (5/120s no backend).
+        setRetryCooldownLeft(RETRY_COOLDOWN_S);
       }
     } catch (e) {
       const msg =
         e instanceof CheckoutApiError ? e.message : "Não foi possível criar a cobrança.";
       setErrorMsg(msg);
+      setRetryCooldownLeft(RETRY_COOLDOWN_S);
     } finally {
       setCreatingPayment(false);
       submittingRef.current = false;
@@ -1061,13 +1082,15 @@ export default function Checkout() {
                         className="w-full"
                         size="lg"
                         onClick={handleRetry}
-                        disabled={creatingPayment}
+                        disabled={creatingPayment || retryCooldownLeft > 0}
                       >
                         {creatingPayment ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Verificando...
                           </>
+                        ) : retryCooldownLeft > 0 ? (
+                          `Aguarde ${retryCooldownLeft}s para tentar novamente`
                         ) : (
                           "Não paguei — tentar outro método"
                         )}
@@ -1079,7 +1102,7 @@ export default function Checkout() {
                       className="w-full"
                       size="lg"
                       onClick={handlePay}
-                      disabled={!canPay || submittingRef.current}
+                      disabled={!canPay || submittingRef.current || retryCooldownLeft > 0}
                     >
                       {creatingPayment ? (
                         <>

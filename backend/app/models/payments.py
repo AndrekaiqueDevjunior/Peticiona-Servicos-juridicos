@@ -23,6 +23,13 @@ class Order(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     pagarme_charge_id = db.Column(db.String(80), nullable=True)
     idempotency_key = db.Column(db.String(80), nullable=True)
     payment_idempotency_key = db.Column(db.String(80), nullable=True)
+    # Contador estável de tentativas de pagamento. Incrementado por
+    # `create_checkout_payment` antes de chamar o gateway. Usado pra
+    # compor o Idempotency-Key da Pagar.me: retry martelado da MESMA
+    # tentativa devolve a order original em vez de criar várias orders
+    # no painel do gateway. Antes era UUID aleatório a cada chamada,
+    # que poluía a contabilidade do operador.
+    payment_attempts = db.Column(db.Integer, nullable=False, default=0)
     paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
     released_at = db.Column(db.DateTime(timezone=True), nullable=True)
 

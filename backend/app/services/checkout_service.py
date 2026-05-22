@@ -644,7 +644,15 @@ def create_checkout_payment(user, payload: dict, *, client_ip: str | None = None
         _set_paid(order)
         db.session.commit()
         return {"order": serialize_checkout_order(order), "next_action": {"type": "none"}}, 200
-    idempotency_key = f"checkout-payment-{order.id}-{uuid4().hex[:20]}"
+
+    # Idempotency-Key ESTÁVEL: incrementamos o contador antes de chamar
+    # o gateway; retry martelado da MESMA tentativa (mesma payment_attempts)
+    # devolve a Pagar.me order original em vez de criar várias.
+    # Cliente nervoso clicando 5x no botão "Tentar de novo" antes desse
+    # commit ainda esbarra no _lock_user_order (FOR UPDATE) e serializa
+    # — quem chegar 2º vê status='processing' e short-circuita acima.
+    order.payment_attempts = (order.payment_attempts or 0) + 1
+    idempotency_key = f"checkout-payment-{order.id}-{order.payment_attempts}"
     order.payment_idempotency_key = idempotency_key
     order.status = "processing"
     db.session.commit()
