@@ -77,6 +77,30 @@ def test_password_reset_for_unknown_email_keeps_generic_response(api_anonymous, 
     assert emails == []
 
 
+@pytest.mark.parametrize("factory_name", ["create_admin", "create_staff"])
+def test_password_reset_blocks_privileged_accounts_without_enumeration(
+    api_anonymous, app, db, monkeypatch, caplog, factory_name
+):
+    import tests.factories as factories
+
+    _configure_email_provider(app, monkeypatch)
+    user = getattr(factories, factory_name)(email=f"{factory_name}@peticiona.app.br")
+    db.session.commit()
+
+    emails = capture_emails(monkeypatch, target_module=password_reset_service)
+
+    with caplog.at_level("WARNING"):
+        response = api_anonymous.post(
+            "/api/auth/password-reset/request",
+            json={"email": user.email},
+        )
+
+    assert response.status_code == 200
+    assert response.get_json().get("message") == "Se o e-mail estiver cadastrado, enviaremos as instruções."
+    assert emails == []
+    assert "conta privilegiada" in "\n".join(record.getMessage() for record in caplog.records)
+
+
 def test_password_reset_falls_back_to_dry_run_without_provider(
     api_anonymous, app, db, monkeypatch, caplog
 ):

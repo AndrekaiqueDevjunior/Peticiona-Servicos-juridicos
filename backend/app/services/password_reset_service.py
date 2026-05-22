@@ -12,6 +12,7 @@ from app.models import User
 from app.services.email_service import build_password_reset_html, send_email
 
 logger = logging.getLogger(__name__)
+PRIVILEGED_PASSWORD_RESET_ROLES = {"admin", "staff"}
 
 
 class EmailDeliveryError(AppError):
@@ -143,6 +144,14 @@ def request_password_reset(email: str) -> dict:
     if not user or not user.is_active:
         # Não vaza que o e-mail não existe — resposta idêntica ao caso de
         # sucesso. Importante pra não permitir enumeração de usuários.
+        return response
+
+    if user.role in PRIVILEGED_PASSWORD_RESET_ROLES:
+        logger.warning(
+            "Reset de senha self-service bloqueado para conta privilegiada user_id=%s role=%s.",
+            user.id,
+            user.role,
+        )
         return response
 
     token = _build_reset_token(user)
