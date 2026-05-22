@@ -59,10 +59,14 @@ def _verify_resend_signature(
 def pagarme():
     raw_body = request.get_data(cache=True)
     
-    # Em produção, assinatura HMAC é obrigatória para segurança
+    # Em produção, assinatura HMAC é obrigatória para segurança.
+    # Default DEBUG=False (fail-secure): se a flag não estiver setada
+    # explicitamente, assumimos prod e exigimos HMAC. Antes o default
+    # era True, então uma config esquecida em prod abria janela para
+    # webhook sem assinatura (só com token).
     from flask import current_app
-    is_production = current_app.config.get("ENV") == "production" or not current_app.config.get("DEBUG", True)
-    
+    is_production = current_app.config.get("ENV") == "production" or not current_app.config.get("DEBUG", False)
+
     signature = (
         request.headers.get("X-Hub-Signature-256")
         or request.headers.get("X-Hub-Signature")

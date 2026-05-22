@@ -1066,6 +1066,39 @@ def get_admin_plan(plan_id: object) -> dict:
     return {"plan": _serialize_plan(plan)}
 
 
+#: Limite de quantos centavos de saldo um plano pode dar por centavo cobrado.
+#: 2.0 = promoção "ganhe 100% extra" ainda passa; valores maiores indicam
+#: provavelmente erro de digitação (R$ 1 pagando R$ 1.000.000 em saldo). Sem
+#: este teto, admin descuidado consegue criar plano que infla saldo de
+#: cliente sem cobertura financeira correspondente.
+MAX_PLAN_CREDIT_TO_PRICE_RATIO = 2.0
+
+
+def _validate_plan_credit_ratio(monthly_price_cents: int, monthly_credits_cents: int) -> None:
+    """Recusa planos onde o saldo creditado é múltiplos do preço pago.
+
+    Promoção legítima (e.g. R$ 100 paga R$ 150 em crédito → ratio 1.5)
+    passa. Erro grosseiro (R$ 1 paga R$ 999.999.999 em crédito) é
+    bloqueado antes de virar fraude. Quando o preço é 0 (plano grátis),
+    qualquer crédito > 0 é bloqueado também — não há cobertura financeira.
+    """
+    if monthly_credits_cents <= 0:
+        return
+    if monthly_price_cents <= 0:
+        raise ValidationError(
+            "Plano sem preço (monthly_price_cents=0) não pode dar crédito. "
+            "Configure o preço primeiro ou zere monthly_credits_cents."
+        )
+    ratio = monthly_credits_cents / monthly_price_cents
+    if ratio > MAX_PLAN_CREDIT_TO_PRICE_RATIO:
+        raise ValidationError(
+            f"monthly_credits_cents ({monthly_credits_cents}) excede o teto de "
+            f"{MAX_PLAN_CREDIT_TO_PRICE_RATIO}x o monthly_price_cents "
+            f"({monthly_price_cents}). Ratio atual: {ratio:.2f}x — provável "
+            f"erro de digitação."
+        )
+
+
 def create_admin_plan(actor, payload: dict) -> dict:
     code = str(payload.get("code") or "").strip().lower()
     name = str(payload.get("name") or "").strip()
@@ -1089,14 +1122,16 @@ def create_admin_plan(actor, payload: dict) -> dict:
         if payload.get("monthly_credits_cents") in (None, "", 0, "0")
         else payload.get("monthly_credits_cents")
     )
+    monthly_credits_value = _to_int(
+        monthly_credits_default, field_name="monthly_credits_cents", minimum=0
+    )
+    _validate_plan_credit_ratio(monthly_price_cents_value, monthly_credits_value)
     plan = Plan(
         code=code,
         name=name,
         description=str(payload.get("description") or "").strip() or None,
         monthly_price_cents=monthly_price_cents_value,
-        monthly_credits_cents=_to_int(
-            monthly_credits_default, field_name="monthly_credits_cents", minimum=0
-        ),
+        monthly_credits_cents=monthly_credits_value,
         petition_limit_monthly=(
             _to_int(payload.get("petition_limit_monthly"), field_name="petition_limit_monthly", minimum=0)
             if payload.get("petition_limit_monthly") is not None
@@ -1129,6 +1164,11 @@ def update_admin_plan(actor, plan_id: object, payload: dict) -> dict:
         plan.monthly_credits_cents = _to_int(
             payload.get("monthly_credits_cents"), field_name="monthly_credits_cents", minimum=0
         )
+    # Após aplicar ambos os campos (ou só um), valida o ratio. Cobre
+    # tanto "atualizou price e esqueceu credits" quanto "atualizou
+    # credits sem rever price" — qualquer caminho que deixe o plano
+    # fora do limite é recusado.
+    _validate_plan_credit_ratio(plan.monthly_price_cents, plan.monthly_credits_cents)
     if "petition_limit_monthly" in payload:
         plan.petition_limit_monthly = (
             _to_int(payload.get("petition_limit_monthly"), field_name="petition_limit_monthly", minimum=0)
