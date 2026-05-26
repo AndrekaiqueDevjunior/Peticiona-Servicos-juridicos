@@ -463,6 +463,85 @@ def _fix_petition_document_links_timestamps() -> None:
         """)
 
 
+_CREDIT_CONVERSION_RATE_CENTS = 16000  # R$160 — preço médio de 1 crédito (referência do plano essencial)
+
+
+def _add_credit_transactions_kind() -> None:
+    """Adiciona coluna `kind` em credit_transactions e migra saldos legacy.
+
+    O sistema antigo armazenava `amount` em CENTAVOS, com saldo único
+    agregado. O novo sistema usa UNIDADES (1 = 1 crédito) com três tipos:
+    'common', 'peticao_express', 'recurso_express'.
+
+    Estratégia de migração (não-destrutiva):
+    1. Marca TODAS as rows existentes como kind='legacy_cents' — elas
+       permanecem para histórico, mas são ignoradas pelo novo compute_balance.
+    2. Para cada usuário com saldo legado positivo, insere UMA row nova:
+       kind='common', amount = saldo_legacy_cents // 16000.
+    3. Going forward, todas as escritas usam kind explícito.
+    """
+    if "credit_transactions" not in _table_names():
+        return
+    if "kind" in _column_names("credit_transactions"):
+        return
+
+    if db.engine.dialect.name == "postgresql":
+        _execute(
+            "ALTER TABLE credit_transactions ADD COLUMN kind VARCHAR(40) NOT NULL DEFAULT 'legacy_cents'"
+        )
+    else:
+        _execute(
+            "ALTER TABLE credit_transactions ADD COLUMN kind VARCHAR(40) NOT NULL DEFAULT 'legacy_cents'"
+        )
+
+    # Agora calcula o saldo legacy por usuário e cria a row de migração.
+    rows = db.session.execute(
+        text(
+            """
+            SELECT user_id,
+                   COALESCE(SUM(CASE WHEN type='in' THEN amount ELSE 0 END), 0) -
+                   COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END), 0) AS balance_cents
+            FROM credit_transactions
+            GROUP BY user_id
+            HAVING COALESCE(SUM(CASE WHEN type='in' THEN amount ELSE 0 END), 0) -
+                   COALESCE(SUM(CASE WHEN type='out' THEN amount ELSE 0 END), 0) > 0
+            """
+        )
+    ).fetchall()
+
+    now_sql = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+
+    for user_id, balance_cents in rows:
+        credits = int(balance_cents) // _CREDIT_CONVERSION_RATE_CENTS
+        if credits <= 0:
+            continue
+        idem = f"migration-cents-to-credits-{user_id}"
+        existing = db.session.execute(
+            text("SELECT id FROM credit_transactions WHERE idempotency_key = :idem LIMIT 1"),
+            {"idem": idem},
+        ).fetchone()
+        if existing:
+            continue
+        description = (
+            f"Migração: {credits} crédito(s) comum(ns) "
+            f"(saldo legado: R$ {int(balance_cents) / 100:.2f})"
+        )
+        # company_id é nullable; obtemos do usuário se possível
+        db.session.execute(
+            text(
+                f"""
+                INSERT INTO credit_transactions
+                    (user_id, type, source, amount, description, idempotency_key, kind,
+                     company_id, created_at, updated_at)
+                SELECT :uid, 'in', 'migration', :amt, :desc, :idem, 'common',
+                       (SELECT company_id FROM users WHERE id = :uid),
+                       {now_sql}, {now_sql}
+                """
+            ),
+            {"uid": user_id, "amt": credits, "desc": description, "idem": idem},
+        )
+
+
 def _add_orders_service_order_id() -> None:
     if "orders" not in _table_names():
         return
@@ -785,6 +864,7 @@ def run_runtime_migrations() -> None:
     _fix_petition_document_links_timestamps()
     _add_orders_payment_attempts()
     _add_orders_service_order_id()
+    _add_credit_transactions_kind()
     _normalize_credit_transaction_types()
     _harden_credit_transactions_schema()
     _clear_orphan_order_debits()

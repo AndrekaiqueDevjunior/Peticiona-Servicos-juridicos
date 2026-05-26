@@ -76,6 +76,23 @@ _TYPE_IN = "in"
 _TYPE_OUT = "out"
 _VALID_TYPES = frozenset({_TYPE_IN, _TYPE_OUT})
 
+#: Kinds válidos para créditos. Espelha CHECK constraint
+#: `ck_credit_transactions_kind`. 'legacy_cents' é histórico; código novo
+#: NUNCA escreve com esse kind — só leitura para extrato.
+KIND_COMMON = "common"
+KIND_PETICAO_EXPRESS = "peticao_express"
+KIND_RECURSO_EXPRESS = "recurso_express"
+KIND_LEGACY_CENTS = "legacy_cents"
+_VALID_KINDS = frozenset({KIND_COMMON, KIND_PETICAO_EXPRESS, KIND_RECURSO_EXPRESS})
+_ACTIVE_KINDS = (KIND_COMMON, KIND_PETICAO_EXPRESS, KIND_RECURSO_EXPRESS)
+
+#: Mapa de label humano por kind — usado em mensagens de erro/UI.
+KIND_LABELS = {
+    KIND_COMMON: "créditos comuns",
+    KIND_PETICAO_EXPRESS: "créditos de Petição Express",
+    KIND_RECURSO_EXPRESS: "créditos de Recurso Express",
+}
+
 
 # ---------------------------------------------------------------------------
 # Exceções
@@ -88,14 +105,15 @@ class LedgerError(Exception):
 
 
 class InsufficientBalance(LedgerError):
-    """Tentativa de débito maior que o saldo disponível."""
+    """Tentativa de débito maior que o saldo disponível para o kind solicitado."""
 
-    def __init__(self, *, available: int, required: int) -> None:
+    def __init__(self, *, available: int, required: int, kind: str = KIND_COMMON) -> None:
         super().__init__(
-            f"insufficient balance: available={available}, required={required}"
+            f"insufficient balance (kind={kind}): available={available}, required={required}"
         )
         self.available = available
         self.required = required
+        self.kind = kind
 
 
 class LedgerCorruption(LedgerError):
@@ -140,21 +158,23 @@ def _acquire_advisory_lock(user_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 
-def compute_balance(user_id: int) -> int:
-    """Soma autoritativa de `credit_transactions` para um usuário.
+def compute_balance(user_id: int, *, kind: str = KIND_COMMON) -> int:
+    """Saldo (em unidades de crédito) do usuário para um `kind` específico.
 
-    Retorna o saldo em centavos (mesma unidade de ``amount``). Esta é a
-    única função que deve ser usada para "qual o saldo do usuário X?".
-    `financial_service.get_balance` consome esta função; o gate em
-    `_assert_have_balance` também. Garante uma única regra: nenhum
-    `type` fora de `{'in','out'}` é interpretado — vira `LedgerCorruption`.
+    Ignora rows com `kind='legacy_cents'` — saldo histórico em centavos
+    que NÃO entra mais na contagem. O sistema novo opera em unidades
+    (1 crédito = 1 serviço).
     """
+    if kind not in _VALID_KINDS:
+        raise LedgerError(
+            f"kind={kind!r} inválido — só {sorted(_VALID_KINDS)} são aceitos"
+        )
     rows: Iterable[tuple[str, int]] = db.session.execute(
         text(
             "SELECT type, amount FROM credit_transactions "
-            "WHERE user_id = :uid"
+            "WHERE user_id = :uid AND kind = :kind"
         ),
-        {"uid": int(user_id)},
+        {"uid": int(user_id), "kind": kind},
     ).fetchall()
 
     balance = 0
@@ -171,19 +191,53 @@ def compute_balance(user_id: int) -> int:
     return balance
 
 
-def compute_totals(user_id: int) -> dict[str, int]:
-    """Retorna `{credits_in, credits_out, balance}` para um usuário.
+def compute_balances(user_id: int) -> dict[str, int]:
+    """Retorna `{common, peticao_express, recurso_express}` para o usuário.
 
-    Útil para o serializer de saldo (`financial_service.get_balance`)
-    que precisa dos totais separados para a UI. Mesma regra estrita
-    que `compute_balance`.
+    Útil pra UI que exibe os 3 saldos lado a lado. Ignora 'legacy_cents'.
     """
     rows = db.session.execute(
         text(
-            "SELECT type, amount FROM credit_transactions "
-            "WHERE user_id = :uid"
+            "SELECT kind, type, SUM(amount) AS total "
+            "FROM credit_transactions "
+            "WHERE user_id = :uid AND kind IN ('common','peticao_express','recurso_express') "
+            "GROUP BY kind, type"
         ),
         {"uid": int(user_id)},
+    ).fetchall()
+
+    balances = {k: 0 for k in _ACTIVE_KINDS}
+    for kind, ttype, total in rows:
+        if kind not in balances:
+            continue
+        if ttype == _TYPE_IN:
+            balances[kind] += int(total or 0)
+        elif ttype == _TYPE_OUT:
+            balances[kind] -= int(total or 0)
+        else:
+            raise LedgerCorruption(
+                f"credit_transactions.type={ttype!r} fora do whitelist "
+                f"(user_id={user_id})"
+            )
+    return balances
+
+
+def compute_totals(user_id: int, *, kind: str = KIND_COMMON) -> dict[str, int]:
+    """Retorna `{credits_in, credits_out, balance}` para o kind solicitado.
+
+    Mantém retro-compatibilidade com callers antigos que esperavam
+    totais agregados — agora sempre referente a um kind específico.
+    """
+    if kind not in _VALID_KINDS:
+        raise LedgerError(
+            f"kind={kind!r} inválido — só {sorted(_VALID_KINDS)} são aceitos"
+        )
+    rows = db.session.execute(
+        text(
+            "SELECT type, amount FROM credit_transactions "
+            "WHERE user_id = :uid AND kind = :kind"
+        ),
+        {"uid": int(user_id), "kind": kind},
     ).fetchall()
 
     credits_in = 0
@@ -219,6 +273,7 @@ class _WriteParams:
     description: str
     idempotency_key: str | None
     company_id: int | None
+    kind: str = KIND_COMMON
     #: Se True, pula o gate de saldo suficiente e a invariante final de
     #: não-negatividade. Usado em estornos de gateway externo (Pagar.me
     #: reembolsou — não há como o cliente "ter saldo" para perder o
@@ -230,6 +285,10 @@ def _validate(params: _WriteParams) -> None:
     if params.ttype not in _VALID_TYPES:
         raise LedgerError(
             f"type={params.ttype!r} inválido — só {sorted(_VALID_TYPES)} são aceitos"
+        )
+    if params.kind not in _VALID_KINDS:
+        raise LedgerError(
+            f"kind={params.kind!r} inválido — só {sorted(_VALID_KINDS)} são aceitos"
         )
     if not isinstance(params.amount, int) or params.amount <= 0:
         raise LedgerError(
@@ -272,6 +331,9 @@ def _ensure_idempotent_match(
         mismatches.append(f"amount {existing.amount} ≠ {params.amount}")
     if existing.source != params.source:
         mismatches.append(f"source {existing.source!r} ≠ {params.source!r}")
+    existing_kind = getattr(existing, "kind", None) or KIND_COMMON
+    if existing_kind != params.kind:
+        mismatches.append(f"kind {existing_kind!r} ≠ {params.kind!r}")
     if mismatches:
         raise IdempotentReplay(
             f"idempotency_key={params.idempotency_key!r} já existe com "
@@ -296,10 +358,12 @@ def _insert(params: _WriteParams) -> CreditTransaction:
     if params.ttype == _TYPE_OUT and not params.allow_negative_balance:
         # Gate de saldo DENTRO do lock — única forma segura de garantir
         # que dois débitos concorrentes não somem além do disponível.
-        current = compute_balance(params.user_id)
+        # Importante: o saldo é POR KIND — só pode debitar 'peticao_express'
+        # de quem tem crédito 'peticao_express' (e assim por diante).
+        current = compute_balance(params.user_id, kind=params.kind)
         if current < params.amount:
             raise InsufficientBalance(
-                available=current, required=params.amount
+                available=current, required=params.amount, kind=params.kind,
             )
 
     tx = CreditTransaction(
@@ -310,6 +374,7 @@ def _insert(params: _WriteParams) -> CreditTransaction:
         amount=params.amount,
         description=params.description,
         idempotency_key=params.idempotency_key,
+        kind=params.kind,
     )
     db.session.add(tx)
     db.session.flush()
@@ -317,15 +382,12 @@ def _insert(params: _WriteParams) -> CreditTransaction:
     # Defesa em profundidade: se algum bug nosso (ou um INSERT cru de
     # outro lugar fora deste módulo) deixou o saldo negativo, fail-fast
     # antes de continuar. Não substitui o gate acima — complementa.
-    # Pulamos quando o caller pediu allow_negative_balance (estorno de
-    # gateway, reversão administrativa) — nesses casos o negativo é
-    # esperado e representa dívida do cliente.
     if not params.allow_negative_balance:
-        final = compute_balance(params.user_id)
+        final = compute_balance(params.user_id, kind=params.kind)
         if final < 0:
             raise LedgerCorruption(
                 f"saldo ficou negativo após INSERT (user_id={params.user_id}, "
-                f"balance={final}) — invariante violada"
+                f"kind={params.kind}, balance={final}) — invariante violada"
             )
     return tx
 
@@ -338,20 +400,17 @@ def credit(
     description: str,
     idempotency_key: str | None = None,
     company_id: int | None = None,
+    kind: str = KIND_COMMON,
 ) -> CreditTransaction:
-    """Adiciona créditos ao saldo do usuário (`type='in'`).
+    """Adiciona créditos UNITÁRIOS ao saldo do usuário (`type='in'`).
+
+    O sistema novo opera em UNIDADES (1 crédito = 1 serviço), não centavos.
+    `kind` define o "bolso" de destino: 'common', 'peticao_express' ou
+    'recurso_express'. Saldos não se misturam entre kinds.
 
     Args:
-        user: instância de ``User`` (ou qualquer objeto com `.id` e
-            opcionalmente `.company_id`).
-        amount: valor em centavos. Deve ser > 0.
-        source: identificador curto do contexto da operação
-            (`'checkout'`, `'admin_grant'`, `'client_order_refund'`…).
-        description: texto que aparece no extrato. Obrigatório.
-        idempotency_key: chave estável para replay seguro. Recomendado.
-        company_id: opcional; default = `user.company_id`.
-
-    Returns: a ``CreditTransaction`` criada (ou a existente, em replay).
+        amount: quantidade de créditos (unidades, não centavos).
+        kind: tipo do crédito ('common' default).
     """
     params = _WriteParams(
         user_id=user.id,
@@ -361,6 +420,7 @@ def credit(
         description=description,
         idempotency_key=idempotency_key,
         company_id=company_id if company_id is not None else getattr(user, "company_id", None),
+        kind=kind,
     )
     return _insert(params)
 
@@ -374,18 +434,17 @@ def debit(
     idempotency_key: str | None = None,
     company_id: int | None = None,
     allow_negative_balance: bool = False,
+    kind: str = KIND_COMMON,
 ) -> CreditTransaction:
-    """Subtrai créditos do saldo (`type='out'`).
+    """Subtrai créditos UNITÁRIOS do saldo (`type='out'`).
 
-    Por padrão falha com ``InsufficientBalance`` se saldo < amount. O
-    caller traduz para o cliente (geralmente ``ValidationError`` com
-    mensagem amigável).
+    O débito é SEMPRE do bolso correspondente ao `kind`. Tentar debitar
+    'peticao_express' de quem só tem 'common' lança InsufficientBalance —
+    saldos não se misturam.
 
-    Quando ``allow_negative_balance=True``, o gate é pulado — usado em
-    estornos de gateway (Pagar.me devolveu o pagamento, o crédito tem
-    que sair mesmo se o cliente já gastou) e em reversões
-    administrativas explícitas. Cliente fica com saldo negativo, que é
-    dívida real registrada no livro-razão.
+    Args:
+        amount: quantidade de créditos a debitar.
+        kind: tipo do crédito ('common' default).
     """
     params = _WriteParams(
         user_id=user.id,
@@ -396,6 +455,7 @@ def debit(
         idempotency_key=idempotency_key,
         company_id=company_id if company_id is not None else getattr(user, "company_id", None),
         allow_negative_balance=allow_negative_balance,
+        kind=kind,
     )
     return _insert(params)
 
@@ -411,14 +471,7 @@ def refund(
     """Estorna uma transação existente como espelho.
 
     `out` vira `in` (devolve crédito ao usuário) e vice-versa.
-    Idempotência é altamente recomendada — passe uma chave estável tipo
-    `f"refund-{original.id}"` para que o mesmo estorno chamado duas
-    vezes não duplique.
-
-    Por default ``allow_negative_balance=True``: estornos de pagamento
-    podem deixar o saldo negativo (cliente gastou o crédito antes do
-    gateway reembolsar). Quando estornar um débito (`out`→`in`), o
-    saldo só sobe — então a flag é inofensiva nesse caso.
+    Sempre estorna no MESMO `kind` da transação original.
     """
     if original.type == _TYPE_OUT:
         reverse_type = _TYPE_IN
@@ -427,6 +480,13 @@ def refund(
     else:
         raise LedgerCorruption(
             f"transação a estornar tem type={original.type!r} inválido"
+        )
+
+    original_kind = getattr(original, "kind", None) or KIND_COMMON
+    if original_kind == KIND_LEGACY_CENTS:
+        raise LedgerError(
+            "não é possível estornar transação legacy_cents — saldo histórico "
+            "não participa do novo sistema de créditos"
         )
 
     params = _WriteParams(
@@ -438,5 +498,6 @@ def refund(
         idempotency_key=idempotency_key,
         company_id=original.company_id,
         allow_negative_balance=allow_negative_balance,
+        kind=original_kind,
     )
     return _insert(params)
