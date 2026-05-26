@@ -34,7 +34,7 @@ CANONICAL_PLANS: list[dict] = [
     },
     {
         "code": "plano_profissional",
-        "name": "Plano Profissional",
+        "name": "Plano Intermediário",
         "subtitle": "Para escritórios em crescimento",
         "monthly_price_cents": 75000,
         "price_per_service_cents": 15000,
@@ -48,7 +48,7 @@ CANONICAL_PLANS: list[dict] = [
     },
     {
         "code": "plano_estrategico",
-        "name": "Plano Estratégico",
+        "name": "Plano Premium",
         "subtitle": "Para alta demanda e escala",
         "monthly_price_cents": 280000,
         "price_per_service_cents": 14000,

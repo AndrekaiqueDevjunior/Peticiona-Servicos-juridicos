@@ -19,6 +19,15 @@ from app.services.serializers import format_brl_from_cents
 logger = logging.getLogger(__name__)
 
 
+# Catálogo de pacotes adquiridos no checkout via Pagar.me.
+#
+# SISTEMA NOVO: cada pacote libera N créditos UNITÁRIOS de um `credit_kind`
+# específico após confirmação do pagamento. `credit_cents` é mantido como
+# campo legado (mesmo valor que amount_cents) para compatibilidade com
+# código antigo. O que importa para o saldo é:
+#   * credit_units → quantidade de créditos a creditar
+#   * credit_kind  → bolso onde os créditos entram ('common',
+#                    'peticao_express' ou 'recurso_express')
 CREDIT_PACKAGES: dict[str, dict] = {
     "essencial": {
         "id": "essencial",
@@ -27,61 +36,53 @@ CREDIT_PACKAGES: dict[str, dict] = {
         "source": "plano",
         "amount_cents": 48000,
         "credit_cents": 48000,
-        "description": "Saldo de R$ 480,00 — R$ 160,00 por serviço.",
+        "credit_units": 3,
+        "credit_kind": "common",
+        "description": "R$ 480,00 — 3 créditos comuns (R$ 160,00 por serviço).",
     },
     "profissional": {
         "id": "profissional",
-        "name": "Plano Profissional",
+        "name": "Plano Intermediário",
         "kind": "plan",
         "source": "plano",
         "amount_cents": 75000,
         "credit_cents": 75000,
-        "description": "Saldo de R$ 750,00 — R$ 150,00 por serviço.",
+        "credit_units": 5,
+        "credit_kind": "common",
+        "description": "R$ 750,00 — 5 créditos comuns (R$ 150,00 por serviço).",
     },
     "estrategico": {
         "id": "estrategico",
-        "name": "Plano Estratégico",
+        "name": "Plano Premium",
         "kind": "plan",
         "source": "plano",
         "amount_cents": 280000,
         "credit_cents": 280000,
-        "description": "Saldo de R$ 2.800,00 — R$ 140,00 por serviço.",
-    },
-    "peticao_avulsa": {
-        "id": "peticao_avulsa",
-        "name": "Petição Avulsa",
-        "kind": "single",
-        "source": "avulso",
-        "amount_cents": 16000,
-        "credit_cents": 16000,
-        "description": "Crédito para serviços do Grupo A.",
-    },
-    "recurso_avulso": {
-        "id": "recurso_avulso",
-        "name": "Recurso Avulso",
-        "kind": "single",
-        "source": "avulso",
-        "amount_cents": 20000,
-        "credit_cents": 20000,
-        "description": "Crédito para serviços do Grupo B.",
+        "credit_units": 20,
+        "credit_kind": "common",
+        "description": "R$ 2.800,00 — 20 créditos comuns (R$ 140,00 por serviço).",
     },
     "peticao_express": {
         "id": "peticao_express",
-        "name": "Petição Express",
+        "name": "Crédito Petição Express",
         "kind": "single",
         "source": "avulso",
         "amount_cents": 23000,
         "credit_cents": 23000,
-        "description": "Entrega prioritária para serviços do Grupo A.",
+        "credit_units": 1,
+        "credit_kind": "peticao_express",
+        "description": "1 crédito para Petição Express (entrega em até 24h).",
     },
     "recurso_express": {
         "id": "recurso_express",
-        "name": "Recurso Express",
+        "name": "Crédito Recurso Express",
         "kind": "single",
         "source": "avulso",
         "amount_cents": 26000,
         "credit_cents": 26000,
-        "description": "Entrega prioritária para serviços do Grupo B.",
+        "credit_units": 1,
+        "credit_kind": "recurso_express",
+        "description": "1 crédito para Recurso Express (entrega em até 24h).",
     },
 }
 
@@ -436,13 +437,21 @@ def _credit_purchase(purchase: CreditPurchase, user) -> None:
         )
         return
 
+    # Resolve units e kind do pacote — fonte de verdade é CREDIT_PACKAGES.
+    # Para pacotes legados (não presentes mais no dict), faz fallback
+    # conservador: 1 crédito comum (preserva o "valor" sem inflar saldo).
+    package = CREDIT_PACKAGES.get(purchase.package_id) or {}
+    credit_units = int(package.get("credit_units") or 1)
+    credit_kind = str(package.get("credit_kind") or credit_ledger.KIND_COMMON)
+
     credit_ledger.credit(
         purchase_owner,
-        amount=purchase.credit_cents,
+        amount=credit_units,
         source=purchase.source,
         description=f"Compra Pagar.me - {purchase.package_name}",
         idempotency_key=f"credit-purchase-{purchase.id}",
         company_id=purchase.company_id,
+        kind=credit_kind,
     )
     purchase.credited_at = utcnow()
 
@@ -453,7 +462,8 @@ def _credit_purchase(purchase: CreditPurchase, user) -> None:
         user=user,
         metadata={
             "code": purchase.code,
-            "amount_cents": purchase.credit_cents,
+            "credit_units": credit_units,
+            "credit_kind": credit_kind,
             "source": purchase.source,
         },
     )

@@ -222,15 +222,53 @@ def _payment_event(order: Order | None, event_type: str, gateway_event_id: str, 
     )
 
 
-def _credit_amount_for_order(order: Order) -> int:
+# Mapa de service_id express → kind de crédito liberado. Cada compra de
+# pacote express libera 1 crédito do kind correspondente.
+_EXPRESS_SERVICE_KIND = {
+    "servico_peticao_express": "peticao_express",
+    "servico_recurso_express": "recurso_express",
+}
+
+
+def _credit_release_for_order(order: Order) -> tuple[str, int]:
+    """Resolve (kind, units) que devem ser liberados ao confirmar pagamento.
+
+    Para planos: kind='common', units = plan.credits_quantity (3/5/20).
+    Para pacotes express: kind='peticao_express' ou 'recurso_express', units=1.
+    Para qualquer outro service_id: (KIND_COMMON, 0) — não libera nada.
+    """
+    from app.services.credit_ledger import KIND_COMMON
+
+    if order.service_id in _EXPRESS_SERVICE_KIND:
+        return _EXPRESS_SERVICE_KIND[order.service_id], 1
+
     plan = Plan.query.filter_by(code=order.service_id).first()
     if plan:
-        configured = int(plan.monthly_credits_cents or 0)
-        if configured > 0:
-            return configured
-        # Plano cadastrado sem monthly_credits_cents explícito: caímos no valor
-        # pago para que o cliente receba o crédito equivalente ao que desembolsou.
-    return max(0, int(order.amount or 0))
+        units = int(getattr(plan, "credits_quantity", None) or 0)
+        if units <= 0:
+            # Fallback: plano sem credits_quantity explícito — não libera
+            # créditos (refuso silencioso). Log para investigação.
+            logger.warning(
+                "checkout_plan_missing_credits_quantity order_id=%s plan_code=%s",
+                order.id,
+                plan.code,
+            )
+            return KIND_COMMON, 0
+        return KIND_COMMON, units
+
+    logger.warning(
+        "checkout_unknown_service_id_no_credit_release order_id=%s service_id=%s",
+        order.id,
+        order.service_id,
+    )
+    return KIND_COMMON, 0
+
+
+def _credit_amount_for_order(order: Order) -> int:
+    """Legacy: retorna apenas units (sem kind). Mantido para callers antigos
+    que ainda inspecionam o valor liberado em centavos. NÃO use em código novo."""
+    _, units = _credit_release_for_order(order)
+    return units
 
 
 def _finalize_express_service_order(order: Order) -> None:
@@ -260,37 +298,42 @@ def _finalize_express_service_order(order: Order) -> None:
 
 
 def _release_order(order: Order) -> None:
-    """Quando um Order vira `paid`, libera o crédito ou finaliza upgrade Express.
+    """Libera créditos ao saldo do cliente quando um Order vira `paid`.
 
-    Para Orders de upgrade Express (service_order_id definido):
-    - Finaliza o ServiceOrder vinculado (express_upgrade=True, prazo 24h)
-    - NÃO libera créditos ao saldo do cliente
+    Cada compra libera créditos UNITÁRIOS do `kind` correspondente:
+    - Planos (essencial/profissional/estratégico) → N créditos 'common'
+    - Pacote Petição Express → 1 crédito 'peticao_express'
+    - Pacote Recurso Express → 1 crédito 'recurso_express'
 
-    Para Orders normais (compra de crédito):
-    - Libera o crédito ao saldo via credit_ledger
-    - Idempotente por `checkout-{order.id}` — replay do webhook não duplica
+    Idempotente por `checkout-{order.id}` — replay do webhook não duplica.
     """
     from app.services import credit_ledger
 
     if order.status != "paid":
         return
+
+    # Fluxo antigo de upgrade Express por pedido (deprecated). Mantido para
+    # finalizar pedidos legados pendentes. NOVO sistema usa créditos express
+    # pré-comprados, sem service_order_id no checkout.
     if getattr(order, "service_order_id", None):
         _finalize_express_service_order(order)
         order.released_at = order.released_at or utcnow()
         return
-    credit_amount = _credit_amount_for_order(order)
-    if credit_amount > 0:
+
+    kind, units = _credit_release_for_order(order)
+    if units > 0:
         owner = order.user or db.session.get(User, order.user_id)
         if owner is None:
             logger.warning("release_order_owner_missing order_id=%s", order.id)
             return
         credit_ledger.credit(
             owner,
-            amount=credit_amount,
+            amount=units,
             source="checkout",
             description=f"Checkout #{order.id}",
             idempotency_key=f"checkout-{order.id}",
             company_id=order.company_id,
+            kind=kind,
         )
     order.released_at = order.released_at or utcnow()
 
@@ -309,8 +352,8 @@ def _reverse_released_order(order: Order, *, reason: str) -> None:
     """
     from app.services import credit_ledger
 
-    credit_amount = _credit_amount_for_order(order)
-    if not order.released_at or credit_amount <= 0:
+    kind, units = _credit_release_for_order(order)
+    if not order.released_at or units <= 0:
         return
     owner = order.user or db.session.get(User, order.user_id)
     if owner is None:
@@ -319,12 +362,13 @@ def _reverse_released_order(order: Order, *, reason: str) -> None:
     description = f"Estorno Checkout #{order.id} ({reason})"
     credit_ledger.debit(
         owner,
-        amount=credit_amount,
+        amount=units,
         source="checkout_refund",
         description=description,
         idempotency_key=f"checkout-refund-{order.id}-{reason}",
         company_id=order.company_id,
         allow_negative_balance=True,
+        kind=kind,
     )
     order.released_at = None
 
