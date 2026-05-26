@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from app.core.errors import PermissionDenied, ValidationError
+from app.core.errors import NotFoundError, PermissionDenied, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
 from app.domain.plan_rules import ensure_plan_allows_new_petition
-from app.models import Document, Petition, PetitionDocumentLink, PetitionParty, ServiceOrder, ServiceOrderItem
+from app.models import Document, Petition, PetitionDocumentLink, PetitionParty, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
+from app.models.payments import Order as CheckoutOrder
 from app.services.audit_service import log_action
 from app.services.serializers import serialize_order, serialize_petition
 
@@ -31,6 +32,36 @@ def _validate_document_ids(user, document_ids: list[int]) -> list[Document]:
     if len(documents) != len(set(document_ids)):
         raise PermissionDenied("Um ou mais documentos não pertencem à sua conta.")
     return documents
+
+
+_GRUPO_B_TIPOS = {
+    "Petição inicial comum",
+    "Mandado de segurança",
+    "Cumprimento de sentença (inicial)",
+    "Apelação",
+    "Agravo de instrumento",
+    "Agravo interno",
+    "Embargos de declaração",
+    "Recurso ordinário",
+    "Recurso especial",
+    "Recurso extraordinário",
+    "Agravo em recurso especial",
+    "Agravo em recurso extraordinário",
+}
+
+_EXPRESS_CODE_BY_GRUPO = {
+    "A": "servico_peticao_express",
+    "B": "servico_recurso_express",
+}
+
+
+def _resolve_express_catalog(tipo_peticao: str | None) -> tuple[str, int]:
+    grupo = "B" if tipo_peticao in _GRUPO_B_TIPOS else "A"
+    code = _EXPRESS_CODE_BY_GRUPO[grupo]
+    item = ServiceCatalogItem.query.filter_by(code=code, is_active=True).first()
+    if item is None:
+        raise NotFoundError(f"Serviço express '{code}' não encontrado no catálogo.")
+    return code, int(item.unit_price)
 
 
 def create_petition(user, payload: dict) -> dict:
@@ -96,6 +127,33 @@ def create_petition(user, payload: dict) -> dict:
 
     order = _create_service_order_for_petition(user, petition, payload)
 
+    express_checkout_order_id = None
+    if payload.get("express_upgrade"):
+        express_service_code, express_amount = _resolve_express_catalog(petition.tipo_peticao)
+        checkout_order = CheckoutOrder(
+            user_id=user.id,
+            service_id=express_service_code,
+            amount=express_amount,
+            currency="BRL",
+            status="pending",
+            service_order_id=order.id,
+            idempotency_key=f"express-upgrade-{order.reference}",
+            company_id=user.company_id,
+        )
+        db.session.add(checkout_order)
+        db.session.flush()
+        order.express_order_id = checkout_order.id
+        order.status = "pendente_pagamento_express"
+        db.session.flush()
+        express_checkout_order_id = str(checkout_order.id)
+        log_action(
+            action="order.express_upgrade_initiated",
+            entity_type="service_order",
+            entity_id=order.id,
+            user=user,
+            metadata={"reference": order.reference, "express_checkout_order_id": checkout_order.id},
+        )
+
     log_action(
         action="petition.created",
         entity_type="petition",
@@ -104,11 +162,14 @@ def create_petition(user, payload: dict) -> dict:
         metadata={"reference": petition.reference, "status": petition.status},
     )
     db.session.commit()
-    return {
+    result: dict = {
         "message": "Petição criada com sucesso.",
         "petition": serialize_petition(petition),
         "order": serialize_order(order),
     }
+    if express_checkout_order_id is not None:
+        result["express_checkout_order_id"] = express_checkout_order_id
+    return result
 
 
 def list_petitions(user) -> dict:

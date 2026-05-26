@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import timezone
+from datetime import timedelta, timezone
 from uuid import uuid4
 
 from flask import current_app
@@ -233,17 +233,50 @@ def _credit_amount_for_order(order: Order) -> int:
     return max(0, int(order.amount or 0))
 
 
-def _release_order(order: Order) -> None:
-    """Quando um Order vira `paid`, libera o crédito ao saldo do cliente.
+def _finalize_express_service_order(order: Order) -> None:
+    """Finaliza o ServiceOrder vinculado quando o pagamento express é confirmado."""
+    from app.models.orders import ServiceOrder
 
-    Usa `credit_ledger.credit` com `idempotency_key=f"checkout-{order.id}"`
-    — replay (ex.: webhook do Pagar.me chegando duas vezes) devolve a mesma
-    transação sem duplicar. Ordem com `amount=0` (pedido gratuito) só marca
-    `released_at` sem inserir nada no livro-razão.
+    service_order = db.session.get(ServiceOrder, order.service_order_id)
+    if service_order is None:
+        logger.warning(
+            "express_service_order_not_found order_id=%s service_order_id=%s",
+            order.id,
+            order.service_order_id,
+        )
+        return
+    if service_order.status != "pendente_pagamento_express":
+        return
+    service_order.express_upgrade = True
+    service_order.status = "pendente"
+    service_order.deadline_at = utcnow() + timedelta(hours=24)
+    log_action(
+        action="order.express_upgrade_confirmed",
+        entity_type="service_order",
+        entity_id=service_order.id,
+        user=None,
+        metadata={"checkout_order_id": order.id, "reference": service_order.reference},
+    )
+
+
+def _release_order(order: Order) -> None:
+    """Quando um Order vira `paid`, libera o crédito ou finaliza upgrade Express.
+
+    Para Orders de upgrade Express (service_order_id definido):
+    - Finaliza o ServiceOrder vinculado (express_upgrade=True, prazo 24h)
+    - NÃO libera créditos ao saldo do cliente
+
+    Para Orders normais (compra de crédito):
+    - Libera o crédito ao saldo via credit_ledger
+    - Idempotente por `checkout-{order.id}` — replay do webhook não duplica
     """
     from app.services import credit_ledger
 
     if order.status != "paid":
+        return
+    if getattr(order, "service_order_id", None):
+        _finalize_express_service_order(order)
+        order.released_at = order.released_at or utcnow()
         return
     credit_amount = _credit_amount_for_order(order)
     if credit_amount > 0:

@@ -31,6 +31,8 @@ class ServiceOrder(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     split_plataforma = db.Column(db.Integer, nullable=False, default=100)
     split_funcionario = db.Column(db.Integer, nullable=False, default=0)
+    express_upgrade = db.Column(db.Boolean, nullable=False, default=False)
+    express_order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=True)
 
     user = db.relationship("User", foreign_keys=[user_id])
     petition = db.relationship("Petition")

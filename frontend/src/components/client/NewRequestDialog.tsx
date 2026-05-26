@@ -5,9 +5,8 @@ import {
   calcularPrecoPedido,
   formatBRL,
   useUserPricingProfile,
-  type Modalidade,
 } from "@/lib/pricing";
-import { useBalance, WALLET_LABEL } from "@/lib/balance";
+import { useBalance } from "@/lib/balance";
 import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import { api } from "@/lib/api";
 import {
@@ -22,6 +21,7 @@ import {
   Trash2,
   UploadCloud,
   Wallet,
+  Zap,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import {
   Popover,
   PopoverContent,
@@ -229,54 +230,38 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Modalidade escolhida (padrão x express) — só é usada quando express está disponível
-  const [modalidade, setModalidade] = useState<Modalidade>("padrao");
+  // Toggle de upgrade Express — quando ativo, o pedido é redirecionado para checkout separado
+  const [expressUpgrade, setExpressUpgrade] = useState(false);
 
-  // Perfil de precificação do usuário (plano ativo + express comprados)
+  // Perfil de precificação do usuário (plano ativo)
   const { data: pricingProfile } = useUserPricingProfile();
-  const perfilSeguro = pricingProfile ?? {
-    plano: null,
-    peticaoExpressDisponivel: false,
-    recursoExpressDisponivel: false,
-  };
-  const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro, modalidade);
-  const valorPedido = pricing.precoFinal;
+  const perfilSeguro = pricingProfile ?? { plano: null };
+  const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro);
+  const valorPedido = pricing.precoPadrao ?? 0;
   const tipoReconhecido = pricing.precoPadrao !== null;
 
-  // Cálculo do prazo de entrega (depende da modalidade efetiva).
+  // Cálculo do prazo de entrega (depende do toggle express).
   const modalidadePrazo = modalidadeParaPrazo({
-    modalidadeEscolhida: pricing.modalidadeEscolhida,
     grupo: pricing.grupo,
     plano: perfilSeguro.plano,
+    expressUpgrade,
   });
   const prazoCalc = modalidadePrazo ? calcularPrazo(modalidadePrazo) : null;
 
   const balance = useBalance();
 
-  // Saldo agregado vem do backend (única fonte de verdade). A decisão
-  // final de "pode criar pedido?" é sempre do backend em
-  // _assert_sufficient_balance — aqui só sinalizamos a UI.
-  // balance.saldoCents está em centavos; pricing.* trabalha em reais
-  // (ver roundCurrency em lib/pricing.ts), então normalizamos para reais.
+  // Saldo agregado vem do backend (única fonte de verdade).
   const saldoCarteira = balance.saldoCents / 100;
   const saldoApos = saldoCarteira - valorPedido;
   const semSaldo = tipoReconhecido && saldoCarteira < valorPedido;
 
-  const padraoDisponivel = saldoCarteira >= (pricing.precoPadrao ?? 0);
-  const expressDisponivel =
-    pricing.precoExpress !== null && saldoCarteira >= (pricing.precoExpress ?? 0);
-
-  // Carteira é sempre "agregada" — backend não mantém separação por tipo.
   const carteiraResolvida = pricing.grupo
     ? { wallet: "agregado" as const, saldo: saldoCarteira }
     : null;
-  const carteiraPadrao = carteiraResolvida;
 
   const mensagemBloqueio = (() => {
     if (!tipoReconhecido) return null;
-    if (semSaldo) {
-      return "Saldo insuficiente. Adicione créditos para continuar.";
-    }
+    if (semSaldo) return "Saldo insuficiente. Adicione créditos para continuar.";
     return null;
   })();
 
@@ -358,7 +343,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const reset = () => {
     setAreaDireito("");
     setTipoPeticao("");
-    setModalidade("padrao");
+    setExpressUpgrade(false);
     setDataPublicacao(undefined);
     setNumeroProcesso("");
     setCompetencia("");
@@ -404,7 +389,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         ? await api.documents.upload(arquivos.map((item) => item.file))
         : { documents: [] };
 
-      await api.petitions.create({
+      const result = await api.petitions.create({
         area_direito: areaDireito,
         tipo_peticao: tipoPeticao,
         numero_processo: numeroProcesso,
@@ -416,12 +401,20 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         detalhes,
         partes: partes.map((parte) => ({ nome: parte.nome, tipo: parte.tipo })),
         document_ids: uploadedDocuments.documents.map((document) => document.id),
+        express_upgrade: expressUpgrade || undefined,
       });
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["balance"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
+
+      if (expressUpgrade && result.express_checkout_order_id) {
+        reset();
+        onOpenChange(false);
+        navigate(`/checkout/${result.express_checkout_order_id}`);
+        return;
+      }
 
       setSuccess(true);
     } catch (err: unknown) {
@@ -515,7 +508,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                 value={tipoPeticao}
                 onValueChange={(v) => {
                   setTipoPeticao(v);
-                  setModalidade("padrao");
+                  setExpressUpgrade(false);
                 }}
               >
                 <SelectTrigger id="tipo-peticao">
@@ -991,10 +984,65 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
           </section>
 
-          {/* 6. Resumo do pedido */}
+          {/* 6. Upgrade Express */}
+          {tipoPeticao && tipoReconhecido && (
+            <section className="space-y-3">
+              <div
+                className={cn(
+                  "flex flex-col gap-3 rounded-lg border-2 p-4 transition-colors",
+                  expressUpgrade
+                    ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20"
+                    : "border-border bg-muted/20",
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "mt-0.5 rounded-full p-1.5",
+                        expressUpgrade ? "bg-amber-400 text-white" : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      <Zap className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-foreground">
+                        Deseja entrega Express?{" "}
+                        <span className="font-normal text-muted-foreground text-sm">
+                          (até 24 horas)
+                        </span>
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        Seu pedido terá prioridade máxima. O crédito comum é consumido normalmente
+                        {pricing.precoExpressUpgrade !== null && (
+                          <> e uma taxa adicional de <strong>{formatBRL(pricing.precoExpressUpgrade)}</strong> será cobrada separadamente.</>
+                        )}
+                        {pricing.precoExpressUpgrade === null && <> e nenhuma taxa adicional é aplicada agora.</>}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={expressUpgrade}
+                    onCheckedChange={setExpressUpgrade}
+                    disabled={!tipoReconhecido}
+                    id="express-toggle"
+                    aria-label="Ativar entrega Express"
+                  />
+                </div>
+
+                {expressUpgrade && (
+                  <div className="rounded-md border border-amber-300 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                    <strong>Como funciona:</strong> ao finalizar o pedido, você será redirecionado para o checkout do serviço Express. Após o pagamento, seu pedido será confirmado automaticamente com prazo de 24 horas.
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {/* 7. Resumo do pedido */}
           <section className="space-y-4">
             <h3 className="text-base font-semibold text-foreground">
-              6. Resumo do pedido
+              {tipoPeticao && tipoReconhecido ? "7." : "6."} Resumo do pedido
             </h3>
 
             <div className="rounded-lg border border-border bg-muted/30 p-4">
@@ -1005,87 +1053,6 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                 </p>
               ) : (
                 <>
-                  {/* Escolha de modalidade — só aparece quando ao menos uma das duas está disponível */}
-                  {(pricing.precoExpress !== null || padraoDisponivel) && (
-                    <div className="mb-4 space-y-2">
-                      <Label className="text-sm">Modalidade de entrega</Label>
-                      <RadioGroup
-                        value={modalidade}
-                        onValueChange={(v) => setModalidade(v as Modalidade)}
-                        className="grid gap-2 sm:grid-cols-2"
-                      >
-                        <label
-                          htmlFor="mod-padrao"
-                          className={cn(
-                            "flex items-start gap-2 rounded-md border p-3 text-sm",
-                            !padraoDisponivel && "cursor-not-allowed opacity-60",
-                            padraoDisponivel && "cursor-pointer",
-                            modalidade === "padrao" && padraoDisponivel
-                              ? "border-primary bg-primary/5"
-                              : "border-border",
-                          )}
-                        >
-                          <RadioGroupItem
-                            id="mod-padrao"
-                            value="padrao"
-                            disabled={!padraoDisponivel}
-                            className="mt-0.5"
-                          />
-                          <div>
-                            <div className="font-medium">{pricing.labelPadrao}</div>
-                            <div className="text-muted-foreground">
-                              {formatBRL(pricing.precoPadrao ?? 0)}
-                            </div>
-                            {carteiraPadrao && (
-                              <div className="mt-0.5 text-[11px] text-muted-foreground">
-                                Debita do {WALLET_LABEL[carteiraPadrao.wallet]}
-                              </div>
-                            )}
-                            {!padraoDisponivel && (
-                              <div className="mt-0.5 text-[11px] text-destructive">
-                                Sem saldo nesta carteira
-                              </div>
-                            )}
-                          </div>
-                        </label>
-                        {pricing.precoExpress !== null && (
-                          <label
-                            htmlFor="mod-express"
-                            className={cn(
-                              "flex items-start gap-2 rounded-md border p-3 text-sm",
-                              !expressDisponivel && "cursor-not-allowed opacity-60",
-                              expressDisponivel && "cursor-pointer",
-                              modalidade === "express" && expressDisponivel
-                                ? "border-primary bg-primary/5"
-                                : "border-border",
-                            )}
-                          >
-                            <RadioGroupItem
-                              id="mod-express"
-                              value="express"
-                              disabled={!expressDisponivel}
-                              className="mt-0.5"
-                            />
-                            <div>
-                              <div className="font-medium">{pricing.labelExpress}</div>
-                              <div className="text-muted-foreground">
-                                {formatBRL(pricing.precoExpress)}
-                              </div>
-                              <div className="mt-0.5 text-[11px] text-muted-foreground">
-                                Debita do{" "}
-                                {WALLET_LABEL[
-                                  pricing.grupo === "A"
-                                    ? "peticao_express"
-                                    : "recurso_express"
-                                ]}
-                              </div>
-                            </div>
-                          </label>
-                        )}
-                      </RadioGroup>
-                    </div>
-                  )}
-
                   <div className="space-y-1.5 border-b border-border pb-3">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Serviço</span>
@@ -1095,8 +1062,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                     </div>
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">Modalidade</span>
-                      <span className="font-medium text-foreground">
-                        {pricing.labelFinal}
+                      <span className="flex items-center gap-1.5 font-medium text-foreground">
+                        {expressUpgrade && <Zap className="h-3.5 w-3.5 text-amber-500" />}
+                        {expressUpgrade ? "Express (24h)" : pricing.labelPadrao}
                       </span>
                     </div>
                     {prazoCalc && (
@@ -1119,12 +1087,23 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      Valor deste pedido
+                      Crédito deste pedido
                     </span>
                     <span className="font-display text-2xl font-semibold text-primary">
                       {formatBRL(valorPedido)}
                     </span>
                   </div>
+
+                  {expressUpgrade && pricing.precoExpressUpgrade !== null && (
+                    <div className="mt-2 flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        + Taxa Express (checkout separado)
+                      </span>
+                      <span className="font-semibold text-amber-600">
+                        {formatBRL(pricing.precoExpressUpgrade)}
+                      </span>
+                    </div>
+                  )}
 
                   {mensagemBloqueio || semSaldo ? (
                     <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -1150,14 +1129,12 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                             <Wallet className="h-4 w-4" />
                             Será debitado do
                           </span>
-                          <span className="font-medium">
-                            {WALLET_LABEL[carteiraResolvida.wallet]}
-                          </span>
+                          <span className="font-medium">saldo disponível</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">
-                          Saldo dessa carteira
+                          Saldo atual
                         </span>
                         <span className="font-medium">{formatBRL(saldoCarteira)}</span>
                       </div>
@@ -1192,9 +1169,17 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             <Button
               type="submit"
               disabled={submitting || !tipoReconhecido}
-              className="bg-accent text-accent-foreground hover:bg-accent/90"
+              className={cn(
+                expressUpgrade
+                  ? "bg-amber-500 text-white hover:bg-amber-600"
+                  : "bg-accent text-accent-foreground hover:bg-accent/90",
+              )}
             >
-              {submitting ? "Finalizando..." : "Finalizar pedido"}
+              {submitting
+                ? expressUpgrade ? "Redirecionando..." : "Finalizando..."
+                : expressUpgrade
+                ? "Continuar para checkout Express"
+                : "Finalizar pedido"}
             </Button>
           </DialogFooter>
         </form>

@@ -7,6 +7,7 @@ STATUS_LABELS = {
     "em_andamento": "Aguardando dados",
     "concluido": "Concluído",
     "cancelado": "Cancelado",
+    "pendente_pagamento_express": "Aguardando pagamento Express",
 }
 
 
@@ -116,6 +117,8 @@ def serialize_order(order) -> dict:
         "split_funcionario": split_funcionario,
         "staff_payout_cents": payout_cents,
         "staff_payout_brl": format_brl_from_cents(payout_cents),
+        "express_upgrade": bool(getattr(order, "express_upgrade", False)),
+        "express_order_id": getattr(order, "express_order_id", None),
         "items": [
             {
                 "code": item.code,

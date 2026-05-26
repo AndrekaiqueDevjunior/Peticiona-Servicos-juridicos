@@ -3,7 +3,7 @@
 // - Express: 24 horas corridas a partir da confirmação do pagamento.
 // O prazo interno do funcionário é sempre 2 dias corridos antes do prazo do cliente.
 
-import type { Modalidade, PlanoAtivo } from "@/lib/pricing";
+import type { PlanoAtivo } from "@/lib/pricing";
 
 export type ModalidadePrazo =
   | { tipo: "plano"; plano: Exclude<PlanoAtivo, null> }
@@ -140,13 +140,13 @@ export const calcularPrazo = (
 
 /** Helper: deriva ModalidadePrazo a partir do estado do pricing. */
 export const modalidadeParaPrazo = (params: {
-  modalidadeEscolhida: Modalidade;
   grupo: "A" | "B" | null;
   plano: PlanoAtivo;
+  expressUpgrade?: boolean;
 }): ModalidadePrazo | null => {
-  const { modalidadeEscolhida, grupo, plano } = params;
+  const { grupo, plano, expressUpgrade } = params;
   if (!grupo) return null;
-  if (modalidadeEscolhida === "express") return { tipo: "express", grupo };
+  if (expressUpgrade) return { tipo: "express", grupo };
   if (plano) return { tipo: "plano", plano };
   return { tipo: "avulso", grupo };
 };

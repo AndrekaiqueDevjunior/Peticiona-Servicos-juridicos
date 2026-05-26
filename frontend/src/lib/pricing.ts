@@ -6,8 +6,6 @@ export type PlanoAtivo = "essencial" | "profissional" | "estrategico" | null;
 
 export interface UserPricingProfile {
   plano: PlanoAtivo;
-  peticaoExpressDisponivel: boolean;
-  recursoExpressDisponivel: boolean;
 }
 
 interface PricingSnapshot {
@@ -221,23 +219,13 @@ export const getGrupoServico = (tipoPeticao: string): GrupoServico => {
 
 // ---- Cálculo ---------------------------------------------------------------
 
-export type Modalidade = "express" | "padrao";
-
 export interface PricingResult {
-  /** Preço do serviço padrão (plano ou avulso) — null se tipo não reconhecido */
+  /** Preço do serviço comum (plano ou avulso) — null se tipo não reconhecido */
   precoPadrao: number | null;
-  /** Rótulo da modalidade padrão (ex: "Plano Profissional", "Petição Avulsa") */
+  /** Rótulo do serviço comum (ex: "Plano Profissional", "Petição Avulsa") */
   labelPadrao: string;
-  /** Preço Express se aplicável e disponível para o usuário */
-  precoExpress: number | null;
-  /** Rótulo da modalidade express (ex: "Petição Express") */
-  labelExpress: string | null;
-  /** Modalidade efetivamente escolhida pelo usuário */
-  modalidadeEscolhida: Modalidade;
-  /** Preço final aplicado ao pedido */
-  precoFinal: number;
-  /** Rótulo da modalidade final */
-  labelFinal: string;
+  /** Preço da taxa Express (pagamento separado, não debita da carteira) */
+  precoExpressUpgrade: number | null;
   /** Grupo do serviço (A ou B) */
   grupo: GrupoServico;
 }
@@ -245,11 +233,9 @@ export interface PricingResult {
 export const calcularPrecoPedido = (
   tipoPeticao: string,
   perfil: UserPricingProfile,
-  modalidadeEscolhida: Modalidade = "padrao",
 ): PricingResult => {
   const grupo = getGrupoServico(tipoPeticao);
 
-  // Padrão: plano ativo tem prioridade sobre avulso.
   let precoPadrao: number | null = null;
   let labelPadrao = "";
 
@@ -266,53 +252,37 @@ export const calcularPrecoPedido = (
     }
   }
 
-  // Express é sempre opcional e adicional, independente do plano.
-  let precoExpress: number | null = null;
-  let labelExpress: string | null = null;
-  if (grupo === "A" && perfil.peticaoExpressDisponivel) {
-    precoExpress = getPrecoPeticaoExpress();
-    labelExpress = "Petição Express";
-  } else if (grupo === "B" && perfil.recursoExpressDisponivel) {
-    precoExpress = getPrecoRecursoExpress();
-    labelExpress = "Recurso Express";
+  // Express é uma taxa separada — não debita da carteira de créditos.
+  let precoExpressUpgrade: number | null = null;
+  if (grupo === "A") {
+    const p = getPrecoPeticaoExpress();
+    if (p > 0) precoExpressUpgrade = p;
+  } else if (grupo === "B") {
+    const p = getPrecoRecursoExpress();
+    if (p > 0) precoExpressUpgrade = p;
   }
-
-  const expressAtivo =
-    modalidadeEscolhida === "express" && precoExpress !== null;
 
   return {
     precoPadrao,
     labelPadrao,
-    precoExpress,
-    labelExpress,
-    modalidadeEscolhida: expressAtivo ? "express" : "padrao",
-    precoFinal: expressAtivo ? (precoExpress as number) : (precoPadrao ?? 0),
-    labelFinal: expressAtivo ? (labelExpress as string) : labelPadrao,
+    precoExpressUpgrade,
     grupo,
   };
 };
 
-import { useBalance } from "@/lib/balance";
 import { useAuth } from "@/lib/auth";
 
 /**
  * Perfil do cliente para o cálculo de preço.
  * - `plano`: vem do backend via /api/me (user.active_plan_id resolvido em
  *   alias). Quando o usuário NÃO tem plano, fica null.
- * - Disponibilidade Express: o backend não separa por carteira; a decisão
- *   final é tomada lá em _assert_sufficient_balance ao criar o pedido.
- *   Aqui usamos "saldo cobre o preço Express?" como pista de UI; um
- *   eventual erro do backend (saldo insuficiente) é mostrado por toast.
  */
 export const useUserPricingProfile = () => {
   usePricingCatalog({ includeCatalog: true });
-  const balance = useBalance();
   const { user } = useAuth();
   const planoCode = resolvePlanFromUser(user?.active_plan_id ?? null);
   const profile: UserPricingProfile = {
     plano: planoCode,
-    peticaoExpressDisponivel: balance.saldoCents > 0,
-    recursoExpressDisponivel: balance.saldoCents > 0,
   };
   return { data: profile } as { data: UserPricingProfile };
 };

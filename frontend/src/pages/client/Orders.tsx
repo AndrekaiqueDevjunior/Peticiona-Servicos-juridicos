@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -238,9 +239,22 @@ export default function Orders() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
-                      {order.status_label || order.status}
-                    </span>
+                    {order.express_upgrade && (
+                      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                        <Zap className="h-3 w-3" />
+                        Express 24h
+                      </span>
+                    )}
+                    {order.status === "pendente_pagamento_express" && (
+                      <span className="inline-flex w-fit items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                        Aguardando pgto. Express
+                      </span>
+                    )}
+                    {order.status !== "pendente_pagamento_express" && (
+                      <span className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
+                        {order.status_label || order.status}
+                      </span>
+                    )}
                     <Button
                       type="button"
                       variant="outline"

@@ -78,6 +78,8 @@ def _add_service_order_columns() -> None:
         "completed_at": f"ALTER TABLE service_orders ADD COLUMN completed_at {ts}",
         "split_plataforma": "ALTER TABLE service_orders ADD COLUMN split_plataforma INTEGER NOT NULL DEFAULT 100",
         "split_funcionario": "ALTER TABLE service_orders ADD COLUMN split_funcionario INTEGER NOT NULL DEFAULT 0",
+        "express_upgrade": "ALTER TABLE service_orders ADD COLUMN express_upgrade BOOLEAN NOT NULL DEFAULT FALSE",
+        "express_order_id": "ALTER TABLE service_orders ADD COLUMN express_order_id INTEGER",
     }
 
     for column_name, sql in statements.items():
@@ -461,6 +463,16 @@ def _fix_petition_document_links_timestamps() -> None:
         """)
 
 
+def _add_orders_service_order_id() -> None:
+    if "orders" not in _table_names():
+        return
+    if "service_order_id" in _column_names("orders"):
+        return
+    _execute(
+        "ALTER TABLE orders ADD COLUMN service_order_id INTEGER"
+    )
+
+
 def _add_orders_payment_attempts() -> None:
     """Adiciona contador estável de tentativas de pagamento em `orders`.
 
@@ -772,6 +784,7 @@ def run_runtime_migrations() -> None:
     _add_petition_columns()
     _fix_petition_document_links_timestamps()
     _add_orders_payment_attempts()
+    _add_orders_service_order_id()
     _normalize_credit_transaction_types()
     _harden_credit_transactions_schema()
     _clear_orphan_order_debits()

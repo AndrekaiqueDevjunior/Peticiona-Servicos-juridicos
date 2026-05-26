@@ -114,6 +114,7 @@ export interface PetitionPayload {
   detalhes: string;
   partes: PetitionParty[];
   document_ids: number[];
+  express_upgrade?: boolean;
 }
 
 export interface DashboardData {
@@ -209,11 +210,14 @@ export interface ClientOrder {
   service_type: string;
   status: string;
   status_label: string;
+  total_amount: number;
   total_brl: string;
   deadline_at: string | null;
   created_at: string;
   completed_at: string | null;
   petition: Petition | null;
+  express_upgrade: boolean;
+  express_order_id: number | null;
   items: { code: string; title: string; quantity: number; unit_price: number; line_total: number }[];
 }
 
@@ -591,7 +595,7 @@ export const api = {
   petitions: {
     list: () => request<{ petitions: Petition[] }>("/petitions"),
     create: (payload: PetitionPayload) =>
-      request<{ message: string; petition: Petition; order?: unknown }>("/petitions", {
+      request<{ message: string; petition: Petition; order?: unknown; express_checkout_order_id?: string }>("/petitions", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
