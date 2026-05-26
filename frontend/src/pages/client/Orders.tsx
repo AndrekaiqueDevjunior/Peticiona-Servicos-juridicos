@@ -116,20 +116,6 @@ export default function Orders() {
   const [cancelOrder, setCancelOrder] = useState<CheckoutOrderType | null>(null);
   const [petitionOrder, setPetitionOrder] = useState<ClientOrder | null>(null);
 
-  const updatePetitionMutation = useMutation({
-    mutationFn: (payload: { id: number; data: Parameters<typeof api.clientArea.updateOrder>[1] }) =>
-      api.clientArea.updateOrder(payload.id, payload.data),
-    onSuccess: ({ order }) => {
-      toast({ title: "Pedido atualizado", description: "As alterações foram salvas." });
-      setPetitionOrder(order);
-      queryClient.invalidateQueries({ queryKey: ["client-service-orders"] });
-    },
-    onError: (err) => {
-      const msg = err instanceof ApiError ? err.message : "Não foi possível salvar.";
-      toast({ title: "Erro ao salvar", description: msg, variant: "destructive" });
-    },
-  });
-
   const uploadDocsToOrder = async (orderId: number, files: File[]) => {
     try {
       const res = await api.clientArea.uploadOrderDocuments(orderId, files);
@@ -432,11 +418,6 @@ export default function Orders() {
         order={petitionOrder}
         open={!!petitionOrder}
         onOpenChange={(open) => !open && setPetitionOrder(null)}
-        isSubmitting={updatePetitionMutation.isPending}
-        onSave={(data) => {
-          if (!petitionOrder) return;
-          updatePetitionMutation.mutate({ id: petitionOrder.id, data });
-        }}
         onUploadDocuments={async (files) => {
           if (!petitionOrder) return;
           await uploadDocsToOrder(petitionOrder.id, files);

@@ -707,6 +707,17 @@ export const api = {
       request<{ deleted: boolean }>(`/client-area/documents/${documentId}`, {
         method: "DELETE",
       }),
+    listComments: (orderId: number) =>
+      request<{ comments: OrderComment[] }>(`/orders/${orderId}/comments`),
+    addComment: (orderId: number, text: string) =>
+      request<{ comment: OrderComment }>(`/orders/${orderId}/comments`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }),
+    deleteComment: (orderId: number, commentId: number) =>
+      request<{ deleted: boolean }>(`/orders/${orderId}/comments/${commentId}`, {
+        method: "DELETE",
+      }),
   },
 
   staff: {
