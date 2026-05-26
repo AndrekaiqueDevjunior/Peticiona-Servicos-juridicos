@@ -5,7 +5,6 @@ import HowItWorks from "@/components/landing/HowItWorks";
 import Advantages from "@/components/landing/Advantages";
 import Pricing from "@/components/landing/Pricing";
 import Footer from "@/components/landing/Footer";
-import FloatingChat from "@/components/landing/FloatingChat";
 
 const Index = () => (
   <div className="min-h-screen bg-background">
@@ -18,7 +17,6 @@ const Index = () => (
       <Pricing />
     </main>
     <Footer />
-    <FloatingChat />
   </div>
 );
 

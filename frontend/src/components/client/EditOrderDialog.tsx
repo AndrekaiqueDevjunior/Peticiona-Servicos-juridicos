@@ -600,7 +600,7 @@ export function EditOrderDialog({
                   <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                     Documentos enviados
                   </h3>
-                  {canEdit && onUploadDocuments && (
+                  {onUploadDocuments && (
                     <>
                       <input
                         ref={fileInputRef}
@@ -634,7 +634,7 @@ export function EditOrderDialog({
                     ))}
                   </ul>
                 ) : null}
-                {canEdit && onUploadDocuments && (
+                {onUploadDocuments && (
                   <div
                     role="button"
                     tabIndex={0}
