@@ -17,11 +17,25 @@ interface BuyCreditsDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const formatBRLFromCents = (value: number) =>
-  (value / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+const formatBRL = (cents: number) =>
+  (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function pricePerCreditLabel(plan: { monthly_price_cents: number; credits_quantity: number | null; price_per_service_cents: number | null }): string | null {
+  if (plan.credits_quantity && plan.credits_quantity > 0) {
+    return formatBRL(Math.round(plan.monthly_price_cents / plan.credits_quantity));
+  }
+  if (plan.price_per_service_cents != null) {
+    return formatBRL(plan.price_per_service_cents);
+  }
+  return null;
+}
+
+function validityLabel(days: number | null): string | null {
+  if (!days) return null;
+  if (days % 365 === 0) return `${days / 365} ano${days / 365 > 1 ? "s" : ""} para usar seus créditos`;
+  if (days % 30 === 0) return `${days / 30} ${days / 30 === 1 ? "mês" : "meses"} para usar seus créditos`;
+  return `${days} dias para usar seus créditos`;
+}
 
 export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) => {
   const navigate = useNavigate();
@@ -34,9 +48,11 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
     queryFn: () => api.content.catalog(),
   });
 
-  const services = catalogData?.catalog.flatMap((section) =>
-    section.items.map((item) => ({ ...item, section: section.section })),
-  ) ?? [];
+  const services = (
+    catalogData?.catalog.flatMap((section) =>
+      section.items.map((item) => ({ ...item, section: section.section })),
+    ) ?? []
+  ).filter((s) => s.code !== "servico_express_upgrade");
 
   const goToCheckout = (serviceId: string) => {
     onOpenChange(false);
@@ -47,9 +63,9 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Comprar creditos</DialogTitle>
+          <DialogTitle>Comprar créditos</DialogTitle>
           <DialogDescription>
-            Catalogo real carregado do backend. O checkout usa o codigo oficial de cada item.
+            1 crédito = 1 serviço jurídico. Escolha um pacote ou solicite avulso.
           </DialogDescription>
         </DialogHeader>
 
@@ -61,10 +77,11 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
             </TabsTrigger>
             <TabsTrigger value="avulsos">
               <Zap className="mr-2 h-4 w-4" />
-              Servicos avulsos
+              Avulsos
             </TabsTrigger>
           </TabsList>
 
+          {/* ─── Planos ─── */}
           <TabsContent value="planos" className="mt-4">
             {loadingPlans ? (
               <p className="text-sm text-muted-foreground">Carregando planos...</p>
@@ -74,10 +91,9 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
               <div className="grid gap-4 md:grid-cols-3">
                 {plansData.plans.map((plan) => {
                   const ctaLabel = plan.cta_label || `Adquirir ${plan.name}`;
-                  const pricePerService =
-                    plan.price_per_service_cents != null
-                      ? formatBRLFromCents(plan.price_per_service_cents)
-                      : null;
+                  const perCredit = pricePerCreditLabel(plan);
+                  const validity = validityLabel(plan.validity_days);
+                  const benefits = plan.benefits.length > 0 ? plan.benefits : plan.features;
                   return (
                     <div
                       key={plan.code}
@@ -93,25 +109,41 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
                       <h4 className="font-display text-lg font-semibold text-foreground">
                         {plan.name}
                       </h4>
-                      <p className="mt-1 font-display text-2xl font-semibold text-primary">
+                      {plan.subtitle && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{plan.subtitle}</p>
+                      )}
+                      <p className="mt-2 font-display text-2xl font-semibold text-primary">
                         {plan.monthly_price_brl}
                       </p>
-                      {pricePerService && (
-                        <p className="mt-1 text-sm text-accent">{pricePerService} por serviço</p>
+                      {perCredit && (
+                        <p className="mt-1 text-sm text-accent">{perCredit} por crédito</p>
                       )}
-                      {plan.description && (
-                        <p className="mt-2 text-sm text-muted-foreground">{plan.description}</p>
-                      )}
-                      {plan.features?.length ? (
+
+                      {/* créditos + validade */}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {plan.credits_quantity != null && plan.credits_quantity > 0 && (
+                          <span className="rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent">
+                            {plan.credits_quantity} crédito{plan.credits_quantity !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {validity && (
+                          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
+                            {validity}
+                          </span>
+                        )}
+                      </div>
+
+                      {benefits.length > 0 && (
                         <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-                          {plan.features.map((feature) => (
-                            <li key={feature} className="flex items-start gap-2">
+                          {benefits.map((f) => (
+                            <li key={f} className="flex items-start gap-2">
                               <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
-                              <span>{feature}</span>
+                              <span>{f}</span>
                             </li>
                           ))}
                         </ul>
-                      ) : null}
+                      )}
+
                       <Button
                         type="button"
                         className={`mt-4 ${
@@ -130,15 +162,17 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
             )}
           </TabsContent>
 
+          {/* ─── Avulsos ─── */}
           <TabsContent value="avulsos" className="mt-4">
             {loadingCatalog ? (
-              <p className="text-sm text-muted-foreground">Carregando catalogo...</p>
+              <p className="text-sm text-muted-foreground">Carregando serviços...</p>
             ) : !services.length ? (
-              <p className="text-sm text-muted-foreground">Nenhum servico avulso ativo no backend.</p>
+              <p className="text-sm text-muted-foreground">Nenhum serviço avulso ativo no backend.</p>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 {services.map((service) => {
-                  const isExpress = !!service.delivery_label && /24h/i.test(service.delivery_label);
+                  const isExpress =
+                    !!service.delivery_label && /24h/i.test(service.delivery_label);
                   return (
                     <div
                       key={service.code}
@@ -154,7 +188,7 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
                         <h4 className="font-medium text-foreground">{service.title}</h4>
                       </div>
                       <p className="mt-2 font-display text-xl font-semibold text-primary">
-                        {formatBRLFromCents(service.unit_price)}
+                        {formatBRL(service.unit_price)}
                       </p>
                       {service.delivery_label && (
                         <p className="mt-1 text-xs font-medium text-accent">
@@ -172,7 +206,7 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
                         className="mt-3"
                         onClick={() => goToCheckout(service.code)}
                       >
-                        Comprar
+                        Solicitar avulso
                       </Button>
                     </div>
                   );
