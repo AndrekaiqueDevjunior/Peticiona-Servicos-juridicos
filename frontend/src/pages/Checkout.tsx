@@ -147,6 +147,9 @@ export default function Checkout() {
   const { orderId: orderIdParam } = useParams<{ orderId?: string }>();
   const [search] = useSearchParams();
   const serviceFromQuery = search.get("service");
+  const serviceOrderIdFromQuery = search.get("service_order_id")
+    ? Number(search.get("service_order_id"))
+    : undefined;
 
   const { user } = useAuth();
   const profile = useClientProfile();
@@ -297,11 +300,11 @@ export default function Checkout() {
     }
   };
 
-  const createOrder = async (serviceId: CheckoutServiceId, expectedAmount?: number) => {
+  const createOrder = async (serviceId: CheckoutServiceId, expectedAmount?: number, serviceOrderId?: number) => {
     setCreatingOrder(true);
     setErrorMsg(null);
     try {
-      const { order } = await checkoutApi.createOrder(serviceId, expectedAmount);
+      const { order } = await checkoutApi.createOrder(serviceId, expectedAmount, serviceOrderId);
       setOrder(order);
       // Atualiza a URL para conter o orderId, para o usuário poder voltar.
       navigate(`/checkout/${order.id}`, { replace: true });
@@ -321,7 +324,7 @@ export default function Checkout() {
       return;
     }
     if (serviceFromQuery) {
-      void createOrder(serviceFromQuery, servicePreview?.amount);
+      void createOrder(serviceFromQuery, servicePreview?.amount, serviceOrderIdFromQuery);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderIdParam, serviceFromQuery]);

@@ -6,7 +6,7 @@ import {
   formatBRL,
   useUserPricingProfile,
 } from "@/lib/pricing";
-import { useBalance, type CreditKind, CREDIT_KIND_LABEL, hasCommonCredit, hasPetitionExpressCredit, hasResourceExpressCredit } from "@/lib/balance";
+import { useBalance, hasCommonCredit } from "@/lib/balance";
 import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import { api } from "@/lib/api";
 import {
@@ -235,39 +235,11 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
   const balance = useBalance();
 
-  // Determina qual kind de crédito express seria necessário (Grupo B = recurso, else = petição)
-  const grupoB = [
-    "Apelação",
-    "Agravo de instrumento",
-    "Agravo interno",
-    "Embargos de declaração",
-    "Recurso ordinário",
-    "Recurso especial",
-    "Recurso extraordinário",
-    "Agravo em recurso especial",
-    "Agravo em recurso extraordinário",
-    "Petição inicial comum",
-    "Mandado de segurança",
-    "Cumprimento de sentença (inicial)",
-  ];
-  const expressKind: CreditKind = grupoB.includes(tipoPeticao)
-    ? "recurso_express"
-    : "peticao_express";
-
-  // Verificações de crédito disponível (1 crédito por serviço)
   const temCreditoComum = hasCommonCredit(balance);
-  const temCreditoExpress = expressKind === "recurso_express"
-    ? hasResourceExpressCredit(balance)
-    : hasPetitionExpressCredit(balance);
-
-  const podeProceder = expressUpgrade ? temCreditoExpress : temCreditoComum;
-  const mensagemBloqueio = expressUpgrade
-    ? !temCreditoExpress
-      ? `Você não possui créditos ${CREDIT_KIND_LABEL[expressKind]}. Adquira um crédito deste tipo antes de solicitar serviço Express.`
-      : null
-    : !temCreditoComum
-      ? "Você não possui créditos comuns. Adquira um plano para receber mais créditos."
-      : null;
+  const podeProceder = temCreditoComum;
+  const mensagemBloqueio = !temCreditoComum
+    ? "Você não possui créditos. Adquira um plano para receber mais créditos."
+    : null;
 
   // Cliente sempre comenta como "cliente"; a visão de redator é exclusiva do
   // painel interno (staff/admin), não do modal de novo pedido.
@@ -412,6 +384,14 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["balance"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
+
+      if (expressUpgrade && result.order?.id) {
+        onOpenChange(false);
+        navigate(
+          `/checkout?service=servico_express_upgrade&service_order_id=${result.order.id}`,
+        );
+        return;
+      }
 
       setSuccess(true);
     } catch (err: unknown) {
@@ -1011,49 +991,22 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                       </p>
                       <p className="text-sm text-muted-foreground mt-0.5">
                         Seu pedido terá prioridade máxima e será entregue em até 24 horas.
-                        Você precisa de um crédito {CREDIT_KIND_LABEL[expressKind].toLowerCase()} para usar este serviço.
+                        Após finalizar, você será redirecionado ao checkout para pagar a taxa de entrega Express.
                       </p>
                     </div>
                   </div>
                   <Switch
-                    checked={expressUpgrade && temCreditoExpress}
-                    onCheckedChange={(checked) => {
-                      if (checked && !temCreditoExpress) {
-                        toast({
-                          title: "Crédito Express não disponível",
-                          description: `Você não possui ${CREDIT_KIND_LABEL[expressKind].toLowerCase()}. Adquira um pacote Express antes de usar este serviço.`,
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setExpressUpgrade(checked);
-                    }}
-                    disabled={!tipoPeticao || !temCreditoExpress}
+                    checked={expressUpgrade}
+                    onCheckedChange={setExpressUpgrade}
+                    disabled={!tipoPeticao}
                     id="express-toggle"
                     aria-label="Ativar entrega Express"
                   />
                 </div>
 
-                {expressUpgrade && temCreditoExpress && (
+                {expressUpgrade && (
                   <div className="rounded-md border border-amber-300 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                    <strong>Pronto!</strong> Você tem {CREDIT_KIND_LABEL[expressKind].toLowerCase()} disponível. Este pedido será entregue em até 24 horas.
-                  </div>
-                )}
-
-                {expressUpgrade && !temCreditoExpress && (
-                  <div className="rounded-md border border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <strong>Crédito indisponível:</strong> Você não possui {CREDIT_KIND_LABEL[expressKind].toLowerCase()}. Adquira um
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onOpenChange(false);
-                        navigate("/area-cliente/comprar-creditos");
-                      }}
-                      className="font-semibold underline underline-offset-2 ml-1"
-                    >
-                      pacote Express
-                    </button>
-                    antes de usar este serviço.
+                    <strong>Atenção:</strong> ao finalizar, você será redirecionado ao pagamento da taxa de entrega Express (cobrada separadamente do seu crédito).
                   </div>
                 )}
               </div>
@@ -1099,15 +1052,16 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                   </div>
 
                   <div className="mt-3 flex items-center justify-between rounded-md bg-muted/50 p-2 text-sm">
-                    <span className="text-muted-foreground">
-                      {expressUpgrade ? "Será debitado de" : "Será debitado de"}
-                    </span>
-                    <span className="font-medium">
-                      {expressUpgrade
-                        ? CREDIT_KIND_LABEL[expressKind]
-                        : CREDIT_KIND_LABEL.common}
-                    </span>
+                    <span className="text-muted-foreground">Será debitado de</span>
+                    <span className="font-medium">Créditos comuns</span>
                   </div>
+
+                  {expressUpgrade && (
+                    <div className="mt-2 flex items-center justify-between rounded-md bg-amber-50 border border-amber-200 p-2 text-sm dark:bg-amber-950/20">
+                      <span className="text-muted-foreground">Taxa Express (checkout)</span>
+                      <span className="font-medium text-amber-700 dark:text-amber-300">Cobrado separado</span>
+                    </div>
+                  )}
 
                   {mensagemBloqueio ? (
                     <div className="mt-4 rounded-md border border-destructive bg-destructive/5 p-3 text-sm text-destructive">
@@ -1130,20 +1084,14 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                           <Wallet className="h-4 w-4" />
                           Saldo atual
                         </span>
-                        <span className="font-medium">
-                          {expressUpgrade
-                            ? `${balance.balances.recurso_express} crédito(s)`
-                            : `${balance.balances.common} crédito(s)`}
-                        </span>
+                        <span className="font-medium">{balance.balances.common} crédito(s)</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">
                           Saldo após este pedido
                         </span>
                         <span className="font-semibold text-accent">
-                          {expressUpgrade
-                            ? `${Math.max(0, balance.balances.recurso_express - 1)} crédito(s)`
-                            : `${Math.max(0, balance.balances.common - 1)} crédito(s)`}
+                          {Math.max(0, balance.balances.common - 1)} crédito(s)
                         </span>
                       </div>
                     </div>
@@ -1176,9 +1124,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
               )}
             >
               {submitting
-                ? expressUpgrade ? "Finalizando..." : "Finalizando..."
+                ? "Finalizando..."
                 : expressUpgrade
-                ? "Finalizar pedido Express"
+                ? "Finalizar e ir para o checkout Express"
                 : "Finalizar pedido"}
             </Button>
           </DialogFooter>

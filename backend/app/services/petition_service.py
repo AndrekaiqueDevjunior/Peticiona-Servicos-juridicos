@@ -33,31 +33,6 @@ def _validate_document_ids(user, document_ids: list[int]) -> list[Document]:
     return documents
 
 
-_GRUPO_B_TIPOS = {
-    "Petição inicial comum",
-    "Mandado de segurança",
-    "Cumprimento de sentença (inicial)",
-    "Apelação",
-    "Agravo de instrumento",
-    "Agravo interno",
-    "Embargos de declaração",
-    "Recurso ordinário",
-    "Recurso especial",
-    "Recurso extraordinário",
-    "Agravo em recurso especial",
-    "Agravo em recurso extraordinário",
-}
-
-
-def _express_kind_for_tipo(tipo_peticao: str | None) -> str:
-    """Resolve qual kind de crédito Express usar baseado no tipo de petição.
-
-    Grupo B (recursos, petições iniciais com complexidade) → 'recurso_express'.
-    Grupo A (defesas, manifestações, administrativo) → 'peticao_express'.
-    """
-    if tipo_peticao in _GRUPO_B_TIPOS:
-        return "recurso_express"
-    return "peticao_express"
 
 
 def create_petition(user, payload: dict) -> dict:
@@ -146,12 +121,6 @@ def list_petitions(user) -> dict:
     return {"petitions": [serialize_petition(item) for item in petitions]}
 
 
-_EXPRESS_KIND_LABEL = {
-    "peticao_express": "Petição Express",
-    "recurso_express": "Recurso Express",
-}
-
-
 def _create_service_order_for_petition(
     user,
     petition: Petition,
@@ -176,19 +145,19 @@ def _create_service_order_for_petition(
         }
     )
 
-    # Express: prazo 24h. Comum: prazo definido pelo cliente (opcional).
-    deadline_at = (
-        datetime.now(timezone.utc) + timedelta(hours=24)
-        if express_upgrade
-        else _parse_deadline(payload.get("deadline_at"))
-    )
+    # Express: prazo definido após pagamento confirmado pelo webhook.
+    # Comum: prazo definido pelo cliente (opcional).
+    deadline_at = None if express_upgrade else _parse_deadline(payload.get("deadline_at"))
+
+    # Express aguarda pagamento da taxa; comum vai direto para fila de trabalho.
+    status = "pendente_pagamento_express" if express_upgrade else "pendente"
 
     order = ServiceOrder(
         user_id=user.id,
         petition=petition,
         company_id=user.company_id,
         reference=_placeholder_order_reference(),
-        status="pendente",
+        status=status,
         total_amount=preview["total_amount"],
         deadline_at=deadline_at,
         express_upgrade=express_upgrade,
@@ -211,22 +180,11 @@ def _create_service_order_for_petition(
             )
         )
 
-    # Débito unitário: 1 crédito do bolso correto.
-    # - express_upgrade=True → 1 crédito 'peticao_express' ou 'recurso_express'
-    #   (depende do tipo de petição via _express_kind_for_tipo).
-    # - express_upgrade=False → 1 crédito 'common'.
-    # Saldos NÃO se misturam: se cliente não tem crédito do kind certo,
-    # InsufficientBalance vira ValidationError com mensagem orientadora.
+    # Débito: sempre 1 crédito comum, independente de express_upgrade.
+    # O upgrade Express é cobrado separadamente via checkout/pagamento.
     if user is not None:
         service_title = petition.tipo_peticao or petition.area_direito or "Serviço jurídico"
-        if express_upgrade:
-            credit_kind = _express_kind_for_tipo(petition.tipo_peticao)
-            label_express = _EXPRESS_KIND_LABEL.get(credit_kind, "Express")
-            description = f"Débito Express — {order.reference} ({service_title})"
-        else:
-            credit_kind = credit_ledger.KIND_COMMON
-            label_express = None
-            description = f"Débito — {order.reference} ({service_title})"
+        description = f"Débito — {order.reference} ({service_title})"
         try:
             credit_ledger.debit(
                 user,
@@ -234,21 +192,14 @@ def _create_service_order_for_petition(
                 source="client_order",
                 description=description,
                 idempotency_key=f"order-debit-{order.reference}",
-                kind=credit_kind,
+                kind=credit_ledger.KIND_COMMON,
             )
         except credit_ledger.InsufficientBalance as exc:
-            if express_upgrade:
-                msg = (
-                    f"Você não possui créditos de {label_express}. "
-                    f"Disponível: {exc.available} crédito(s). "
-                    f"Necessário: 1 crédito. Adquira um crédito {label_express} antes de solicitar."
-                )
-            else:
-                msg = (
-                    f"Saldo de créditos comuns insuficiente. "
-                    f"Disponível: {exc.available} crédito(s). "
-                    f"Necessário: 1 crédito. Adquira um plano para receber mais créditos."
-                )
+            msg = (
+                f"Saldo de créditos insuficiente. "
+                f"Disponível: {exc.available} crédito(s). "
+                f"Necessário: 1 crédito. Adquira um plano para receber mais créditos."
+            )
             raise ValidationError(msg) from exc
 
     log_action(

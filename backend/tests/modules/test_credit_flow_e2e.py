@@ -2,7 +2,7 @@
 
 Valida que os kinds nunca se contaminam:
 - Compra plano essencial (3 common) + cria 1 petição = 2 common restante
-- Compra crédito express + cria petição express = kind correto decrementado
+- Criação express debita common (não mais express kinds)
 - Cancelamento restaura saldo original
 """
 
@@ -62,54 +62,30 @@ class TestCreditFlowCommonService:
         assert balance_after_petition == 2, "Deveria ter debitado 1 crédito"
 
         # 4. Verificar que outros kinds não foram afetados
-        assert (
-            credit_ledger.compute_balance(
-                client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS
-            )
-            == 0
-        )
-        assert (
-            credit_ledger.compute_balance(
-                client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS
-            )
-            == 0
-        )
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS) == 0
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS) == 0
 
 
-class TestExpressServiceSegregation:
-    """Fluxo: compra crédito express → cria petição express → only express kind affected."""
+class TestExpressDebitsCommon:
+    """Fluxo: express upgrade débita common, não mais peticao_express/recurso_express."""
 
-    def test_buy_peticao_express_and_create_service(self, api_client, client_user, db):
-        # 1. Credita 1 crédito peticao_express
+    def test_express_debits_common_not_express_kind(self, api_client, client_user, db):
+        # Credita 1 common e 1 peticao_express
         credit_ledger.credit(
-            client_user,
-            amount=1,
-            source="test",
-            description="Express Petição comprado",
-            idempotency_key="exp-pet-buy",
-            kind=credit_ledger.KIND_PETICAO_EXPRESS,
-        )
-        # Também credita comum para ter saldo
-        credit_ledger.credit(
-            client_user,
-            amount=1,
-            source="test",
-            description="Common para comparação",
-            idempotency_key="common-compare",
+            client_user, amount=1,
+            source="test", description="Common",
+            idempotency_key="exp-common-1",
             kind=credit_ledger.KIND_COMMON,
+        )
+        credit_ledger.credit(
+            client_user, amount=1,
+            source="test", description="Pet exp legado",
+            idempotency_key="exp-pet-legacy",
+            kind=credit_ledger.KIND_PETICAO_EXPRESS,
         )
         db.session.flush()
 
-        before_pet_exp = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS
-        )
-        before_common = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_COMMON
-        )
-        assert before_pet_exp == 1
-        assert before_common == 1
-
-        # 2. Cria petição express (Grupo A)
+        # Cria petição express
         response = api_client.post(
             "/api/petitions",
             json={
@@ -126,64 +102,34 @@ class TestExpressServiceSegregation:
             },
         )
 
-        assert response.status_code == 201
+        assert response.status_code == 201, response.get_json()
+        body = response.get_json()
+        assert body["order"]["status"] == "pendente_pagamento_express"
 
-        # 3. Verificar que só peticao_express foi afetado
-        after_pet_exp = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS
-        )
-        after_common = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_COMMON
-        )
+        # Common foi debitado; peticao_express não foi tocado
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS) == 1
 
-        assert after_pet_exp == 0, "Peticao express deveria ter diminuído"
-        assert after_common == 1, "Common não deveria ter sido afetado"
-        assert (
-            credit_ledger.compute_balance(
-                client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS
-            )
-            == 0
-        )
-
-
-class TestResourceExpressSegregation:
-    """Fluxo: compra crédito recurso_express → cria recurso express → only that kind affected."""
-
-    def test_buy_recurso_express_and_create_appeal(self, api_client, client_user, db):
-        # 1. Credita créditos
+    def test_express_grupo_b_also_debits_common(self, api_client, client_user, db):
         credit_ledger.credit(
-            client_user,
-            amount=1,
-            source="test",
-            description="Express Recurso",
-            idempotency_key="exp-rec-buy",
-            kind=credit_ledger.KIND_RECURSO_EXPRESS,
-        )
-        credit_ledger.credit(
-            client_user,
-            amount=5,
-            source="test",
-            description="Common",
-            idempotency_key="common-many",
+            client_user, amount=1,
+            source="test", description="Common",
+            idempotency_key="exp-b-common-1",
             kind=credit_ledger.KIND_COMMON,
+        )
+        credit_ledger.credit(
+            client_user, amount=1,
+            source="test", description="Rec exp legado",
+            idempotency_key="exp-rec-legacy",
+            kind=credit_ledger.KIND_RECURSO_EXPRESS,
         )
         db.session.flush()
 
-        before_rec_exp = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS
-        )
-        before_common = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_COMMON
-        )
-        assert before_rec_exp == 1
-        assert before_common == 5
-
-        # 2. Cria petição express com tipo Grupo B (Apelação)
         response = api_client.post(
             "/api/petitions",
             json={
                 "area_direito": "Direito Civil",
-                "tipo_peticao": "Apelação",  # Grupo B
+                "tipo_peticao": "Apelação",
                 "partes": [{"nome": "Pedro", "tipo": "Apelante"}],
                 "resumo_caso": "Appeal rápido",
                 "detalhes": "24h",
@@ -195,24 +141,11 @@ class TestResourceExpressSegregation:
             },
         )
 
-        assert response.status_code == 201
+        assert response.status_code == 201, response.get_json()
 
-        # 3. Verificar que só recurso_express foi afetado
-        after_rec_exp = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS
-        )
-        after_common = credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_COMMON
-        )
-
-        assert after_rec_exp == 0, "Recurso express deveria ter diminuído"
-        assert after_common == 5, "Common não deveria ter sido afetado"
-        assert (
-            credit_ledger.compute_balance(
-                client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS
-            )
-            == 0
-        )
+        # Common debitado; recurso_express intacto
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS) == 1
 
 
 class TestCancelationRestoresCredit:

@@ -574,14 +574,18 @@ def _pagarme_payload(order: Order, user, payload: dict) -> dict:
 
 
 def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
-    service_id = _text((payload or {}).get("service_id"), max_length=80)
+    from app.models.orders import ServiceOrder
+
+    data = payload or {}
+    service_id = _text(data.get("service_id"), max_length=80)
     if not service_id:
         raise ValidationError("Serviço obrigatório.")
     code, amount, _name = _catalog_entry(service_id)
     if amount < 0:
         raise ValidationError("Valor do serviço inválido.")
+
     # Validar preço esperado enviado pelo frontend (proteção contra preços desatualizados)
-    expected_amount = (payload or {}).get("expected_amount")
+    expected_amount = data.get("expected_amount")
     if expected_amount is not None:
         try:
             expected_int = int(expected_amount)
@@ -599,17 +603,46 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
                 f"Preço do serviço foi atualizado. Atualize a página e tente novamente. "
                 f"Valor atual: {format_brl_from_cents(amount)}"
             )
-    existing = (
-        Order.query.filter(
-            Order.user_id == user.id,
-            Order.service_id == code,
-            Order.status.in_(["pending", "processing"]),
+
+    # Vincular ao ServiceOrder para upgrades Express
+    service_order_id = data.get("service_order_id")
+    linked_service_order = None
+    if service_order_id is not None:
+        try:
+            service_order_id = int(service_order_id)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError("service_order_id inválido.") from exc
+        linked_service_order = ServiceOrder.query.filter_by(
+            id=service_order_id, user_id=user.id
+        ).first()
+        if linked_service_order is None:
+            raise ValidationError("Pedido de serviço não encontrado.")
+        if linked_service_order.status != "pendente_pagamento_express":
+            raise ValidationError("Este pedido não está aguardando pagamento Express.")
+        # Idempotência: retorna checkout existente para o mesmo service_order
+        existing = (
+            Order.query.filter(
+                Order.service_order_id == service_order_id,
+                Order.status.in_(["pending", "processing"]),
+            )
+            .order_by(Order.id.desc())
+            .first()
         )
-        .order_by(Order.id.desc())
-        .first()
-    )
-    if existing:
-        return {"order": serialize_checkout_order(existing)}, 200
+        if existing:
+            return {"order": serialize_checkout_order(existing)}, 200
+    else:
+        existing = (
+            Order.query.filter(
+                Order.user_id == user.id,
+                Order.service_id == code,
+                Order.status.in_(["pending", "processing"]),
+            )
+            .order_by(Order.id.desc())
+            .first()
+        )
+        if existing:
+            return {"order": serialize_checkout_order(existing)}, 200
+
     order = Order(
         user_id=user.id,
         service_id=code,
@@ -618,6 +651,7 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
         status="pending",
         idempotency_key=f"checkout-order-{user.id}-{code}-{uuid4().hex[:16]}",
         company_id=getattr(user, "company_id", None),
+        service_order_id=service_order_id,
     )
     if amount == 0:
         order.status = "paid"
@@ -626,7 +660,14 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     db.session.flush()
     if amount == 0:
         _release_order(order)
-    log_action(action="checkout_order_created", entity_type="order", entity_id=order.id, user=user, company_id=order.company_id, metadata={"service_id": code, "amount": amount})
+    log_action(
+        action="checkout_order_created",
+        entity_type="order",
+        entity_id=order.id,
+        user=user,
+        company_id=order.company_id,
+        metadata={"service_id": code, "amount": amount, "service_order_id": service_order_id},
+    )
     db.session.commit()
     return {"order": serialize_checkout_order(order)}, 201
 

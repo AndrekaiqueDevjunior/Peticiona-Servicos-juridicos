@@ -241,6 +241,21 @@ export default function Orders() {
                         {order.status_label || order.status}
                       </span>
                     )}
+                    {order.status === "pendente_pagamento_express" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="bg-amber-500 text-white hover:bg-amber-600"
+                        onClick={() =>
+                          navigate(
+                            `/checkout?service=servico_express_upgrade&service_order_id=${order.id}`,
+                          )
+                        }
+                      >
+                        <Zap className="mr-1.5 h-4 w-4" />
+                        Pagar Express
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       variant="outline"

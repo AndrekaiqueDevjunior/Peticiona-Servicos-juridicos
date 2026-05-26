@@ -1,10 +1,9 @@
-"""Testes da criação de petições e débito automático de créditos por kind.
+"""Testes da criação de petições e débito automático de créditos.
 
 Valida que:
-- POST /api/petitions com crédito disponível → 201, débita 1 crédito correto
-- POST express com Grupo A → usa peticao_express
-- POST express com Grupo B → usa recurso_express
-- Erro sem crédito suficiente inclui mensagem orientadora por kind
+- POST /api/petitions com crédito disponível → 201, débita 1 crédito common
+- POST express → débita 1 crédito common + cria ordem com status pendente_pagamento_express
+- Erro sem crédito suficiente inclui mensagem orientadora
 """
 
 from __future__ import annotations
@@ -32,29 +31,6 @@ def client_with_common_credit(client_user, db):
         description="Test credit",
         idempotency_key="test-common-1",
         kind=credit_ledger.KIND_COMMON,
-    )
-    db.session.flush()
-    return client_user
-
-
-@pytest.fixture
-def client_with_express_credits(client_user, db):
-    """Credita 1 crédito de cada tipo de express."""
-    credit_ledger.credit(
-        client_user,
-        amount=1,
-        source="test",
-        description="Pet express",
-        idempotency_key="test-pet-exp",
-        kind=credit_ledger.KIND_PETICAO_EXPRESS,
-    )
-    credit_ledger.credit(
-        client_user,
-        amount=1,
-        source="test",
-        description="Rec express",
-        idempotency_key="test-rec-exp",
-        kind=credit_ledger.KIND_RECURSO_EXPRESS,
     )
     db.session.flush()
     return client_user
@@ -95,29 +71,8 @@ class TestCreatePetitionWithCommonCredit:
         )
         assert after_balance == 0, "Débito de 1 crédito common não funcionou"
 
-    def test_other_kinds_untouched_after_common_debit(self, api, client_user, db):
-        # Add credits to all kinds
-        credit_ledger.credit(
-            client_user, amount=1,
-            source="test", description="Common",
-            idempotency_key="setup-common",
-            kind=credit_ledger.KIND_COMMON,
-        )
-        credit_ledger.credit(
-            client_user, amount=5,
-            source="test", description="Pet exp",
-            idempotency_key="setup-pet-exp",
-            kind=credit_ledger.KIND_PETICAO_EXPRESS,
-        )
-        credit_ledger.credit(
-            client_user, amount=3,
-            source="test", description="Rec exp",
-            idempotency_key="setup-rec-exp",
-            kind=credit_ledger.KIND_RECURSO_EXPRESS,
-        )
-        db.session.flush()
-
-        response = api(client_user).post(
+    def test_order_status_is_pendente_for_regular(self, api, client_with_common_credit, db):
+        response = api(client_with_common_credit).post(
             "/api/petitions",
             json={
                 "area_direito": "Direito Civil",
@@ -133,11 +88,9 @@ class TestCreatePetitionWithCommonCredit:
         )
 
         assert response.status_code == 201
-
-        # Verify only common was debited
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS) == 5
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS) == 3
+        order = response.get_json()["order"]
+        assert order["status"] == "pendente"
+        assert order["express_upgrade"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +99,7 @@ class TestCreatePetitionWithCommonCredit:
 
 
 class TestCreatePetitionWithoutCredit:
-    """POST /api/petitions sem crédito → 422/400 com mensagem orientadora."""
+    """POST /api/petitions sem crédito → erro com mensagem orientadora."""
 
     def test_no_common_credit_returns_error_message(self, api, client_user, db):
         response = api(client_user).post(
@@ -168,20 +121,19 @@ class TestCreatePetitionWithoutCredit:
 
 
 # ---------------------------------------------------------------------------
-# Express com Grupo A (peticao_express)
+# Express: débita common + cria pendente_pagamento_express
 # ---------------------------------------------------------------------------
 
 
-class TestCreateExpressPetitionGroupA:
-    """POST express com Grupo A (Contestação, etc.) → debita peticao_express."""
+class TestCreateExpressPetition:
+    """POST express → débita 1 crédito common e cria ordem com pendente_pagamento_express."""
 
-    def test_express_grupo_a_debits_peticao_express(self, api, client_user, db):
-        # Credita apenas peticao_express
+    def test_express_debits_common_credit(self, api, client_user, db):
         credit_ledger.credit(
             client_user, amount=1,
-            source="test", description="Pet exp",
-            idempotency_key="exp-a-1",
-            kind=credit_ledger.KIND_PETICAO_EXPRESS,
+            source="test", description="Common for express",
+            idempotency_key="exp-common-1",
+            kind=credit_ledger.KIND_COMMON,
         )
         db.session.flush()
 
@@ -189,7 +141,7 @@ class TestCreateExpressPetitionGroupA:
             "/api/petitions",
             json={
                 "area_direito": "Direito Civil",
-                "tipo_peticao": "Contestação",  # Grupo A
+                "tipo_peticao": "Contestação",
                 "partes": [{"nome": "Anna", "tipo": "Réu"}],
                 "resumo_caso": "Express defesa",
                 "detalhes": "Precisa de 24h",
@@ -205,26 +157,15 @@ class TestCreateExpressPetitionGroupA:
         body = response.get_json()
         order = body["order"]
         assert order["express_upgrade"] is True
-        assert credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS
-        ) == 0
+        assert order["status"] == "pendente_pagamento_express"
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
 
-
-# ---------------------------------------------------------------------------
-# Express com Grupo B (recurso_express)
-# ---------------------------------------------------------------------------
-
-
-class TestCreateExpressPetitionGroupB:
-    """POST express com Grupo B (Apelação, recursos) → debita recurso_express."""
-
-    def test_express_grupo_b_debits_recurso_express(self, api, client_user, db):
-        # Credita apenas recurso_express
+    def test_express_with_grupo_b_also_debits_common(self, api, client_user, db):
         credit_ledger.credit(
             client_user, amount=1,
-            source="test", description="Rec exp",
-            idempotency_key="exp-b-1",
-            kind=credit_ledger.KIND_RECURSO_EXPRESS,
+            source="test", description="Common for express B",
+            idempotency_key="exp-b-common-1",
+            kind=credit_ledger.KIND_COMMON,
         )
         db.session.flush()
 
@@ -232,7 +173,7 @@ class TestCreateExpressPetitionGroupB:
             "/api/petitions",
             json={
                 "area_direito": "Direito Civil",
-                "tipo_peticao": "Apelação",  # Grupo B
+                "tipo_peticao": "Apelação",
                 "partes": [{"nome": "José", "tipo": "Apelante"}],
                 "resumo_caso": "Express recurso",
                 "detalhes": "Urgente no tribunal",
@@ -248,47 +189,21 @@ class TestCreateExpressPetitionGroupB:
         body = response.get_json()
         order = body["order"]
         assert order["express_upgrade"] is True
-        assert credit_ledger.compute_balance(
-            client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS
-        ) == 0
+        assert order["status"] == "pendente_pagamento_express"
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
 
-
-class TestExpressWithoutCorrectKind:
-    """Express sem crédito do kind certo → erro com mensagem específica."""
-
-    def test_no_peticao_express_returns_error(self, api, client_user, db):
-        # Tenta express Grupo A sem crédito peticao_express
+    def test_express_without_common_credit_returns_error(self, api, client_user, db):
         response = api(client_user).post(
             "/api/petitions",
             json={
                 "area_direito": "Direito Civil",
-                "tipo_peticao": "Contestação",  # Grupo A = peticao_express needed
+                "tipo_peticao": "Contestação",
                 "partes": [{"nome": "Tom", "tipo": "Réu"}],
-                "resumo_caso": "No express credits",
+                "resumo_caso": "No credits",
                 "detalhes": "Test",
                 "justica_gratuita": False,
                 "tutela_urgencia": False,
                 "advogado_subscritor": "Dr. Slow",
-                "document_ids": [],
-                "express_upgrade": True,
-            },
-        )
-
-        assert response.status_code in [400, 422], f"Expected error, got {response.status_code}: {response.get_json()}"
-
-    def test_no_recurso_express_returns_error(self, api, client_user, db):
-        # Tenta express Grupo B sem crédito recurso_express
-        response = api(client_user).post(
-            "/api/petitions",
-            json={
-                "area_direito": "Direito Civil",
-                "tipo_peticao": "Agravo de instrumento",  # Grupo B = recurso_express needed
-                "partes": [{"nome": "Jerry", "tipo": "Agravante"}],
-                "resumo_caso": "No rec credits",
-                "detalhes": "Test",
-                "justica_gratuita": False,
-                "tutela_urgencia": False,
-                "advogado_subscritor": "Dr. Lento",
                 "document_ids": [],
                 "express_upgrade": True,
             },

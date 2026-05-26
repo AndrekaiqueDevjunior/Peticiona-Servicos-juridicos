@@ -141,10 +141,14 @@ const safeParse = (raw: string): unknown => {
 // ---------------------------------------------------------------------------
 
 export const checkoutApi = {
-  createOrder: (service_id: CheckoutServiceId, expected_amount?: number) =>
+  createOrder: (
+    service_id: CheckoutServiceId,
+    expected_amount?: number,
+    service_order_id?: number,
+  ) =>
     request<{ order: CheckoutOrder }>("/checkout/create-order", {
       method: "POST",
-      body: JSON.stringify({ service_id, expected_amount }),
+      body: JSON.stringify({ service_id, expected_amount, service_order_id }),
     }),
 
   createPayment: (input: {
