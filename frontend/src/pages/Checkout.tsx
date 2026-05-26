@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Wallet,
   XCircle,
+  Zap,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -681,7 +682,11 @@ export default function Checkout() {
         )}
 
         {order && order.status === "paid" && (
-          <ConfirmationScreen order={order} onGoToBalance={() => navigate("/area-cliente/saldos")} />
+          <ConfirmationScreen
+            order={order}
+            onGoToBalance={() => navigate("/area-cliente/saldos")}
+            onGoToOrders={() => navigate("/area-cliente/pedidos")}
+          />
         )}
 
         {order && (order.status === "canceled" || order.status === "refunded" || order.status === "refused" || order.status === "expired" || order.status === "chargeback") && (
@@ -1239,10 +1244,14 @@ function NextActionPanel({ action }: { action: PaymentNextAction }) {
 function ConfirmationScreen({
   order,
   onGoToBalance,
+  onGoToOrders,
 }: {
   order: CheckoutOrder;
   onGoToBalance: () => void;
+  onGoToOrders?: () => void;
 }) {
+  const isExpressUpgrade = order.service_id === "servico_express_upgrade";
+
   const paidAt = order.paid_at
     ? new Date(order.paid_at).toLocaleString("pt-BR", {
         day: "2-digit",
@@ -1257,12 +1266,16 @@ function ConfirmationScreen({
     <div className="mx-auto max-w-lg">
       <Card className="overflow-hidden">
         {/* Faixa verde no topo */}
-        <div className="bg-emerald-500 px-6 py-8 text-center text-white dark:bg-emerald-600">
+        <div className={`px-6 py-8 text-center text-white ${isExpressUpgrade ? "bg-amber-500 dark:bg-amber-600" : "bg-emerald-500 dark:bg-emerald-600"}`}>
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/20">
             <CheckCircle2 className="h-9 w-9" />
           </div>
           <h2 className="font-display text-2xl font-semibold">Pagamento confirmado!</h2>
-          <p className="mt-1 text-sm opacity-80">Seu crédito já está disponível na plataforma.</p>
+          <p className="mt-1 text-sm opacity-80">
+            {isExpressUpgrade
+              ? "Seu pedido Express foi ativado! Entrega em até 24 horas."
+              : "Seu crédito já está disponível na plataforma."}
+          </p>
         </div>
 
         <CardContent className="space-y-4 p-6">
@@ -1271,12 +1284,12 @@ function ConfirmationScreen({
             <div className="flex items-center justify-between border-b border-border pb-3">
               <span className="text-muted-foreground">Serviço</span>
               <span className="font-medium text-foreground">
-                {order.service_name || order.service_id}
+                {isExpressUpgrade ? "Entrega Express (upgrade)" : (order.service_name || order.service_id)}
               </span>
             </div>
             <div className="flex items-center justify-between border-b border-border py-3">
               <span className="text-muted-foreground">Valor pago</span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              <span className={`font-semibold ${isExpressUpgrade ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                 {formatAmountFromCents(order.amount)}
               </span>
             </div>
@@ -1292,10 +1305,17 @@ function ConfirmationScreen({
             </div>
           </div>
 
-          <Button className="w-full" size="lg" onClick={onGoToBalance}>
-            <Wallet className="mr-2 h-4 w-4" />
-            Ver meus Saldos
-          </Button>
+          {isExpressUpgrade ? (
+            <Button className="w-full bg-amber-500 hover:bg-amber-600 text-white" size="lg" onClick={onGoToOrders}>
+              <Zap className="mr-2 h-4 w-4" />
+              Ver meus Pedidos
+            </Button>
+          ) : (
+            <Button className="w-full" size="lg" onClick={onGoToBalance}>
+              <Wallet className="mr-2 h-4 w-4" />
+              Ver meus Saldos
+            </Button>
+          )}
 
           <p className="text-center text-xs text-muted-foreground">
             <ShieldCheck className="mr-1 inline h-3.5 w-3.5" />

@@ -87,7 +87,7 @@ CANONICAL_SERVICES: list[dict] = [
         "section": "Recursos",
         "title": "Recurso",
         "description": "Recurso jurídico padrão (entrega regular).",
-        "unit_price": 20000,
+        "unit_price": 18000,
         "delivery_label": "Entrega em até 3 dias úteis",
     },
     {
@@ -103,7 +103,7 @@ CANONICAL_SERVICES: list[dict] = [
         "section": "Recursos",
         "title": "Recurso Express",
         "description": "Recurso jurídico entregue em 24 horas.",
-        "unit_price": 25000,
+        "unit_price": 22000,
         "delivery_label": "Entrega em 24h",
     },
     {
