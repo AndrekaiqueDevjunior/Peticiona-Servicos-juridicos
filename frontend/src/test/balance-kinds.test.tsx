@@ -71,16 +71,13 @@ describe("Balance page with credit kinds", () => {
 
     renderWithQueryClient(<Balance />);
 
-    // Wait for cards to render
-    await waitFor(() => {
-      expect(screen.getByText("Créditos Comuns")).toBeInTheDocument();
-    });
-
+    // Wait for cards and balances to render
+    expect(await screen.findByText("Créditos Comuns")).toBeInTheDocument();
     expect(screen.getByText("Créditos Petição Express")).toBeInTheDocument();
     expect(screen.getByText("Créditos Recurso Express")).toBeInTheDocument();
 
-    // Check balances are displayed
-    expect(screen.getByText("5")).toBeInTheDocument(); // common balance
+    // Check balances are displayed (using findBy to wait for async data)
+    expect(await screen.findByText("5")).toBeInTheDocument(); // common balance
     expect(screen.getByText("2")).toBeInTheDocument(); // peticao_express balance
     expect(screen.getByText("1")).toBeInTheDocument(); // recurso_express balance
   });
@@ -122,13 +119,11 @@ describe("Balance page with credit kinds", () => {
 
     renderWithQueryClient(<Balance />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Créditos Comuns")).toBeInTheDocument();
-    });
+    // Wait for balance data to load
+    expect(await screen.findByText("Créditos Comuns")).toBeInTheDocument();
 
-    // Verify specific balances (may need to adjust selectors based on actual layout)
-    const text = screen.getByText(/10.*crédito/i);
-    expect(text).toBeInTheDocument();
+    // Verify specific balances
+    expect(await screen.findByText("10")).toBeInTheDocument(); // common balance
   });
 
   it("shows kind badges in movements", async () => {
@@ -189,11 +184,9 @@ describe("Balance page with credit kinds", () => {
 
     renderWithQueryClient(<Balance />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Créditos Comuns")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Créditos comprados")).toBeInTheDocument();
+    // Wait for balance data and movements to load
+    expect(await screen.findByText("Créditos Comuns")).toBeInTheDocument();
+    expect(await screen.findByText("Créditos comprados")).toBeInTheDocument();
     expect(screen.getByText("Petição criada")).toBeInTheDocument();
   });
 

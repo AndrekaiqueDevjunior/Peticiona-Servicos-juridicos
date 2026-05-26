@@ -116,7 +116,7 @@ describe("balance helpers", () => {
     });
 
     it("labels are in Portuguese", () => {
-      expect(CREDIT_KIND_LABEL.common).toContain("Comum");
+      expect(CREDIT_KIND_LABEL.common).toContain("Comuns");
       expect(CREDIT_KIND_LABEL.peticao_express).toContain("Petição");
       expect(CREDIT_KIND_LABEL.recurso_express).toContain("Recurso");
     });

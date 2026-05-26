@@ -133,13 +133,8 @@ describe("NewRequestDialog with credit validation", () => {
 
     renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
 
-    await waitFor(() => {
-      const petitionText = screen.queryByText(/tipo de petição/i);
-      expect(petitionText).toBeInTheDocument();
-    });
-
-    // When Apelação is selected, express should work because recurso_express available
-    // This is more of an integration test validating the logic flows through
+    // Verify the dialog renders and contains the petition type selector
+    expect(await screen.findByText(/qual o tipo de petição/i)).toBeInTheDocument();
   });
 
   it("correctly identifies Grupo A (Contestação) as peticao_express", async () => {
@@ -158,12 +153,8 @@ describe("NewRequestDialog with credit validation", () => {
 
     renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
 
-    await waitFor(() => {
-      const petitionText = screen.queryByText(/tipo de petição/i);
-      expect(petitionText).toBeInTheDocument();
-    });
-
-    // When Contestação is selected, express should work because peticao_express available
+    // Verify the dialog renders and contains the petition type selector
+    expect(await screen.findByText(/qual o tipo de petição/i)).toBeInTheDocument();
   });
 
   it("shows summary with correct credit kind for express", async () => {

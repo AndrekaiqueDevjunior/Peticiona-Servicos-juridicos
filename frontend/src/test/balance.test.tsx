@@ -20,21 +20,33 @@ describe("Balance", () => {
             credits_used: 15000,
             credits_used_cents: 15000,
             credits_used_brl: "R$ 150,00",
+            balances: {
+              common: 450,
+              peticao_express: 0,
+              recurso_express: 0,
+            },
+            totals_by_kind: {
+              common: { credits_in: 600, credits_out: 150 },
+              peticao_express: { credits_in: 0, credits_out: 0 },
+              recurso_express: { credits_in: 0, credits_out: 0 },
+            },
             movements: [
               {
                 type: "in",
-                amount: 60000,
+                amount: 600,
                 amount_cents: 60000,
                 amount_brl: "R$ 600,00",
+                kind: "common",
                 description: "Compra de créditos",
                 source: "checkout",
                 date: "2026-05-01T10:00:00Z",
               },
               {
                 type: "out",
-                amount: 15000,
+                amount: 150,
                 amount_cents: 15000,
                 amount_brl: "R$ 150,00",
+                kind: "common",
                 description: "Consumo em pedido",
                 source: "petition",
                 date: "2026-05-01T12:00:00Z",
@@ -48,7 +60,7 @@ describe("Balance", () => {
 
     renderWithQueryClient(<Balance />);
 
-    expect((await screen.findAllByText("R$ 450,00")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("450")).length).toBeGreaterThan(0);
     expect(screen.getByText("Compra de créditos")).toBeInTheDocument();
     expect(screen.getByText("Consumo em pedido")).toBeInTheDocument();
   });
