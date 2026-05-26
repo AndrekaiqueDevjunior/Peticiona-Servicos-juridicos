@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from app.core.errors import NotFoundError, PermissionDenied, ValidationError
+from app.core.errors import PermissionDenied, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
 from app.domain.plan_rules import ensure_plan_allows_new_petition
-from app.models import Document, Petition, PetitionDocumentLink, PetitionParty, ServiceCatalogItem, ServiceOrder, ServiceOrderItem
-from app.models.payments import Order as CheckoutOrder
+from app.models import Document, Petition, PetitionDocumentLink, PetitionParty, ServiceOrder, ServiceOrderItem
 from app.services.audit_service import log_action
 from app.services.serializers import serialize_order, serialize_petition
 
@@ -49,19 +48,16 @@ _GRUPO_B_TIPOS = {
     "Agravo em recurso extraordinário",
 }
 
-_EXPRESS_CODE_BY_GRUPO = {
-    "A": "servico_peticao_express",
-    "B": "servico_recurso_express",
-}
 
+def _express_kind_for_tipo(tipo_peticao: str | None) -> str:
+    """Resolve qual kind de crédito Express usar baseado no tipo de petição.
 
-def _resolve_express_catalog(tipo_peticao: str | None) -> tuple[str, int]:
-    grupo = "B" if tipo_peticao in _GRUPO_B_TIPOS else "A"
-    code = _EXPRESS_CODE_BY_GRUPO[grupo]
-    item = ServiceCatalogItem.query.filter_by(code=code, is_active=True).first()
-    if item is None:
-        raise NotFoundError(f"Serviço express '{code}' não encontrado no catálogo.")
-    return code, int(item.unit_price)
+    Grupo B (recursos, petições iniciais com complexidade) → 'recurso_express'.
+    Grupo A (defesas, manifestações, administrativo) → 'peticao_express'.
+    """
+    if tipo_peticao in _GRUPO_B_TIPOS:
+        return "recurso_express"
+    return "peticao_express"
 
 
 def create_petition(user, payload: dict) -> dict:
@@ -125,34 +121,10 @@ def create_petition(user, payload: dict) -> dict:
             )
         )
 
-    order = _create_service_order_for_petition(user, petition, payload)
-
-    express_checkout_order_id = None
-    if payload.get("express_upgrade"):
-        express_service_code, express_amount = _resolve_express_catalog(petition.tipo_peticao)
-        checkout_order = CheckoutOrder(
-            user_id=user.id,
-            service_id=express_service_code,
-            amount=express_amount,
-            currency="BRL",
-            status="pending",
-            service_order_id=order.id,
-            idempotency_key=f"express-upgrade-{order.reference}",
-            company_id=user.company_id,
-        )
-        db.session.add(checkout_order)
-        db.session.flush()
-        order.express_order_id = checkout_order.id
-        order.status = "pendente_pagamento_express"
-        db.session.flush()
-        express_checkout_order_id = str(checkout_order.id)
-        log_action(
-            action="order.express_upgrade_initiated",
-            entity_type="service_order",
-            entity_id=order.id,
-            user=user,
-            metadata={"reference": order.reference, "express_checkout_order_id": checkout_order.id},
-        )
+    express_upgrade = bool(payload.get("express_upgrade"))
+    order = _create_service_order_for_petition(
+        user, petition, payload, express_upgrade=express_upgrade
+    )
 
     log_action(
         action="petition.created",
@@ -162,14 +134,11 @@ def create_petition(user, payload: dict) -> dict:
         metadata={"reference": petition.reference, "status": petition.status},
     )
     db.session.commit()
-    result: dict = {
+    return {
         "message": "Petição criada com sucesso.",
         "petition": serialize_petition(petition),
         "order": serialize_order(order),
     }
-    if express_checkout_order_id is not None:
-        result["express_checkout_order_id"] = express_checkout_order_id
-    return result
 
 
 def list_petitions(user) -> dict:
@@ -177,7 +146,19 @@ def list_petitions(user) -> dict:
     return {"petitions": [serialize_petition(item) for item in petitions]}
 
 
-def _create_service_order_for_petition(user, petition: Petition, payload: dict) -> ServiceOrder:
+_EXPRESS_KIND_LABEL = {
+    "peticao_express": "Petição Express",
+    "recurso_express": "Recurso Express",
+}
+
+
+def _create_service_order_for_petition(
+    user,
+    petition: Petition,
+    payload: dict,
+    *,
+    express_upgrade: bool = False,
+) -> ServiceOrder:
     from app.core.errors import ValidationError
     from app.core.references import human_reference
     from app.services import credit_ledger
@@ -185,7 +166,6 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
         _placeholder_order_reference,
         _preview_service_request,
     )
-    from app.services.serializers import format_brl_from_cents
 
     preview = _preview_service_request(
         {
@@ -196,6 +176,13 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
         }
     )
 
+    # Express: prazo 24h. Comum: prazo definido pelo cliente (opcional).
+    deadline_at = (
+        datetime.now(timezone.utc) + timedelta(hours=24)
+        if express_upgrade
+        else _parse_deadline(payload.get("deadline_at"))
+    )
+
     order = ServiceOrder(
         user_id=user.id,
         petition=petition,
@@ -203,7 +190,8 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
         reference=_placeholder_order_reference(),
         status="pendente",
         total_amount=preview["total_amount"],
-        deadline_at=_parse_deadline(payload.get("deadline_at")),
+        deadline_at=deadline_at,
+        express_upgrade=express_upgrade,
     )
     db.session.add(order)
     db.session.flush()
@@ -223,33 +211,56 @@ def _create_service_order_for_petition(user, petition: Petition, payload: dict) 
             )
         )
 
-    # Débito via credit_ledger: o gate de saldo, o advisory lock por
-    # usuário e a idempotência por (order.reference) são responsabilidade
-    # do módulo. Mantém a ordem antiga (sem cobrança em pedidos de valor
-    # zero) e converte InsufficientBalance em ValidationError com a
-    # mesma mensagem que a UI já estava acostumada a tratar.
-    if preview["total_amount"] > 0 and user is not None:
+    # Débito unitário: 1 crédito do bolso correto.
+    # - express_upgrade=True → 1 crédito 'peticao_express' ou 'recurso_express'
+    #   (depende do tipo de petição via _express_kind_for_tipo).
+    # - express_upgrade=False → 1 crédito 'common'.
+    # Saldos NÃO se misturam: se cliente não tem crédito do kind certo,
+    # InsufficientBalance vira ValidationError com mensagem orientadora.
+    if user is not None:
         service_title = petition.tipo_peticao or petition.area_direito or "Serviço jurídico"
+        if express_upgrade:
+            credit_kind = _express_kind_for_tipo(petition.tipo_peticao)
+            label_express = _EXPRESS_KIND_LABEL.get(credit_kind, "Express")
+            description = f"Débito Express — {order.reference} ({service_title})"
+        else:
+            credit_kind = credit_ledger.KIND_COMMON
+            label_express = None
+            description = f"Débito — {order.reference} ({service_title})"
         try:
             credit_ledger.debit(
                 user,
-                amount=preview["total_amount"],
+                amount=1,
                 source="client_order",
-                description=f"Débito — {order.reference} ({service_title})",
+                description=description,
                 idempotency_key=f"order-debit-{order.reference}",
+                kind=credit_kind,
             )
         except credit_ledger.InsufficientBalance as exc:
-            raise ValidationError(
-                f"Saldo insuficiente. Disponível: {format_brl_from_cents(max(0, exc.available))}. "
-                f"Necessário: {format_brl_from_cents(exc.required)}."
-            ) from exc
+            if express_upgrade:
+                msg = (
+                    f"Você não possui créditos de {label_express}. "
+                    f"Disponível: {exc.available} crédito(s). "
+                    f"Necessário: 1 crédito. Adquira um crédito {label_express} antes de solicitar."
+                )
+            else:
+                msg = (
+                    f"Saldo de créditos comuns insuficiente. "
+                    f"Disponível: {exc.available} crédito(s). "
+                    f"Necessário: 1 crédito. Adquira um plano para receber mais créditos."
+                )
+            raise ValidationError(msg) from exc
 
     log_action(
         action="order.created_from_petition",
         entity_type="service_order",
         entity_id=order.id,
         user=user,
-        metadata={"reference": order.reference, "petition_reference": petition.reference},
+        metadata={
+            "reference": order.reference,
+            "petition_reference": petition.reference,
+            "express_upgrade": express_upgrade,
+        },
     )
     return order
 

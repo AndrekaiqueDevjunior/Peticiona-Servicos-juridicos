@@ -364,42 +364,40 @@ def cancel_order(user, order_id: object) -> dict:
         raise ValidationError("Pedidos concluídos não podem ser cancelados pelo cliente.")
     if order.status != "cancelado":
         order.status = "cancelado"
-        # Estornar créditos se houver débito associado ao pedido.
-        # A idempotência do credit_ledger (chave estável por referência
-        # do pedido) substitui o LIKE %order.reference% por
-        # description que existia antes — agora o motor garante que
-        # cancelamentos duplicados não duplicam o estorno.
-        if order.total_amount > 0:
+        # Estornar crédito do pedido. refund() respeita o kind original
+        # da transação (common para pedidos comuns, peticao_express/
+        # recurso_express para pedidos com upgrade Express). Idempotência
+        # garante que cancelamentos duplicados não dupliquem o estorno.
+        debit = (
+            CreditTransaction.query
+            .filter(
+                CreditTransaction.user_id == user.id,
+                CreditTransaction.source == "client_order",
+                CreditTransaction.type == "out",
+                CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
+            )
+            .first()
+        )
+        if debit is None:
+            # Fallback para pedidos legacy criados antes da migração
+            # pra credit_ledger — não tinham idempotency_key.
             debit = (
                 CreditTransaction.query
                 .filter(
                     CreditTransaction.user_id == user.id,
                     CreditTransaction.source == "client_order",
                     CreditTransaction.type == "out",
-                    CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
+                    CreditTransaction.description.like(f"%{order.reference}%"),
                 )
                 .first()
             )
-            if debit is None:
-                # Fallback para pedidos legacy criados antes da migração
-                # pra credit_ledger — não tinham idempotency_key.
-                debit = (
-                    CreditTransaction.query
-                    .filter(
-                        CreditTransaction.user_id == user.id,
-                        CreditTransaction.source == "client_order",
-                        CreditTransaction.type == "out",
-                        CreditTransaction.description.like(f"%{order.reference}%"),
-                    )
-                    .first()
-                )
-            if debit is not None:
-                credit_ledger.refund(
-                    debit,
-                    source="client_order_refund",
-                    description=f"Estorno — {order.reference}",
-                    idempotency_key=f"order-refund-{order.reference}",
-                )
+        if debit is not None and getattr(debit, "kind", None) != credit_ledger.KIND_LEGACY_CENTS:
+            credit_ledger.refund(
+                debit,
+                source="client_order_refund",
+                description=f"Estorno — {order.reference}",
+                idempotency_key=f"order-refund-{order.reference}",
+            )
         log_action(
             action="order.cancelled_by_client",
             entity_type="service_order",
@@ -477,22 +475,25 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
             )
         )
 
-    if user is not None and total_amount > 0:
+    if user is not None:
         from app.services import credit_ledger
 
         service_title = preview["items"][0]["title"] if preview["items"] else "Serviço"
         try:
             credit_ledger.debit(
                 user,
-                amount=total_amount,
+                amount=1,
                 source="client_order",
                 description=f"Débito — {order.reference} ({service_title})",
                 idempotency_key=f"order-debit-{order.reference}",
+                kind=credit_ledger.KIND_COMMON,
             )
         except credit_ledger.InsufficientBalance as exc:
             raise ValidationError(
-                f"Saldo insuficiente. Disponível: {format_brl_from_cents(max(0, exc.available))}. "
-                f"Necessário: {format_brl_from_cents(exc.required)}."
+                f"Saldo de créditos comuns insuficiente. "
+                f"Disponível: {exc.available} crédito(s). "
+                f"Necessário: {exc.required} crédito(s). "
+                "Adquira um plano para receber mais créditos."
             ) from exc
 
     log_action(
