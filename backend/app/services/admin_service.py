@@ -234,6 +234,9 @@ def _serialize_plan(plan: Plan) -> dict:
             features = _json.loads(plan.features_json)
         except Exception:
             features = []
+    credits_qty = int(getattr(plan, "credits_quantity", None) or 0)
+    price = int(plan.monthly_price_cents or 0)
+    price_per_credit = (price // credits_qty) if credits_qty > 0 else None
     return {
         "id": plan.id,
         "code": plan.code,
@@ -241,6 +244,11 @@ def _serialize_plan(plan: Plan) -> dict:
         "description": plan.description,
         "monthly_price_cents": plan.monthly_price_cents,
         "monthly_price_brl": format_brl_from_cents(plan.monthly_price_cents),
+        "credits_quantity": credits_qty or None,
+        "price_per_credit_cents": price_per_credit,
+        "price_per_credit_brl": format_brl_from_cents(price_per_credit) if price_per_credit else None,
+        "validity_days": int(getattr(plan, "validity_days", None) or 365),
+        # legacy — mantidos para compatibilidade com código existente
         "monthly_credits_cents": plan.monthly_credits_cents,
         "monthly_credits_brl": format_brl_from_cents(plan.monthly_credits_cents),
         "petition_limit_monthly": plan.petition_limit_monthly,
@@ -1126,13 +1134,25 @@ def create_admin_plan(actor, payload: dict) -> dict:
         monthly_credits_default, field_name="monthly_credits_cents", minimum=0
     )
     _validate_plan_credit_ratio(monthly_price_cents_value, monthly_credits_value)
+    credits_qty = (
+        _to_int(payload.get("credits_quantity"), field_name="credits_quantity", minimum=0)
+        if payload.get("credits_quantity") is not None
+        else None
+    )
+    validity = (
+        _to_int(payload.get("validity_days"), field_name="validity_days", minimum=1)
+        if payload.get("validity_days") is not None
+        else 365
+    )
     plan = Plan(
         code=code,
         name=name,
         description=str(payload.get("description") or "").strip() or None,
         monthly_price_cents=monthly_price_cents_value,
         monthly_credits_cents=monthly_credits_value,
-        petition_limit_monthly=(
+        credits_quantity=credits_qty,
+        validity_days=validity,
+        petition_limit_monthly=credits_qty or (
             _to_int(payload.get("petition_limit_monthly"), field_name="petition_limit_monthly", minimum=0)
             if payload.get("petition_limit_monthly") is not None
             else None
@@ -1183,6 +1203,13 @@ def update_admin_plan(actor, plan_id: object, payload: dict) -> dict:
             if payload.get("price_per_service_cents") is not None
             else None
         )
+    if "credits_quantity" in payload and payload.get("credits_quantity") is not None:
+        cq = _to_int(payload.get("credits_quantity"), field_name="credits_quantity", minimum=0)
+        plan.credits_quantity = cq
+        # Mantém backward compat: petition_limit sobe junto
+        plan.petition_limit_monthly = cq or plan.petition_limit_monthly
+    if "validity_days" in payload and payload.get("validity_days") is not None:
+        plan.validity_days = _to_int(payload.get("validity_days"), field_name="validity_days", minimum=1)
     if "is_highlighted" in payload:
         plan.is_highlighted = bool(payload.get("is_highlighted"))
     if "cta_label" in payload:

@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Save, RotateCcw, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Save, RotateCcw, Plus, Trash2, Zap, CreditCard, Info } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,12 @@ import { api, type AdminPlan, type AdminServiceCatalogItem } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { PriceInput } from "@/components/admin/PriceInput";
 
+// Formata centavos como BRL legível
+const fmtBRL = (cents: number | null | undefined) => {
+  if (!cents) return "—";
+  return (cents / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+};
+
 export default function AdminPlans() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -48,34 +55,24 @@ export default function AdminPlans() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["public-plans"] });
-      toast({ title: "Plano excluído." });
+      toast({ title: "Plano desativado." });
       setPendingPlanDelete(null);
     },
     onError: (err) => {
-      toast({
-        title: "Não foi possível excluir o plano",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao desativar", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     },
   });
 
   const deleteServiceMutation = useMutation({
-    mutationFn: (service: AdminServiceCatalogItem) =>
-      api.admin.pricing.deleteService(service.id),
+    mutationFn: (service: AdminServiceCatalogItem) => api.admin.pricing.deleteService(service.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["public-catalog"] });
-      queryClient.invalidateQueries({ queryKey: ["client-catalog"] });
-      toast({ title: "Serviço excluído." });
+      toast({ title: "Serviço desativado." });
       setPendingServiceDelete(null);
     },
     onError: (err) => {
-      toast({
-        title: "Não foi possível excluir o serviço",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao desativar", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     },
   });
 
@@ -93,24 +90,12 @@ export default function AdminPlans() {
     );
   }, [data, draftPlans, draftServices]);
 
-  const updatePlan = <K extends keyof AdminPlan>(
-    id: number,
-    field: K,
-    value: AdminPlan[K],
-  ) => {
-    setDraftPlans((items) =>
-      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
-    );
+  const updatePlan = <K extends keyof AdminPlan>(id: number, field: K, value: AdminPlan[K]) => {
+    setDraftPlans((items) => items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
-  const updateService = <K extends keyof AdminServiceCatalogItem>(
-    id: number,
-    field: K,
-    value: AdminServiceCatalogItem[K],
-  ) => {
-    setDraftServices((items) =>
-      items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
-    );
+  const updateService = <K extends keyof AdminServiceCatalogItem>(id: number, field: K, value: AdminServiceCatalogItem[K]) => {
+    setDraftServices((items) => items.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
   };
 
   const handleReset = () => {
@@ -138,9 +123,12 @@ export default function AdminPlans() {
             name: plan.name,
             description: plan.description,
             monthly_price_cents: plan.monthly_price_cents,
-            monthly_credits_cents: plan.monthly_credits_cents,
-            petition_limit_monthly: plan.petition_limit_monthly,
-            price_per_service_cents: plan.price_per_service_cents,
+            // novo modelo: créditos por unidade, não centavos
+            credits_quantity: plan.credits_quantity ?? undefined,
+            validity_days: plan.validity_days ?? undefined,
+            // backward compat — backend sincroniza automaticamente
+            monthly_credits_cents: plan.monthly_price_cents,
+            petition_limit_monthly: plan.credits_quantity ?? plan.petition_limit_monthly,
             is_active: plan.is_active,
             is_highlighted: plan.is_highlighted,
             cta_label: plan.cta_label,
@@ -163,16 +151,9 @@ export default function AdminPlans() {
       await queryClient.invalidateQueries({ queryKey: ["public-plans"] });
       await queryClient.invalidateQueries({ queryKey: ["public-catalog"] });
       await queryClient.invalidateQueries({ queryKey: ["client-catalog"] });
-      toast({
-        title: "Catálogo atualizado",
-        description: "Os valores reais do backend foram salvos com sucesso.",
-      });
+      toast({ title: "Catálogo atualizado", description: "Valores salvos com sucesso." });
     } catch (err) {
-      toast({
-        title: "Erro ao salvar",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao salvar", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -181,10 +162,8 @@ export default function AdminPlans() {
   if (isLoading) {
     return (
       <div className="mx-auto max-w-5xl space-y-6">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          Planos e preços
-        </h1>
-        <p className="text-sm text-muted-foreground">Carregando catálogo real do backend...</p>
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">Planos e créditos</h1>
+        <p className="text-sm text-muted-foreground">Carregando catálogo...</p>
       </div>
     );
   }
@@ -192,9 +171,7 @@ export default function AdminPlans() {
   if (error || !data) {
     return (
       <div className="mx-auto max-w-5xl space-y-4">
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          Planos e preços
-        </h1>
+        <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">Planos e créditos</h1>
         <p className="rounded-md border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           Não foi possível carregar o catálogo do backend.
         </p>
@@ -204,287 +181,247 @@ export default function AdminPlans() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-            Planos e preços
-          </h1>
+          <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">Planos e créditos</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Edição direta do catálogo real do backend. Os planos vêm de `plans` e os avulsos de
-            `service_catalog_items`.
+            1 crédito = 1 serviço jurídico. Ao comprar um plano, o cliente recebe N créditos comuns.
           </p>
         </div>
         <div className="flex gap-2">
           <Button type="button" variant="outline" onClick={handleReset} disabled={saving || !dirty}>
             <RotateCcw className="h-4 w-4" />
-            Restaurar carregado
+            Restaurar
           </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || saving}
-            className="bg-accent text-accent-foreground hover:bg-accent/90"
-          >
+          <Button type="button" onClick={handleSave} disabled={!dirty || saving} className="bg-accent text-accent-foreground hover:bg-accent/90">
             <Save className="h-4 w-4" />
             {saving ? "Salvando..." : "Salvar alterações"}
           </Button>
         </div>
       </div>
 
+      {/* Info box */}
+      <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">
+        <Info className="mt-0.5 h-4 w-4 shrink-0" />
+        <div>
+          <strong>Modelo de créditos:</strong> cada plano libera N créditos comuns no saldo do cliente ao ser pago.
+          1 crédito é consumido a cada pedido criado (petição ou recurso), independente do tipo.
+          Express é cobrado à parte via checkout.
+        </div>
+      </div>
+
+      {/* Planos */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="font-display text-xl">Planos</CardTitle>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setCreatePlanOpen(true)}
-            className="gap-2"
-          >
+          <CardTitle className="flex items-center gap-2 font-display text-xl">
+            <CreditCard className="h-5 w-5 text-accent" />
+            Planos de créditos
+          </CardTitle>
+          <Button type="button" size="sm" onClick={() => setCreatePlanOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             Novo plano
           </Button>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {draftPlans.map((plan) => (
-            <div key={plan.id} className="rounded-lg border border-border p-4">
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-medium text-foreground">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">Codigo: {plan.code}</p>
+        <CardContent className="space-y-6">
+          {draftPlans.map((plan) => {
+            const creditsQty = plan.credits_quantity ?? null;
+            const pricePerCredit = creditsQty && creditsQty > 0
+              ? Math.round(plan.monthly_price_cents / creditsQty)
+              : null;
+
+            return (
+              <div key={plan.id} className="rounded-lg border border-border bg-card p-5">
+                {/* Cabeçalho do plano */}
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-foreground">{plan.name}</span>
+                    <Badge variant="outline" className="font-mono text-xs">{plan.code}</Badge>
+                    {!plan.is_active && <Badge variant="secondary">Inativo</Badge>}
+                    {plan.is_highlighted && <Badge className="bg-accent text-accent-foreground">Mais escolhido</Badge>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <Button type="button" variant="ghost" size="icon" onClick={() => setPendingPlanDelete(plan)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={plan.is_active} onChange={(e) => updatePlan(plan.id, "is_active", e.target.checked)} />
+                      Ativo
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={plan.is_highlighted} onChange={(e) => updatePlan(plan.id, "is_highlighted", e.target.checked)} />
+                      Destacado
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPendingPlanDelete(plan)}
-                    aria-label="Excluir plano"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={plan.is_active}
-                      onChange={(e) => updatePlan(plan.id, "is_active", e.target.checked)}
+
+                {/* Resumo rápido */}
+                <div className="mb-4 flex flex-wrap gap-4 rounded-md bg-muted/50 p-3 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Preço do pacote</span>
+                    <p className="font-semibold text-foreground">{fmtBRL(plan.monthly_price_cents)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Créditos inclusos</span>
+                    <p className="font-semibold text-foreground">
+                      {creditsQty != null ? `${creditsQty} crédito(s)` : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Preço por crédito</span>
+                    <p className="font-semibold text-accent">{fmtBRL(pricePerCredit)}</p>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Validade</span>
+                    <p className="font-semibold text-foreground">
+                      {plan.validity_days ? `${plan.validity_days} dias` : "365 dias"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Campos editáveis */}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Nome" value={plan.name} onChange={(v) => updatePlan(plan.id, "name", v)} />
+                  <Field label="Descrição" value={plan.description ?? ""} onChange={(v) => updatePlan(plan.id, "description", v)} />
+
+                  <PriceInput
+                    label="Preço do pacote"
+                    valueCents={plan.monthly_price_cents}
+                    onChangeCents={(c) => updatePlan(plan.id, "monthly_price_cents", c)}
+                  />
+
+                  <div className="grid gap-2">
+                    <Label className="text-muted-foreground">Créditos inclusos *</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={creditsQty ?? ""}
+                      onChange={(e) => updatePlan(plan.id, "credits_quantity", e.target.value === "" ? null : Number(e.target.value))}
+                      placeholder="Ex: 3"
                     />
-                    Ativo
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={plan.is_highlighted}
+                    <p className="text-xs text-muted-foreground">Número de serviços jurídicos inclusos no pacote.</p>
+                  </div>
+
+                  <div className="grid gap-2">
+                    <Label className="text-muted-foreground">Validade (dias)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={plan.validity_days ?? 365}
+                      onChange={(e) => updatePlan(plan.id, "validity_days" as keyof AdminPlan, Number(e.target.value) as AdminPlan[keyof AdminPlan])}
+                    />
+                  </div>
+
+                  <Field label="Texto do botão (CTA)" value={plan.cta_label ?? ""} onChange={(v) => updatePlan(plan.id, "cta_label", v)} />
+
+                  <div className="grid gap-2 md:col-span-2">
+                    <Label className="text-muted-foreground">Benefícios exibidos (um por linha)</Label>
+                    <textarea
+                      className="min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={(plan.features ?? []).join("\n")}
                       onChange={(e) =>
-                        updatePlan(plan.id, "is_highlighted", e.target.checked)
+                        updatePlan(plan.id, "features", e.target.value.split("\n").map((l) => l.trim()).filter(Boolean))
                       }
                     />
-                    Mais escolhido
-                  </label>
+                  </div>
                 </div>
               </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="Nome"
-                  value={plan.name}
-                  onChange={(value) => updatePlan(plan.id, "name", value)}
-                />
-                <Field
-                  label="Descricao"
-                  value={plan.description ?? ""}
-                  onChange={(value) => updatePlan(plan.id, "description", value)}
-                />
-                <PriceInput
-                  label="Preço mensal"
-                  valueCents={plan.monthly_price_cents}
-                  onChangeCents={(cents) => updatePlan(plan.id, "monthly_price_cents", cents)}
-                />
-                <PriceInput
-                  label="Créditos mensais"
-                  valueCents={plan.monthly_credits_cents}
-                  onChangeCents={(cents) => updatePlan(plan.id, "monthly_credits_cents", cents)}
-                />
-                <PriceInput
-                  label="Preço por serviço"
-                  valueCents={plan.price_per_service_cents}
-                  onChangeCents={(cents) => updatePlan(plan.id, "price_per_service_cents", cents)}
-                  allowEmpty
-                />
-                <Field
-                  label="Limite mensal de peticoes"
-                  type="number"
-                  value={plan.petition_limit_monthly == null ? "" : String(plan.petition_limit_monthly)}
-                  onChange={(value) =>
-                    updatePlan(
-                      plan.id,
-                      "petition_limit_monthly",
-                      value === "" ? null : Number(value) || 0,
-                    )
-                  }
-                />
-                <Field
-                  label="CTA do botao"
-                  value={plan.cta_label ?? ""}
-                  onChange={(value) => updatePlan(plan.id, "cta_label", value)}
-                />
-                <div className="grid gap-2 md:col-span-2">
-                  <Label className="text-muted-foreground">
-                    Beneficios (um por linha)
-                  </Label>
-                  <textarea
-                    className="min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    value={(plan.features ?? []).join("\n")}
-                    onChange={(e) =>
-                      updatePlan(
-                        plan.id,
-                        "features",
-                        e.target.value
-                          .split("\n")
-                          .map((line) => line.trim())
-                          .filter(Boolean),
-                      )
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
+      {/* Serviços avulsos */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="font-display text-xl">Servicos avulsos</CardTitle>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setCreateServiceOpen(true)}
-            className="gap-2"
-          >
+          <CardTitle className="flex items-center gap-2 font-display text-xl">
+            <Zap className="h-5 w-5 text-accent" />
+            Serviços avulsos
+          </CardTitle>
+          <Button type="button" size="sm" onClick={() => setCreateServiceOpen(true)} className="gap-2">
             <Plus className="h-4 w-4" />
             Novo serviço
           </Button>
         </CardHeader>
         <CardContent className="space-y-4">
-          {draftServices.map((service) => (
-            <div key={service.id} className="rounded-lg border border-border p-4">
-              <div className="mb-4 flex items-start justify-between gap-4">
-                <div>
-                  <p className="font-medium text-foreground">{service.title}</p>
-                  <p className="text-xs text-muted-foreground">Codigo: {service.code}</p>
+          {draftServices.map((service) => {
+            const isExpress = /express/i.test(service.code);
+            const isUpgrade = service.code === "servico_express_upgrade";
+            return (
+              <div key={service.id} className={`rounded-lg border p-4 ${isExpress ? "border-amber-300/60 bg-amber-50/30 dark:bg-amber-950/10" : "border-border"}`}>
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isExpress && <Zap className="h-4 w-4 text-amber-500" />}
+                    <span className="font-semibold text-foreground">{service.title}</span>
+                    <Badge variant="outline" className="font-mono text-xs">{service.code}</Badge>
+                    {isUpgrade && <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Taxa de entrega express</Badge>}
+                    {!service.is_active && <Badge variant="secondary">Inativo</Badge>}
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <Button type="button" variant="ghost" size="icon" onClick={() => setPendingServiceDelete(service)}>
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={service.is_active} onChange={(e) => updateService(service.id, "is_active", e.target.checked)} />
+                      Ativo
+                    </label>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setPendingServiceDelete(service)}
-                    aria-label="Excluir serviço"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={service.is_active}
-                      onChange={(e) => updateService(service.id, "is_active", e.target.checked)}
-                    />
-                    Ativo
-                  </label>
-                </div>
-              </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field
-                  label="Titulo"
-                  value={service.title}
-                  onChange={(value) => updateService(service.id, "title", value)}
-                />
-                <Field
-                  label="Secao"
-                  value={service.section}
-                  onChange={(value) => updateService(service.id, "section", value)}
-                />
-                <Field
-                  label="Descricao"
-                  value={service.description ?? ""}
-                  onChange={(value) => updateService(service.id, "description", value)}
-                />
-                <Field
-                  label="Preco unitario (centavos)"
-                  type="number"
-                  value={String(service.unit_price)}
-                  onChange={(value) => updateService(service.id, "unit_price", Number(value) || 0)}
-                />
-                <Field
-                  label="Etiqueta de entrega"
-                  value={service.delivery_label ?? ""}
-                  onChange={(value) =>
-                    updateService(service.id, "delivery_label", value || null)
-                  }
-                />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Título" value={service.title} onChange={(v) => updateService(service.id, "title", v)} />
+                  <Field label="Seção" value={service.section} onChange={(v) => updateService(service.id, "section", v)} />
+                  <Field label="Descrição" value={service.description ?? ""} onChange={(v) => updateService(service.id, "description", v)} />
+                  <PriceInput
+                    label="Preço unitário"
+                    valueCents={service.unit_price}
+                    onChangeCents={(c) => updateService(service.id, "unit_price", c)}
+                  />
+                  <Field label="Etiqueta de entrega" value={service.delivery_label ?? ""} onChange={(v) => updateService(service.id, "delivery_label", v || null)} />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </CardContent>
       </Card>
 
-      <CreatePlanDialog
-        open={createPlanOpen}
-        onOpenChange={setCreatePlanOpen}
-        onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })}
-      />
-      <CreateServiceDialog
-        open={createServiceOpen}
-        onOpenChange={setCreateServiceOpen}
-        onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })}
-      />
+      {/* Dialogs de criação */}
+      <CreatePlanDialog open={createPlanOpen} onOpenChange={setCreatePlanOpen} onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })} />
+      <CreateServiceDialog open={createServiceOpen} onOpenChange={setCreateServiceOpen} onCreated={() => queryClient.invalidateQueries({ queryKey: ["admin-pricing"] })} />
 
-      <AlertDialog
-        open={!!pendingPlanDelete}
-        onOpenChange={(open) => !open && setPendingPlanDelete(null)}
-      >
+      {/* Confirm delete plan */}
+      <AlertDialog open={!!pendingPlanDelete} onOpenChange={(open) => !open && setPendingPlanDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir este plano?</AlertDialogTitle>
+            <AlertDialogTitle>Desativar este plano?</AlertDialogTitle>
             <AlertDialogDescription>
-              O plano {pendingPlanDelete?.name} ({pendingPlanDelete?.code}) será removido do catálogo público.
+              O plano <strong>{pendingPlanDelete?.name}</strong> ({pendingPlanDelete?.code}) será desativado e não aparecerá mais no catálogo público.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deletePlanMutation.isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => pendingPlanDelete && deletePlanMutation.mutate(pendingPlanDelete)}
-              disabled={deletePlanMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deletePlanMutation.isPending ? "Excluindo..." : "Excluir"}
+            <AlertDialogAction onClick={() => pendingPlanDelete && deletePlanMutation.mutate(pendingPlanDelete)} disabled={deletePlanMutation.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deletePlanMutation.isPending ? "Desativando..." : "Desativar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog
-        open={!!pendingServiceDelete}
-        onOpenChange={(open) => !open && setPendingServiceDelete(null)}
-      >
+      {/* Confirm delete service */}
+      <AlertDialog open={!!pendingServiceDelete} onOpenChange={(open) => !open && setPendingServiceDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir este serviço?</AlertDialogTitle>
+            <AlertDialogTitle>Desativar este serviço?</AlertDialogTitle>
             <AlertDialogDescription>
-              {pendingServiceDelete?.title} ({pendingServiceDelete?.code}) será removido do catálogo.
+              <strong>{pendingServiceDelete?.title}</strong> ({pendingServiceDelete?.code}) será removido do catálogo público.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteServiceMutation.isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() =>
-                pendingServiceDelete && deleteServiceMutation.mutate(pendingServiceDelete)
-              }
-              disabled={deleteServiceMutation.isPending}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteServiceMutation.isPending ? "Excluindo..." : "Excluir"}
+            <AlertDialogAction onClick={() => pendingServiceDelete && deleteServiceMutation.mutate(pendingServiceDelete)} disabled={deleteServiceMutation.isPending} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {deleteServiceMutation.isPending ? "Desativando..." : "Desativar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -493,47 +430,39 @@ export default function AdminPlans() {
   );
 }
 
-function CreatePlanDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: () => void;
-}) {
+// ---------------------------------------------------------------------------
+// Dialog: Novo plano
+// ---------------------------------------------------------------------------
+function CreatePlanDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [monthlyPriceCents, setMonthlyPriceCents] = useState(0);
-  const [monthlyCreditsCents, setMonthlyCreditsCents] = useState(0);
+  const [creditsQty, setCreditsQty] = useState<number | "">(1);
+  const [validityDays, setValidityDays] = useState<number>(365);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  const pricePerCredit = creditsQty && creditsQty > 0 && monthlyPriceCents > 0
+    ? Math.round(monthlyPriceCents / Number(creditsQty))
+    : null;
+
   const reset = () => {
-    setCode("");
-    setName("");
-    setMonthlyPriceCents(0);
-    setMonthlyCreditsCents(0);
-    setDescription("");
+    setCode(""); setName(""); setMonthlyPriceCents(0); setCreditsQty(1); setValidityDays(365); setDescription("");
   };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !name.trim()) {
-      toast({
-        title: "Dados incompletos",
-        description: "Código e nome são obrigatórios.",
-        variant: "destructive",
-      });
+      toast({ title: "Dados incompletos", description: "Código e nome são obrigatórios.", variant: "destructive" });
       return;
     }
     if (monthlyPriceCents <= 0) {
-      toast({
-        title: "Preço inválido",
-        description: "Informe um preço maior que zero (ex.: 10 para R$ 10,00).",
-        variant: "destructive",
-      });
+      toast({ title: "Preço inválido", description: "Informe um preço maior que zero.", variant: "destructive" });
+      return;
+    }
+    if (!creditsQty || Number(creditsQty) < 1) {
+      toast({ title: "Créditos inválidos", description: "Informe ao menos 1 crédito.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -542,7 +471,9 @@ function CreatePlanDialog({
         code: code.trim(),
         name: name.trim(),
         monthly_price_cents: monthlyPriceCents,
-        monthly_credits_cents: monthlyCreditsCents > 0 ? monthlyCreditsCents : monthlyPriceCents,
+        monthly_credits_cents: monthlyPriceCents,
+        credits_quantity: Number(creditsQty),
+        validity_days: validityDays,
         description: description.trim() || null,
         is_active: true,
       });
@@ -551,93 +482,66 @@ function CreatePlanDialog({
       reset();
       onOpenChange(false);
     } catch (err) {
-      toast({
-        title: "Não foi possível criar o plano",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao criar plano", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(value) => {
-        if (!submitting) onOpenChange(value);
-        if (!value) reset();
-      }}
-    >
+    <Dialog open={open} onOpenChange={(v) => { if (!submitting) onOpenChange(v); if (!v) reset(); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Novo plano</DialogTitle>
+          <DialogTitle>Novo plano de créditos</DialogTitle>
           <DialogDescription>
-            Adicione um novo plano ao catálogo. Informe os valores em reais
-            (ex.: 10 = R$ 10,00; 1500 = R$ 1.500,00).
+            Defina o preço do pacote e quantos créditos o cliente recebe ao comprá-lo.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="new-plan-code">Código *</Label>
-              <Input
-                id="new-plan-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-                maxLength={60}
-              />
+              <Input id="new-plan-code" value={code} onChange={(e) => setCode(e.target.value)} required maxLength={60} placeholder="plano_essencial" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="new-plan-name">Nome *</Label>
+              <Input id="new-plan-name" value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} placeholder="Plano Essencial" />
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <PriceInput id="new-plan-price" label="Preço do pacote *" valueCents={monthlyPriceCents} onChangeCents={setMonthlyPriceCents} required />
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-credits">Créditos inclusos *</Label>
               <Input
-                id="new-plan-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                maxLength={120}
+                id="new-plan-credits"
+                type="number"
+                min={1}
+                step={1}
+                value={creditsQty}
+                onChange={(e) => setCreditsQty(e.target.value === "" ? "" : Number(e.target.value))}
+                placeholder="3"
               />
             </div>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <PriceInput
-              id="new-plan-price"
-              label="Preço mensal"
-              valueCents={monthlyPriceCents}
-              onChangeCents={setMonthlyPriceCents}
-              required
-            />
-            <PriceInput
-              id="new-plan-credits"
-              label="Créditos mensais"
-              valueCents={monthlyCreditsCents}
-              onChangeCents={setMonthlyCreditsCents}
-              hint="Quanto vai entrar na carteira do cliente. Em branco = igual ao preço pago."
-              allowEmpty
-            />
+            <div className="grid gap-2">
+              <Label htmlFor="new-plan-validity">Validade (dias)</Label>
+              <Input id="new-plan-validity" type="number" min={1} value={validityDays} onChange={(e) => setValidityDays(Number(e.target.value))} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Preço por crédito (calculado)</Label>
+              <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                {pricePerCredit ? (pricePerCredit / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : "—"}
+              </div>
+            </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="new-plan-description">Descrição</Label>
-            <Input
-              id="new-plan-description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={300}
-            />
+            <Input id="new-plan-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Criando..." : "Criar plano"}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
+            <Button type="submit" disabled={submitting}>{submitting ? "Criando..." : "Criar plano"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -645,15 +549,10 @@ function CreatePlanDialog({
   );
 }
 
-function CreateServiceDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: () => void;
-}) {
+// ---------------------------------------------------------------------------
+// Dialog: Novo serviço avulso
+// ---------------------------------------------------------------------------
+function CreateServiceDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: () => void }) {
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [title, setTitle] = useState("");
@@ -662,30 +561,16 @@ function CreateServiceDialog({
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const reset = () => {
-    setCode("");
-    setTitle("");
-    setSection("");
-    setUnitPriceCents(0);
-    setDescription("");
-  };
+  const reset = () => { setCode(""); setTitle(""); setSection(""); setUnitPriceCents(0); setDescription(""); };
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!code.trim() || !title.trim() || !section.trim()) {
-      toast({
-        title: "Dados incompletos",
-        description: "Código, título e seção são obrigatórios.",
-        variant: "destructive",
-      });
+      toast({ title: "Dados incompletos", description: "Código, título e seção são obrigatórios.", variant: "destructive" });
       return;
     }
     if (unitPriceCents <= 0) {
-      toast({
-        title: "Preço inválido",
-        description: "Informe um preço maior que zero (ex.: 10 para R$ 10,00).",
-        variant: "destructive",
-      });
+      toast({ title: "Preço inválido", description: "Informe um preço maior que zero.", variant: "destructive" });
       return;
     }
     setSubmitting(true);
@@ -703,95 +588,44 @@ function CreateServiceDialog({
       reset();
       onOpenChange(false);
     } catch (err) {
-      toast({
-        title: "Não foi possível criar o serviço",
-        description: err instanceof Error ? err.message : "Tente novamente.",
-        variant: "destructive",
-      });
+      toast({ title: "Erro ao criar serviço", description: err instanceof Error ? err.message : "Tente novamente.", variant: "destructive" });
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(value) => {
-        if (!submitting) onOpenChange(value);
-        if (!value) reset();
-      }}
-    >
+    <Dialog open={open} onOpenChange={(v) => { if (!submitting) onOpenChange(v); if (!v) reset(); }}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Novo serviço avulso</DialogTitle>
-          <DialogDescription>
-            Adicione um novo serviço avulso. Informe o preço em reais
-            (ex.: 10 = R$ 10,00).
-          </DialogDescription>
+          <DialogDescription>Adicione um serviço avulso ao catálogo.</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="grid gap-4">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="new-svc-code">Código *</Label>
-              <Input
-                id="new-svc-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                required
-                maxLength={60}
-              />
+              <Input id="new-svc-code" value={code} onChange={(e) => setCode(e.target.value)} required maxLength={60} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="new-svc-section">Seção *</Label>
-              <Input
-                id="new-svc-section"
-                value={section}
-                onChange={(e) => setSection(e.target.value)}
-                required
-                maxLength={80}
-              />
+              <Input id="new-svc-section" value={section} onChange={(e) => setSection(e.target.value)} required maxLength={80} />
             </div>
           </div>
           <div className="grid gap-2">
             <Label htmlFor="new-svc-title">Título *</Label>
-            <Input
-              id="new-svc-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              maxLength={120}
-            />
+            <Input id="new-svc-title" value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={120} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <PriceInput
-              id="new-svc-price"
-              label="Preço unitário"
-              valueCents={unitPriceCents}
-              onChangeCents={setUnitPriceCents}
-              required
-            />
+            <PriceInput id="new-svc-price" label="Preço unitário *" valueCents={unitPriceCents} onChangeCents={setUnitPriceCents} required />
             <div className="grid gap-2">
               <Label htmlFor="new-svc-description">Descrição</Label>
-              <Input
-                id="new-svc-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={300}
-              />
+              <Input id="new-svc-description" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} />
             </div>
           </div>
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Criando..." : "Criar serviço"}
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>Cancelar</Button>
+            <Button type="submit" disabled={submitting}>{submitting ? "Criando..." : "Criar serviço"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -799,17 +633,7 @@ function CreateServiceDialog({
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
+function Field({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return (
     <div className="grid gap-2">
       <Label className="text-muted-foreground">{label}</Label>
