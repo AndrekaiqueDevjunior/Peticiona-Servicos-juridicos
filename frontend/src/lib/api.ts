@@ -38,12 +38,20 @@ export interface BalanceMovement {
   amount: number;
   amount_cents: number;
   amount_brl: string;
+  kind: "common" | "peticao_express" | "recurso_express" | "legacy_cents";
   description: string;
   source: string | null;
   date: string;
 }
 
+export interface CreditKindTotals {
+  credits_in: number;
+  credits_out: number;
+  balance: number;
+}
+
 export interface BalanceData {
+  // Legacy fields (common/créditos comuns only) — maintained for backwards compatibility
   credits_available: number;
   credits_available_cents: number;
   credits_available_brl: string;
@@ -53,6 +61,19 @@ export interface BalanceData {
   credits_used: number;
   credits_used_cents: number;
   credits_used_brl: string;
+  // Segregated balances by kind (source of truth for new system)
+  balances: {
+    common: number;
+    peticao_express: number;
+    recurso_express: number;
+  };
+  // Detailed totals per kind
+  totals_by_kind: {
+    common: CreditKindTotals;
+    peticao_express: CreditKindTotals;
+    recurso_express: CreditKindTotals;
+  };
+  // All transactions (including legacy_cents) with kind field
   movements: BalanceMovement[];
 }
 

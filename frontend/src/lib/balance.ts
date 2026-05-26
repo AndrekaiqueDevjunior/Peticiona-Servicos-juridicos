@@ -1,16 +1,15 @@
 // Saldo do cliente — consumido SEMPRE do backend (/api/me/balance).
 //
-// Antes este arquivo era um mock localStorage com "carteiras" separadas
-// (peticao_avulsa, recurso_avulso, peticao_express, recurso_express e
-// fila FIFO de planos). Isso permitia ao usuário abrir DevTools e
-// fabricar saldo — embora o backend ainda barrasse a criação efetiva do
-// pedido em _assert_sufficient_balance, a UI mostrava valores fakes e a
-// regra de "qual carteira debitar" estava duplicada no cliente.
+// Sistema novo: 3 saldos segregados por kind (nunca se misturam):
+// - common: créditos para serviços regulares (1 crédito = 1 serviço)
+// - peticao_express: créditos pré-comprados para petições em 24h
+// - recurso_express: créditos pré-comprados para recursos em 24h
 //
-// O backend atual NÃO separa o saldo por categoria; ele opera sobre um
-// único livro-razão (tabela credit_transactions, soma in - out). Quem
-// decide se um pedido pode ser criado é sempre o backend. Aqui apenas
-// LEMOS o agregado para exibição na UI.
+// Legacy: kind='legacy_cents' marca saldos históricos em centavos (pré-migração),
+// preservados para auditoria mas não contados nos saldos ativos.
+//
+// Quem decide se um pedido pode ser criado é sempre o backend (advisory lock + check).
+// Aqui apenas LEMOS os 3 saldos para exibição na UI.
 
 import { useQuery } from "@tanstack/react-query";
 
@@ -18,39 +17,57 @@ import { api, type BalanceData, type BalanceMovement } from "@/lib/api";
 
 export type MovementType = "in" | "out";
 
-export type WalletKind = "agregado";
+export type CreditKind = "common" | "peticao_express" | "recurso_express";
 
-export const WALLET_LABEL: Record<WalletKind, string> = {
-  agregado: "saldo disponível",
+export const CREDIT_KIND_LABEL: Record<CreditKind, string> = {
+  common: "Créditos Comuns",
+  peticao_express: "Créditos Petição Express",
+  recurso_express: "Créditos Recurso Express",
 };
 
 export interface Movement {
   id: string;
   type: MovementType;
-  amount: number; // em centavos
+  amount: number; // em unidades de crédito
+  kind: CreditKind | "legacy_cents"; // o kind da transação
   description: string;
   date: string; // ISO
-  wallet: WalletKind;
+  amountFormatted: string; // "X crédito(s)" ou "R$ X,XX" para legacy
 }
 
 export interface BalanceSnapshot {
-  /** Saldo total em centavos (in - out, calculado pelo backend). */
+  // Saldos segregados por kind (1 crédito = 1 unidade, nunca se misturam)
+  balances: {
+    common: number;
+    peticao_express: number;
+    recurso_express: number;
+  };
+  // Totais por kind (in, out, balance)
+  totals: {
+    common: { credits_in: number; credits_out: number };
+    peticao_express: { credits_in: number; credits_out: number };
+    recurso_express: { credits_in: number; credits_out: number };
+  };
+  // Legacy compat: saldo de créditos comuns
   saldoCents: number;
-  /** Saldo total formatado pelo backend. */
   saldoBRL: string;
-  /** Total creditado (in) em centavos. */
   totalCreditadoCents: number;
-  /** Total debitado (out) em centavos. */
   totalDebitadoCents: number;
-  /** Movimentações vindas do backend (ordem decrescente por data). */
+  // Movimentações vindas do backend (ordem decrescente por data)
   movements: Movement[];
   isLoading: boolean;
   isError: boolean;
 }
 
 const EMPTY: BalanceSnapshot = {
+  balances: { common: 0, peticao_express: 0, recurso_express: 0 },
+  totals: {
+    common: { credits_in: 0, credits_out: 0 },
+    peticao_express: { credits_in: 0, credits_out: 0 },
+    recurso_express: { credits_in: 0, credits_out: 0 },
+  },
   saldoCents: 0,
-  saldoBRL: "R$ 0,00",
+  saldoBRL: "0 crédito(s)",
   totalCreditadoCents: 0,
   totalDebitadoCents: 0,
   movements: [],
@@ -61,19 +78,27 @@ const EMPTY: BalanceSnapshot = {
 const toMovement = (m: BalanceMovement, index: number): Movement => ({
   id: `${m.date}-${index}`,
   type: m.type,
-  amount: m.amount_cents,
+  amount: m.amount,
+  kind: m.kind,
   description: m.description,
   date: m.date,
-  wallet: "agregado",
+  amountFormatted: m.amount_brl,
 });
 
 const fromBackend = (data: BalanceData | undefined, isLoading: boolean, isError: boolean): BalanceSnapshot => {
-  if (!data) return { ...EMPTY, isLoading, isError };
+  if (!data)
+    return { ...EMPTY, isLoading, isError };
   return {
-    saldoCents: data.credits_available_cents,
+    balances: data.balances,
+    totals: {
+      common: data.totals_by_kind.common,
+      peticao_express: data.totals_by_kind.peticao_express,
+      recurso_express: data.totals_by_kind.recurso_express,
+    },
+    saldoCents: data.credits_available,
     saldoBRL: data.credits_available_brl,
-    totalCreditadoCents: data.credits_total_cents,
-    totalDebitadoCents: data.credits_used_cents,
+    totalCreditadoCents: data.credits_total,
+    totalDebitadoCents: data.credits_used,
     movements: data.movements.map(toMovement),
     isLoading,
     isError,
@@ -92,7 +117,19 @@ export const useBalance = (): BalanceSnapshot => {
 
 // ---- Helpers de exibição --------------------------------------------------
 
-/** Cobre o valor com o saldo disponível? Só serve para gating de UI;
- *  a decisão final é sempre do backend ao criar o pedido. */
-export const cobreValor = (snapshot: BalanceSnapshot, valorCents: number) =>
-  snapshot.saldoCents >= valorCents;
+/** Verifica se há crédito disponível de um kind específico.
+ *  Apenas para gating de UI; a decisão final é sempre do backend. */
+export const hasCredit = (snapshot: BalanceSnapshot, kind: CreditKind, amount: number = 1): boolean =>
+  snapshot.balances[kind] >= amount;
+
+/** Verifica se há crédito comum disponível (common kind). */
+export const hasCommonCredit = (snapshot: BalanceSnapshot, amount: number = 1): boolean =>
+  snapshot.balances.common >= amount;
+
+/** Verifica se há crédito de Petição Express disponível. */
+export const hasPetitionExpressCredit = (snapshot: BalanceSnapshot): boolean =>
+  snapshot.balances.peticao_express >= 1;
+
+/** Verifica se há crédito de Recurso Express disponível. */
+export const hasResourceExpressCredit = (snapshot: BalanceSnapshot): boolean =>
+  snapshot.balances.recurso_express >= 1;

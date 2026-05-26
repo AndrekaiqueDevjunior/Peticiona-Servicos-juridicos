@@ -6,7 +6,7 @@ import {
   formatBRL,
   useUserPricingProfile,
 } from "@/lib/pricing";
-import { useBalance } from "@/lib/balance";
+import { useBalance, type CreditKind, CREDIT_KIND_LABEL, hasCommonCredit, hasPetitionExpressCredit, hasResourceExpressCredit } from "@/lib/balance";
 import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
 import { api } from "@/lib/api";
 import {
@@ -233,37 +233,41 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   // Toggle de upgrade Express — quando ativo, o pedido é redirecionado para checkout separado
   const [expressUpgrade, setExpressUpgrade] = useState(false);
 
-  // Perfil de precificação do usuário (plano ativo)
-  const { data: pricingProfile } = useUserPricingProfile();
-  const perfilSeguro = pricingProfile ?? { plano: null };
-  const pricing = calcularPrecoPedido(tipoPeticao, perfilSeguro);
-  const valorPedido = pricing.precoPadrao ?? 0;
-  const tipoReconhecido = pricing.precoPadrao !== null;
-
-  // Cálculo do prazo de entrega (depende do toggle express).
-  const modalidadePrazo = modalidadeParaPrazo({
-    grupo: pricing.grupo,
-    plano: perfilSeguro.plano,
-    expressUpgrade,
-  });
-  const prazoCalc = modalidadePrazo ? calcularPrazo(modalidadePrazo) : null;
-
   const balance = useBalance();
 
-  // Saldo agregado vem do backend (única fonte de verdade).
-  const saldoCarteira = balance.saldoCents / 100;
-  const saldoApos = saldoCarteira - valorPedido;
-  const semSaldo = tipoReconhecido && saldoCarteira < valorPedido;
+  // Determina qual kind de crédito express seria necessário (Grupo B = recurso, else = petição)
+  const grupoB = [
+    "Apelação",
+    "Agravo de instrumento",
+    "Agravo interno",
+    "Embargos de declaração",
+    "Recurso ordinário",
+    "Recurso especial",
+    "Recurso extraordinário",
+    "Agravo em recurso especial",
+    "Agravo em recurso extraordinário",
+    "Petição inicial comum",
+    "Mandado de segurança",
+    "Cumprimento de sentença (inicial)",
+  ];
+  const expressKind: CreditKind = grupoB.includes(tipoPeticao)
+    ? "recurso_express"
+    : "peticao_express";
 
-  const carteiraResolvida = pricing.grupo
-    ? { wallet: "agregado" as const, saldo: saldoCarteira }
-    : null;
+  // Verificações de crédito disponível (1 crédito por serviço)
+  const temCreditoComum = hasCommonCredit(balance);
+  const temCreditoExpress = expressKind === "recurso_express"
+    ? hasResourceExpressCredit(balance)
+    : hasPetitionExpressCredit(balance);
 
-  const mensagemBloqueio = (() => {
-    if (!tipoReconhecido) return null;
-    if (semSaldo) return "Saldo insuficiente. Adicione créditos para continuar.";
-    return null;
-  })();
+  const podeProceder = expressUpgrade ? temCreditoExpress : temCreditoComum;
+  const mensagemBloqueio = expressUpgrade
+    ? !temCreditoExpress
+      ? `Você não possui créditos ${CREDIT_KIND_LABEL[expressKind]}. Adquira um crédito deste tipo antes de solicitar serviço Express.`
+      : null
+    : !temCreditoComum
+      ? "Você não possui créditos comuns. Adquira um plano para receber mais créditos."
+      : null;
 
   // Cliente sempre comenta como "cliente"; a visão de redator é exclusiva do
   // painel interno (staff/admin), não do modal de novo pedido.
@@ -408,13 +412,6 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["balance"] });
       queryClient.invalidateQueries({ queryKey: ["me"] });
-
-      if (expressUpgrade && result.express_checkout_order_id) {
-        reset();
-        onOpenChange(false);
-        navigate(`/checkout/${result.express_checkout_order_id}`);
-        return;
-      }
 
       setSuccess(true);
     } catch (err: unknown) {
@@ -985,7 +982,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
           </section>
 
           {/* 6. Upgrade Express */}
-          {tipoPeticao && tipoReconhecido && (
+          {tipoPeticao && (
             <section className="space-y-3">
               <div
                 className={cn(
@@ -1013,26 +1010,50 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                         </span>
                       </p>
                       <p className="text-sm text-muted-foreground mt-0.5">
-                        Seu pedido terá prioridade máxima. O crédito comum é consumido normalmente
-                        {pricing.precoExpressUpgrade !== null && (
-                          <> e uma taxa adicional de <strong>{formatBRL(pricing.precoExpressUpgrade)}</strong> será cobrada separadamente.</>
-                        )}
-                        {pricing.precoExpressUpgrade === null && <> e nenhuma taxa adicional é aplicada agora.</>}
+                        Seu pedido terá prioridade máxima e será entregue em até 24 horas.
+                        Você precisa de um crédito {CREDIT_KIND_LABEL[expressKind].toLowerCase()} para usar este serviço.
                       </p>
                     </div>
                   </div>
                   <Switch
-                    checked={expressUpgrade}
-                    onCheckedChange={setExpressUpgrade}
-                    disabled={!tipoReconhecido}
+                    checked={expressUpgrade && temCreditoExpress}
+                    onCheckedChange={(checked) => {
+                      if (checked && !temCreditoExpress) {
+                        toast({
+                          title: "Crédito Express não disponível",
+                          description: `Você não possui ${CREDIT_KIND_LABEL[expressKind].toLowerCase()}. Adquira um pacote Express antes de usar este serviço.`,
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setExpressUpgrade(checked);
+                    }}
+                    disabled={!tipoPeticao || !temCreditoExpress}
                     id="express-toggle"
                     aria-label="Ativar entrega Express"
                   />
                 </div>
 
-                {expressUpgrade && (
+                {expressUpgrade && temCreditoExpress && (
                   <div className="rounded-md border border-amber-300 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                    <strong>Como funciona:</strong> ao finalizar o pedido, você será redirecionado para o checkout do serviço Express. Após o pagamento, seu pedido será confirmado automaticamente com prazo de 24 horas.
+                    <strong>Pronto!</strong> Você tem {CREDIT_KIND_LABEL[expressKind].toLowerCase()} disponível. Este pedido será entregue em até 24 horas.
+                  </div>
+                )}
+
+                {expressUpgrade && !temCreditoExpress && (
+                  <div className="rounded-md border border-destructive bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    <strong>Crédito indisponível:</strong> Você não possui {CREDIT_KIND_LABEL[expressKind].toLowerCase()}. Adquira um
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenChange(false);
+                        navigate("/area-cliente/comprar-creditos");
+                      }}
+                      className="font-semibold underline underline-offset-2 ml-1"
+                    >
+                      pacote Express
+                    </button>
+                    antes de usar este serviço.
                   </div>
                 )}
               </div>
@@ -1042,14 +1063,13 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
           {/* 7. Resumo do pedido */}
           <section className="space-y-4">
             <h3 className="text-base font-semibold text-foreground">
-              {tipoPeticao && tipoReconhecido ? "7." : "6."} Resumo do pedido
+              {tipoPeticao ? "7." : "6."} Resumo do pedido
             </h3>
 
             <div className="rounded-lg border border-border bg-muted/30 p-4">
-              {!tipoPeticao || !tipoReconhecido ? (
+              {!tipoPeticao ? (
                 <p className="text-sm text-muted-foreground">
-                  Selecione o tipo de petição para ver o serviço e o valor
-                  aplicado.
+                  Selecione o tipo de petição para ver o serviço e os créditos que serão consumidos.
                 </p>
               ) : (
                 <>
@@ -1064,86 +1084,66 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                       <span className="text-muted-foreground">Modalidade</span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
                         {expressUpgrade && <Zap className="h-3.5 w-3.5 text-amber-500" />}
-                        {expressUpgrade ? "Express (24h)" : pricing.labelPadrao}
+                        {expressUpgrade ? "Express (24h)" : "Padrão (até 3 dias úteis)"}
                       </span>
                     </div>
-                    {prazoCalc && (
-                      <>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Prazo</span>
-                          <span className="font-medium text-foreground">
-                            {prazoCalc.descricao}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Entrega prevista</span>
-                          <span className="font-medium text-foreground">
-                            {format(new Date(prazoCalc.entregaClienteISO), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          </span>
-                        </div>
-                      </>
-                    )}
                   </div>
 
                   <div className="mt-3 flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">
-                      Crédito deste pedido
+                      Créditos a consumir
                     </span>
                     <span className="font-display text-2xl font-semibold text-primary">
-                      {formatBRL(valorPedido)}
+                      1 crédito
                     </span>
                   </div>
 
-                  {expressUpgrade && pricing.precoExpressUpgrade !== null && (
-                    <div className="mt-2 flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        + Taxa Express (checkout separado)
-                      </span>
-                      <span className="font-semibold text-amber-600">
-                        {formatBRL(pricing.precoExpressUpgrade)}
-                      </span>
-                    </div>
-                  )}
+                  <div className="mt-3 flex items-center justify-between rounded-md bg-muted/50 p-2 text-sm">
+                    <span className="text-muted-foreground">
+                      {expressUpgrade ? "Será debitado de" : "Será debitado de"}
+                    </span>
+                    <span className="font-medium">
+                      {expressUpgrade
+                        ? CREDIT_KIND_LABEL[expressKind]
+                        : CREDIT_KIND_LABEL.common}
+                    </span>
+                  </div>
 
-                  {mensagemBloqueio || semSaldo ? (
-                    <div className="mt-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-                      {mensagemBloqueio ?? "Saldo aparentemente insuficiente."}{" "}
-                      Você pode revisar seus saldos em{" "}
+                  {mensagemBloqueio ? (
+                    <div className="mt-4 rounded-md border border-destructive bg-destructive/5 p-3 text-sm text-destructive">
+                      {mensagemBloqueio}{" "}
                       <button
                         type="button"
                         onClick={() => {
                           onOpenChange(false);
-                          navigate("/area-cliente/saldos");
+                          navigate("/area-cliente/comprar-creditos");
                         }}
                         className="font-semibold underline underline-offset-2 hover:opacity-80"
                       >
-                        Comprar mais Saldo
+                        Comprar agora
                       </button>
-                      .
                     </div>
                   ) : (
                     <div className="mt-4 space-y-2 border-t border-border pt-3 text-sm">
-                      {carteiraResolvida && (
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-2 text-muted-foreground">
-                            <Wallet className="h-4 w-4" />
-                            Será debitado do
-                          </span>
-                          <span className="font-medium">saldo disponível</span>
-                        </div>
-                      )}
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <Wallet className="h-4 w-4" />
                           Saldo atual
                         </span>
-                        <span className="font-medium">{formatBRL(saldoCarteira)}</span>
+                        <span className="font-medium">
+                          {expressUpgrade
+                            ? `${balance.balances.recurso_express} crédito(s)`
+                            : `${balance.balances.common} crédito(s)`}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">
-                          Saldo após o débito
+                          Saldo após este pedido
                         </span>
                         <span className="font-semibold text-accent">
-                          {formatBRL(saldoApos)}
+                          {expressUpgrade
+                            ? `${Math.max(0, balance.balances.recurso_express - 1)} crédito(s)`
+                            : `${Math.max(0, balance.balances.common - 1)} crédito(s)`}
                         </span>
                       </div>
                     </div>
@@ -1168,7 +1168,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </Button>
             <Button
               type="submit"
-              disabled={submitting || !tipoReconhecido}
+              disabled={submitting || !tipoPeticao || !podeProceder}
               className={cn(
                 expressUpgrade
                   ? "bg-amber-500 text-white hover:bg-amber-600"
@@ -1176,9 +1176,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
               )}
             >
               {submitting
-                ? expressUpgrade ? "Redirecionando..." : "Finalizando..."
+                ? expressUpgrade ? "Finalizando..." : "Finalizando..."
                 : expressUpgrade
-                ? "Continuar para checkout Express"
+                ? "Finalizar pedido Express"
                 : "Finalizar pedido"}
             </Button>
           </DialogFooter>

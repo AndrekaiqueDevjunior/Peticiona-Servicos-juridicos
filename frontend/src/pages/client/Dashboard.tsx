@@ -1,27 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Clock, FileText, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Wallet, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { CREDIT_KIND_LABEL, type CreditKind } from "@/lib/balance";
 
 const statusColor: Record<string, string> = {
   pendente: "bg-accent-soft text-primary",
   em_andamento: "bg-accent-soft text-primary",
   concluido: "bg-secondary text-foreground",
-};
-
-/** Saldo apresentado ao cliente: negativo vira R$ 0,00 (a divida ainda
- *  existe no backend e fica visivel para a equipe administrativa). */
-const formatSaldoExibicao = (cents: number): string => {
-  const safe = Math.max(0, cents);
-  return (safe / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  });
 };
 
 export default function Dashboard() {
@@ -48,16 +38,12 @@ export default function Dashboard() {
       icon: CheckCircle2,
       color: "text-primary",
     },
-    {
-      label: "Saldo Disponível",
-      // Backend devolve credits_available em centavos e credits_available_brl
-      // já formatado em R$. Saldo negativo é exibido como R$ 0,00 para o
-      // cliente (decisão de UI) — o valor real continua acessível pelo admin
-      // via /admin/financial e por /api/me/balance no campo cents.
-      value: formatSaldoExibicao(balance?.credits_available_cents ?? balance?.credits_available ?? 0),
-      icon: Wallet,
-      color: "text-accent",
-    },
+  ];
+
+  const creditKinds: { kind: CreditKind; color: string; icon: React.ComponentType<any> }[] = [
+    { kind: "common", color: "bg-blue-50 dark:bg-blue-950/20", icon: Wallet },
+    { kind: "peticao_express", color: "bg-amber-50 dark:bg-amber-950/20", icon: Zap },
+    { kind: "recurso_express", color: "bg-orange-50 dark:bg-orange-950/20", icon: Zap },
   ];
 
   return (
@@ -71,7 +57,7 @@ export default function Dashboard() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((s) => (
           <Card key={s.label}>
             <CardContent className="flex items-center gap-4 p-6">
@@ -90,6 +76,37 @@ export default function Dashboard() {
           </Card>
         ))}
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Saldos de Créditos</CardTitle>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/area-cliente/saldos">Ver detalhes</Link>
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {creditKinds.map(({ kind, color, icon: Icon }) => (
+              <div key={kind} className={`rounded-lg border border-border p-4 ${color}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <Icon className="h-4 w-4" />
+                  <p className="text-sm font-medium">{CREDIT_KIND_LABEL[kind]}</p>
+                </div>
+                {isLoading ? (
+                  <Skeleton className="h-10 w-24" />
+                ) : (
+                  <p className="text-3xl font-semibold">{balance?.balances[kind] ?? 0}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {balance?.balances[kind] === 1 ? "crédito" : "créditos"} disponível(is)
+                </p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">

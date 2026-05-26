@@ -1,22 +1,19 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { Plus, TrendingDown, TrendingUp, Wallet, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BuyCreditsDialog } from "@/components/client/BuyCreditsDialog";
 import { api } from "@/lib/api";
+import { CREDIT_KIND_LABEL, type CreditKind } from "@/lib/balance";
+import { cn } from "@/lib/utils";
 
-/** Saldo apresentado ao cliente: negativo vira R$ 0,00. A divida ainda
- *  existe no backend (credits_available_cents) e fica visivel ao admin. */
-const formatSaldoExibicao = (cents: number | undefined): string => {
-  const safe = Math.max(0, cents ?? 0);
-  return (safe / 100).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    minimumFractionDigits: 2,
-  });
-};
+const CREDIT_KINDS: { kind: CreditKind; color: string; icon: React.ComponentType<any> }[] = [
+  { kind: "common", color: "bg-blue-50 dark:bg-blue-950/20", icon: Wallet },
+  { kind: "peticao_express", color: "bg-amber-50 dark:bg-amber-950/20", icon: Zap },
+  { kind: "recurso_express", color: "bg-orange-50 dark:bg-orange-950/20", icon: Zap },
+];
 
 export default function Balance() {
   const [openBuy, setOpenBuy] = useState(false);
@@ -25,8 +22,6 @@ export default function Balance() {
     queryFn: () => api.me.balance(),
   });
 
-  const saldoExibido = formatSaldoExibicao(balance?.credits_available_cents);
-
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
@@ -34,73 +29,73 @@ export default function Balance() {
           Meus Saldos
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Visualize seu saldo disponível e as movimentações registradas pela plataforma.
+          Visualize seus saldos de créditos por tipo de serviço e as movimentações registradas.
         </p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Card className="overflow-hidden md:col-span-2">
-          <div
-            className="relative p-6 text-primary-foreground"
-            style={{ background: "var(--gradient-hero)" }}
-          >
-            <div className="flex items-center gap-2 text-sm opacity-80">
-              <Wallet className="h-4 w-4" />
-              Saldo Disponível
-            </div>
-            {isLoading ? (
-              <Skeleton className="mt-3 h-12 w-48 bg-white/20" />
-            ) : (
-              <p className="mt-3 font-display text-5xl font-semibold">
-                {saldoExibido}
-              </p>
-            )}
-            <p className="mt-1 text-sm opacity-80">
-              Valor líquido disponível para novos pedidos.
-            </p>
-            <Button
-              onClick={() => setOpenBuy(true)}
-              className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-              <Plus className="h-4 w-4" />
-              Recarregar Saldo
-            </Button>
-          </div>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Resumo</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <SummaryRow
-              label="Disponível"
-              value={saldoExibido}
-              isLoading={isLoading}
-            />
-            <SummaryRow
-              label="Total creditado"
-              value={balance?.credits_total_brl}
-              isLoading={isLoading}
-            />
-            <SummaryRow
-              label="Total utilizado"
-              value={balance?.credits_used_brl}
-              isLoading={isLoading}
-            />
-            <SummaryRow
-              label="Movimentações"
-              value={String(balance?.movements.length ?? 0)}
-              isLoading={isLoading}
-              bordered
-            />
-          </CardContent>
-        </Card>
+        {CREDIT_KINDS.map(({ kind, color, icon: Icon }) => (
+          <Card key={kind} className={cn("overflow-hidden", color)}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Icon className="h-4 w-4" />
+                {CREDIT_KIND_LABEL[kind]}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {isLoading ? (
+                <Skeleton className="h-10 w-24" />
+              ) : (
+                <div>
+                  <p className="font-display text-3xl font-semibold">
+                    {balance?.balances[kind] ?? 0}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {balance?.balances[kind] === 1 ? "crédito" : "créditos"}
+                  </p>
+                </div>
+              )}
+              <div className="border-t border-border/20 pt-2 text-xs text-muted-foreground">
+                {isLoading ? (
+                  <Skeleton className="h-4 w-full" />
+                ) : (
+                  <>
+                    <p>
+                      Entrada: {balance?.totals_by_kind[kind].credits_in ?? 0}{" "}
+                      {balance?.totals_by_kind[kind].credits_in === 1 ? "crédito" : "créditos"}
+                    </p>
+                    <p>
+                      Saída: {balance?.totals_by_kind[kind].credits_out ?? 0}{" "}
+                      {balance?.totals_by_kind[kind].credits_out === 1 ? "crédito" : "créditos"}
+                    </p>
+                  </>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-display text-xl">Movimentações</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Ações Rápidas</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Button
+            onClick={() => setOpenBuy(true)}
+            className="w-full bg-accent text-accent-foreground hover:bg-accent/90 sm:w-auto"
+          >
+            <Plus className="h-4 w-4" />
+            Comprar Créditos
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-display text-xl">Extrato Completo</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -120,7 +115,7 @@ export default function Balance() {
                   key={`${movement.date}-${movement.description}-${index}`}
                   className="flex items-center justify-between px-6 py-4"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1">
                     <div
                       className={`rounded-md p-2 ${
                         movement.type === "in" ? "bg-accent/15" : "bg-secondary"
@@ -132,10 +127,17 @@ export default function Balance() {
                         <TrendingDown className="h-4 w-4 text-muted-foreground" />
                       )}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {movement.description}
-                      </p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-foreground">
+                          {movement.description}
+                        </p>
+                        <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                          {movement.kind === "legacy_cents"
+                            ? "Histórico"
+                            : CREDIT_KIND_LABEL[movement.kind as CreditKind]}
+                        </span>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         {new Date(movement.date).toLocaleString("pt-BR")}
                         {movement.source ? ` · ${movement.source}` : ""}
@@ -162,21 +164,3 @@ export default function Balance() {
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-  isLoading,
-  bordered = false,
-}: {
-  label: string;
-  value?: string;
-  isLoading: boolean;
-  bordered?: boolean;
-}) {
-  return (
-    <div className={`flex justify-between ${bordered ? "border-t border-border pt-3" : ""}`}>
-      <span className="text-muted-foreground">{label}</span>
-      {isLoading ? <Skeleton className="h-4 w-16" /> : <span className="font-medium">{value}</span>}
-    </div>
-  );
-}
