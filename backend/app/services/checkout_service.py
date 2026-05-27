@@ -905,13 +905,18 @@ def _extract_gateway_ids(payload: dict) -> tuple[str, str | None, str | None, st
     order_id = None
     charge_id = None
     metadata_order_id = None
+    nested_order: dict = {}
     if event_type.startswith("order."):
         order_id = _text(data.get("id"), max_length=80)
     if event_type.startswith("charge."):
         charge_id = _text(data.get("id"), max_length=80)
         nested_order = data.get("order") if isinstance(data.get("order"), dict) else {}
         order_id = _text(nested_order.get("id"), max_length=80) or None
+    # Para eventos charge.*, o Pagar.me pode colocar metadata em data.metadata
+    # OU em data.order.metadata — tentamos ambos para não perder local_order_id.
     metadata = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+    if not metadata and nested_order:
+        metadata = nested_order.get("metadata") if isinstance(nested_order.get("metadata"), dict) else {}
     metadata_order_id = _text(metadata.get("local_order_id"), max_length=80) or None
     return event_type, event_id, order_id, charge_id, metadata_order_id
 
@@ -959,6 +964,15 @@ def process_pagarme_webhook(payload: dict, *, raw_body: bytes) -> dict:
                 _reverse_released_order(order, reason=status)
             order.status = status
         log_action(action="checkout_webhook_status", entity_type="order", entity_id=order.id, user=None, company_id=order.company_id, metadata={"event_type": event_type, "status": status})
+    else:
+        # Webhook chegou mas não encontrou order correspondente ou não tem status processável.
+        # Logamos com detalhes para facilitar diagnóstico — esses casos resultam em
+        # créditos não liberados se a order existir mas não for localizada.
+        logger.warning(
+            "webhook_pagarme_unmatched event_type=%s event_id=%s "
+            "pagarme_order_id=%s charge_id=%s metadata_order_id=%s status=%s",
+            event_type, event_id, pagarme_order_id, charge_id, metadata_order_id, status,
+        )
     _payment_event(order, event_type, event_id, payload)
     db.session.commit()
     return {"ok": True, "processed": bool(order and status), "status": status, "order_id": order.id if order else None}

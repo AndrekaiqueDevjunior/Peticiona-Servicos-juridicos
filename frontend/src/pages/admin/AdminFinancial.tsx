@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CheckCircle2, ShoppingBag, Undo2, Users } from "lucide-react";
+import { BarChart3, CheckCircle2, RefreshCw, ShoppingBag, Undo2, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +73,7 @@ export default function AdminFinancial() {
   const [ano, setAno] = useState<number>(hoje.getFullYear());
   const [funcionarioFiltro, setFuncionarioFiltro] = useState<string>("todos");
   const [refundTarget, setRefundTarget] = useState<AdminCreditPurchase | null>(null);
+  const [showRecoverConfirm, setShowRecoverConfirm] = useState(false);
 
   const { data: summary, isLoading: loadingSummary, error: summaryError } = useQuery({
     queryKey: ["admin-financial"],
@@ -101,6 +102,48 @@ export default function AdminFinancial() {
     onError: (err) => {
       toast({
         title: "Não foi possível estornar",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const recoverAllMutation = useMutation({
+    mutationFn: () => api.admin.financial.recoverAllPendingCredits(),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-credit-purchases"] });
+      toast({
+        title:
+          data.recovered > 0
+            ? `${data.recovered} pedido(s) recuperado(s)`
+            : "Nenhum crédito pendente encontrado",
+        description: data.message,
+      });
+      setShowRecoverConfirm(false);
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível recuperar créditos",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive",
+      });
+      setShowRecoverConfirm(false);
+    },
+  });
+
+  const releaseMutation = useMutation({
+    mutationFn: (purchase: AdminCreditPurchase) =>
+      api.admin.financial.releaseCheckoutOrderCredits(purchase.id),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["admin-credit-purchases"] });
+      toast({
+        title: data.already_done ? "Créditos já liberados" : "Créditos liberados",
+        description: data.message,
+      });
+    },
+    onError: (err) => {
+      toast({
+        title: "Não foi possível liberar créditos",
         description: err instanceof Error ? err.message : "Tente novamente.",
         variant: "destructive",
       });
@@ -247,10 +290,21 @@ export default function AdminFinancial() {
 
         <TabsContent value="compras" className="mt-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-display text-xl">
                 Compras de {MESES[mes]} / {ano}
               </CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setShowRecoverConfirm(true)}
+                disabled={recoverAllMutation.isPending}
+                className="gap-1.5 text-accent border-accent/40 hover:bg-accent/10"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Recuperar créditos pendentes
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
@@ -298,18 +352,33 @@ export default function AdminFinancial() {
                         </TableCell>
                         <TableCell className="text-right font-medium">{c.amount_brl}</TableCell>
                         <TableCell className="text-right">
-                          {c.status === "paid" && c.pagarme_charge_id && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setRefundTarget(c)}
-                              className="gap-1 text-destructive hover:bg-destructive/10"
-                            >
-                              <Undo2 className="h-3.5 w-3.5" />
-                              Estornar
-                            </Button>
-                          )}
+                          <div className="flex items-center justify-end gap-1">
+                            {c.status === "paid" && !c.credited_at && c.source_kind === "checkout_order" && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => releaseMutation.mutate(c)}
+                                disabled={releaseMutation.isPending}
+                                className="gap-1 text-accent hover:bg-accent/10"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Liberar créditos
+                              </Button>
+                            )}
+                            {c.status === "paid" && c.pagarme_charge_id && (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setRefundTarget(c)}
+                                className="gap-1 text-destructive hover:bg-destructive/10"
+                              >
+                                <Undo2 className="h-3.5 w-3.5" />
+                                Estornar
+                              </Button>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -450,6 +519,32 @@ export default function AdminFinancial() {
           </p>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog
+        open={showRecoverConfirm}
+        onOpenChange={(open) => !open && setShowRecoverConfirm(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Recuperar créditos pendentes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação varre <span className="font-semibold">todos os pedidos pagos</span> no
+              sistema e libera créditos para aqueles que foram confirmados pela Pagar.me mas ainda
+              não foram creditados (ex: falha de webhook). A operação é segura e idempotente — não
+              duplica créditos já liberados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={recoverAllMutation.isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => recoverAllMutation.mutate()}
+              disabled={recoverAllMutation.isPending}
+            >
+              {recoverAllMutation.isPending ? "Recuperando..." : "Recuperar agora"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={!!refundTarget}

@@ -1324,6 +1324,127 @@ def list_admin_credit_purchases(actor) -> dict:
     return {"purchases": items}
 
 
+def list_admin_checkout_orders(actor) -> dict:
+    """Lista todas as Orders do checkout com detalhes de crédito liberado."""
+    from app.services.checkout_service import _checkout_release_tx_exists
+
+    orders = (
+        scoped_query(Order, actor)
+        .order_by(Order.created_at.desc())
+        .all()
+    )
+    result = []
+    for o in orders:
+        has_release_tx = _checkout_release_tx_exists(o) if o.status == "paid" else False
+        item = _serialize_checkout_order_as_purchase(o)
+        item["released_at"] = o.released_at.isoformat() if o.released_at else None
+        item["has_release_tx"] = has_release_tx
+        item["needs_release"] = (
+            o.status == "paid"
+            and not has_release_tx
+            and not getattr(o, "service_order_id", None)
+        )
+        result.append(item)
+    return {"orders": result}
+
+
+def release_checkout_order_credits(actor, order_id: object) -> dict:
+    """Força a liberação de créditos de uma Order paga que ficou sem crédito.
+
+    Útil quando o webhook do gateway falhou e o crédito não foi liberado
+    automaticamente. Idempotente: se o crédito já foi liberado, não duplica.
+    """
+    from app.services.checkout_service import (
+        _checkout_release_tx_exists,
+        _release_order,
+        serialize_checkout_order,
+    )
+
+    parsed_id = _to_int(order_id, field_name="id")
+    order = scoped_query(Order, actor).filter(Order.id == parsed_id).first()
+
+    if order is None:
+        raise NotFoundError("Checkout order não encontrada.")
+
+    if order.status != "paid":
+        raise ValidationError(
+            f"Só é possível liberar créditos de orders pagas (status atual: '{order.status}')."
+        )
+
+    already_released = _checkout_release_tx_exists(order)
+    if already_released:
+        return {
+            "released": False,
+            "already_done": True,
+            "order": serialize_checkout_order(order),
+            "message": "Créditos já foram liberados anteriormente.",
+        }
+
+    _release_order(order)
+    log_action(
+        action="admin.release_checkout_order_credits",
+        entity_type="order",
+        entity_id=order.id,
+        user=actor,
+        metadata={"amount_cents": order.amount, "service_id": order.service_id},
+    )
+    db.session.commit()
+
+    return {
+        "released": True,
+        "already_done": False,
+        "order": serialize_checkout_order(order),
+        "message": "Créditos liberados com sucesso.",
+    }
+
+
+def recover_all_pending_credits(actor) -> dict:
+    """Recupera créditos de TODAS as orders pagas sem liberação em todos os usuários.
+
+    Equivale a rodar `recover_paid_checkout_credits` para cada usuário que
+    tem orders pagas sem crédito. Operação segura e idempotente — não duplica
+    créditos já liberados. Retorna contagem de orders recuperadas por usuário.
+    """
+    from app.services.checkout_service import _checkout_release_tx_exists, _release_order, _credit_release_for_order
+
+    affected_orders = (
+        Order.query
+        .filter(Order.status == "paid")
+        .filter(Order.service_order_id.is_(None))
+        .all()
+    )
+
+    recovered_orders = []
+    skipped = 0
+    for order in affected_orders:
+        _kind, units = _credit_release_for_order(order)
+        if units <= 0:
+            skipped += 1
+            continue
+        if _checkout_release_tx_exists(order):
+            skipped += 1
+            continue
+        _release_order(order)
+        recovered_orders.append(order.id)
+
+    if recovered_orders:
+        log_action(
+            action="admin.recover_all_pending_credits",
+            entity_type="order",
+            entity_id=None,
+            user=actor,
+            metadata={"recovered_count": len(recovered_orders), "order_ids": recovered_orders},
+        )
+        db.session.commit()
+
+    return {
+        "recovered": len(recovered_orders),
+        "skipped": skipped,
+        "order_ids": recovered_orders,
+        "message": f"{len(recovered_orders)} order(s) tiveram créditos liberados.",
+    }
+
+
 def refund_credit_purchase(actor, purchase_id: object) -> dict:
     parsed_id = _to_int(purchase_id, field_name="id")
     purchase = scoped_query(CreditPurchase, actor).filter(CreditPurchase.id == parsed_id).first()

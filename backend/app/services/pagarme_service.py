@@ -162,4 +162,9 @@ def verify_webhook_signature(raw_body: bytes, signature_header: str | None) -> N
         digest = hmac.new(str(secret).encode("utf-8"), raw_body, digestmod).hexdigest()
         candidates.extend([digest, f"{prefix}{digest}"])
     if not any(hmac.compare_digest(received, candidate) for candidate in candidates):
+        logger.warning(
+            "webhook_signature_mismatch received_prefix=%s body_len=%s",
+            received[:12] if received else "(empty)",
+            len(raw_body),
+        )
         raise AuthError("Assinatura do webhook Pagar.me inválida.")

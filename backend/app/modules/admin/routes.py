@@ -25,7 +25,9 @@ from app.services.admin_service import (
     get_admin_service,
     get_admin_staff_member,
     get_financial_entry,
+    list_admin_checkout_orders,
     list_admin_credit_purchases,
+    recover_all_pending_credits,
     list_admin_clients,
     list_admin_orders,
     list_admin_plans,
@@ -34,6 +36,7 @@ from app.services.admin_service import (
     list_financial_entries,
     refund_checkout_order,
     refund_credit_purchase,
+    release_checkout_order_credits,
     update_admin_client,
     update_admin_order,
     update_admin_plan,
@@ -212,6 +215,24 @@ def credit_purchases():
 @roles_required("admin")
 def refund_credit_purchase_route(purchase_id: int):
     return jsonify(refund_credit_purchase(current_actor(), purchase_id))
+
+
+@admin_bp.get("/checkout-orders")
+@roles_required("admin")
+def list_checkout_orders_route():
+    return jsonify(list_admin_checkout_orders(current_actor()))
+
+
+@admin_bp.post("/checkout-orders/recover-all")
+@roles_required("admin")
+def recover_all_pending_credits_route():
+    return jsonify(recover_all_pending_credits(current_actor()))
+
+
+@admin_bp.post("/checkout-orders/<int:order_id>/release")
+@roles_required("admin")
+def release_checkout_order_credits_route(order_id: int):
+    return jsonify(release_checkout_order_credits(current_actor(), order_id))
 
 
 @admin_bp.post("/checkout-orders/<int:order_id>/refund")

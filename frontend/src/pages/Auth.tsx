@@ -120,16 +120,19 @@ const Auth = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 pt-1">
+                <div
+                  className="flex cursor-pointer items-center gap-2 pt-1"
+                  onClick={() => { if (!loading) setRemember((v) => !v); }}
+                  role="presentation"
+                >
                   <Checkbox
-                    id="remember"
                     checked={remember}
-                    onCheckedChange={(checked) => setRemember(checked === true)}
                     disabled={loading}
+                    aria-label="Manter conectado neste dispositivo"
                   />
-                  <Label htmlFor="remember" className="cursor-pointer text-sm font-normal text-muted-foreground">
+                  <span className="text-sm font-normal text-muted-foreground select-none">
                     Manter conectado neste dispositivo
-                  </Label>
+                  </span>
                 </div>
 
                 <Button

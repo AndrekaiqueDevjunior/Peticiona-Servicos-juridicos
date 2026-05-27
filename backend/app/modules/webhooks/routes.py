@@ -76,9 +76,20 @@ def pagarme():
         or request.headers.get("X-PagarMe-Signature")
         or request.headers.get("Pagarme-Signature")
     )
-    
+
+    logger.info(
+        "webhook_pagarme_received method=%s has_signature=%s content_length=%s",
+        request.method,
+        bool(signature),
+        request.content_length,
+    )
+
     if is_production:
         if not signature:
+            logger.warning(
+                "webhook_pagarme_rejected_no_signature headers=%s",
+                dict(request.headers),
+            )
             from app.core.errors import ValidationError
             raise ValidationError("Assinatura do webhook obrigatória em produção")
         verify_webhook_signature(raw_body, signature)

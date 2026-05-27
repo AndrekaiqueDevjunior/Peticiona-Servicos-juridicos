@@ -396,6 +396,12 @@ export interface AdminCreditPurchase {
   source_kind?: "credit_purchase" | "checkout_order";
 }
 
+export interface AdminCheckoutOrderDetail extends AdminCreditPurchase {
+  released_at: string | null;
+  has_release_tx: boolean;
+  needs_release: boolean;
+}
+
 export interface AdminNotification {
   id: string;
   source: "pagarme" | "resend" | string;
@@ -1023,6 +1029,18 @@ export const api = {
       refundCheckoutOrder: (id: number) =>
         request<{ message?: string; purchase?: AdminCreditPurchase }>(
           `/admin/checkout-orders/${id}/refund`,
+          { method: "POST" },
+        ),
+      checkoutOrders: () =>
+        request<{ orders: AdminCheckoutOrderDetail[] }>("/admin/checkout-orders"),
+      releaseCheckoutOrderCredits: (id: number) =>
+        request<{ released: boolean; already_done: boolean; message: string }>(
+          `/admin/checkout-orders/${id}/release`,
+          { method: "POST" },
+        ),
+      recoverAllPendingCredits: () =>
+        request<{ recovered: number; skipped: number; order_ids: number[]; message: string }>(
+          "/admin/checkout-orders/recover-all",
           { method: "POST" },
         ),
     },
