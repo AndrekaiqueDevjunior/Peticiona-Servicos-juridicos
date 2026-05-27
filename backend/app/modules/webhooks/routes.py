@@ -12,7 +12,10 @@ from app.core.errors import ValidationError
 from app.core.extensions import db
 from app.core.rate_limit import limit_requests
 from app.models.email_event import EmailEvent
-from app.services.checkout_service import process_pagarme_webhook
+from app.services.checkout_service import process_pagarme_webhook as process_checkout_pagarme_webhook
+from app.services.credit_payment_service import (
+    process_pagarme_webhook as process_credit_purchase_pagarme_webhook,
+)
 from app.services.pagarme_service import require_webhook_token, verify_webhook_signature
 
 logger = logging.getLogger(__name__)
@@ -88,7 +91,17 @@ def pagarme():
             require_webhook_token(token)
     
     payload = request.get_json(silent=True) or {}
-    return jsonify(process_pagarme_webhook(payload, raw_body=raw_body))
+    checkout_result = process_checkout_pagarme_webhook(payload, raw_body=raw_body)
+    credit_purchase_result = process_credit_purchase_pagarme_webhook(payload)
+
+    response = dict(checkout_result)
+    response["credit_purchase"] = credit_purchase_result
+    response["processed"] = bool(
+        checkout_result.get("processed") or credit_purchase_result.get("matched")
+    )
+    if credit_purchase_result.get("matched") and not response.get("status"):
+        response["status"] = credit_purchase_result.get("status")
+    return jsonify(response)
 
 
 @webhooks_bp.post("/resend")

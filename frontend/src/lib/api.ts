@@ -278,6 +278,7 @@ export interface AdminOrder {
   valor: number;
   valor_brl: string;
   criado_em: string;
+  criado_em_iso: string | null;
   finalizado_em: string | null;
   finalizado_em_iso: string | null;
   split_plataforma: number | null;
@@ -1015,8 +1016,13 @@ export const api = {
       creditPurchases: () =>
         request<{ purchases: AdminCreditPurchase[] }>("/admin/credit-purchases"),
       refundPurchase: (id: number) =>
-        request<{ message?: string; credit_purchase?: AdminCreditPurchase }>(
+        request<{ message?: string; purchase?: AdminCreditPurchase }>(
           `/admin/credit-purchases/${id}/refund`,
+          { method: "POST" },
+        ),
+      refundCheckoutOrder: (id: number) =>
+        request<{ message?: string; purchase?: AdminCreditPurchase }>(
+          `/admin/checkout-orders/${id}/refund`,
           { method: "POST" },
         ),
     },

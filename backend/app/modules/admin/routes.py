@@ -32,6 +32,7 @@ from app.services.admin_service import (
     list_admin_services,
     list_admin_staff,
     list_financial_entries,
+    refund_checkout_order,
     refund_credit_purchase,
     update_admin_client,
     update_admin_order,
@@ -211,6 +212,12 @@ def credit_purchases():
 @roles_required("admin")
 def refund_credit_purchase_route(purchase_id: int):
     return jsonify(refund_credit_purchase(current_actor(), purchase_id))
+
+
+@admin_bp.post("/checkout-orders/<int:order_id>/refund")
+@roles_required("admin")
+def refund_checkout_order_route(order_id: int):
+    return jsonify(refund_checkout_order(current_actor(), order_id))
 
 
 @admin_bp.post("/financial/refund")

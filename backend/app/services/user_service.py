@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 
 from app.core.errors import ConflictError, ValidationError
 from app.core.extensions import db
@@ -15,6 +16,7 @@ TERMS_VERSION = "1.0.0"
 TERMS_TEXT_HASH = hashlib.sha256(
     b"peticiona-termos-de-uso-politica-cancelamento-v1.0.0"
 ).hexdigest()
+logger = logging.getLogger(__name__)
 
 
 def get_profile(user) -> dict:
@@ -115,6 +117,13 @@ def change_my_password(user, payload: dict) -> dict:
 
 
 def get_balance_snapshot(user) -> dict:
+    try:
+        from app.services.checkout_service import recover_paid_checkout_credits
+
+        recover_paid_checkout_credits(user)
+    except Exception:
+        db.session.rollback()
+        logger.exception("balance_recover_paid_checkout_credits_failed user_id=%s", user.id)
     return get_balance(user)
 
 

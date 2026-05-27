@@ -94,26 +94,40 @@ class TestStaffOrderSerializationDoesNotRecurse:
 
 
 class TestPlanPurchaseCreditsClientBalance:
-    """Antes do fix, plano com `monthly_credits_cents=0` era pago mas não
-    creditava saldo. `_release_order` marcava `released_at` mesmo sem criar
-    a CreditTransaction, deixando o pedido permanentemente sem crédito."""
+    """Regressões de liberação de créditos unitários pelo checkout."""
 
-    def _make_paid_order(self, db, client_user, *, service_id, amount, plan_credits=None):
+    def _make_paid_order(
+        self,
+        db,
+        client_user,
+        *,
+        service_id,
+        amount,
+        credits_quantity=None,
+        petition_limit_monthly=None,
+        monthly_credits_cents=None,
+        price_per_service_cents=None,
+    ):
         """Cria diretamente uma Order paga + Plan correspondente."""
-        if plan_credits is not None:
-            plan = Plan.query.filter_by(code=service_id).first()
-            if plan is None:
-                plan = Plan(
-                    code=service_id,
-                    name=f"Plano {service_id}",
-                    monthly_price_cents=amount,
-                    monthly_credits_cents=plan_credits,
-                    is_active=True,
-                )
-                db.session.add(plan)
-            else:
-                plan.monthly_credits_cents = plan_credits
-            db.session.flush()
+        plan = Plan.query.filter_by(code=service_id).first()
+        fields = {
+            "name": f"Plano {service_id}",
+            "monthly_price_cents": amount,
+            "monthly_credits_cents": (
+                monthly_credits_cents if monthly_credits_cents is not None else amount
+            ),
+            "credits_quantity": credits_quantity,
+            "petition_limit_monthly": petition_limit_monthly,
+            "price_per_service_cents": price_per_service_cents,
+            "is_active": True,
+        }
+        if plan is None:
+            plan = Plan(code=service_id, **fields)
+            db.session.add(plan)
+        else:
+            for key, value in fields.items():
+                setattr(plan, key, value)
+        db.session.flush()
 
         order = Order(
             user_id=client_user.id,
@@ -127,41 +141,38 @@ class TestPlanPurchaseCreditsClientBalance:
         db.session.commit()
         return order
 
-    def test_paid_plan_with_zero_credits_falls_back_to_amount(
+    def test_paid_legacy_plan_uses_petition_limit_when_credits_quantity_missing(
         self, api, client_user, db, fake_pagarme
     ):
-        """REGRESSÃO B-5: plano custom com monthly_credits_cents=0 deve cair
-        para `order.amount` ao creditar — antes, ficava em 0 e o cliente
-        nunca recebia saldo após pagar."""
         order = self._make_paid_order(
-            db, client_user, service_id="plano_quebrado", amount=15_000, plan_credits=0
+            db,
+            client_user,
+            service_id="plano_quebrado",
+            amount=1_000,
+            credits_quantity=None,
+            petition_limit_monthly=2,
+            monthly_credits_cents=1_000,
+            price_per_service_cents=500,
         )
 
-        # GET /status dispara _release_order — devia criar CreditTransaction
         response = api(client_user).get(f"/api/checkout/status/{order.id}")
         assert response.status_code == 200
 
         tx = CreditTransaction.query.filter_by(
             user_id=client_user.id, source="checkout"
         ).first()
-        assert tx is not None, (
-            "REGRESSÃO B-5: pedido pago sem monthly_credits_cents NÃO gerou "
-            "CreditTransaction. Bug original: cliente pagava plano R$ 15 e o "
-            "saldo permanecia em zero."
-        )
-        assert tx.amount == 15_000
+        assert tx is not None
+        assert tx.amount == 2
 
-    def test_paid_plan_uses_monthly_credits_when_set(
+    def test_paid_plan_uses_credits_quantity_when_set(
         self, api, client_user, db, fake_pagarme
     ):
-        """Quando o plano tem monthly_credits_cents > 0, o crédito vem dele
-        (e não do amount). Cenário canônico: plano de R$ 48 com 48k créditos."""
         order = self._make_paid_order(
             db,
             client_user,
             service_id="plano_canonico",
             amount=48_000,
-            plan_credits=48_000,
+            credits_quantity=3,
         )
 
         api(client_user).get(f"/api/checkout/status/{order.id}")
@@ -169,13 +180,11 @@ class TestPlanPurchaseCreditsClientBalance:
             user_id=client_user.id, source="checkout"
         ).first()
         assert tx is not None
-        assert tx.amount == 48_000
+        assert tx.amount == 3
 
     def test_release_order_is_idempotent(self, api, client_user, db, fake_pagarme):
-        """REGRESSÃO B-5: chamar /status duas vezes em sequência não pode criar
-        dois CreditTransaction. _release_order ficou idempotente."""
         order = self._make_paid_order(
-            db, client_user, service_id="plano_idemp", amount=10_000, plan_credits=10_000
+            db, client_user, service_id="plano_idemp", amount=10_000, credits_quantity=1
         )
 
         api(client_user).get(f"/api/checkout/status/{order.id}")
@@ -190,12 +199,9 @@ class TestPlanPurchaseCreditsClientBalance:
     def test_status_release_recovers_stuck_paid_orders(
         self, api, client_user, db, fake_pagarme
     ):
-        """REGRESSÃO B-5: pedidos antigos pagos com released_at=None
-        precisam ser recuperados ao reabrir o /status."""
         order = self._make_paid_order(
-            db, client_user, service_id="plano_recover", amount=20_000, plan_credits=20_000
+            db, client_user, service_id="plano_recover", amount=20_000, credits_quantity=2
         )
-        # Estado "stuck": pago mas nunca liberado
         assert order.released_at is None
 
         api(client_user).get(f"/api/checkout/status/{order.id}")
@@ -203,27 +209,52 @@ class TestPlanPurchaseCreditsClientBalance:
         _db.session.refresh(order)
         assert order.released_at is not None
         tx = CreditTransaction.query.filter_by(user_id=client_user.id).first()
-        assert tx is not None and tx.amount == 20_000
+        assert tx is not None and tx.amount == 2
 
     def test_balance_endpoint_reflects_credit_after_release(
         self, api, client_user, db, fake_pagarme
     ):
-        """End-to-end: cliente vê o saldo via GET /api/me/balance após o
-        crédito ser liberado pelo checkout."""
         order = self._make_paid_order(
             db,
             client_user,
             service_id="plano_e2e",
             amount=30_000,
-            plan_credits=30_000,
+            credits_quantity=4,
         )
         api(client_user).get(f"/api/checkout/status/{order.id}")
 
         balance = api(client_user).get("/api/me/balance")
         assert balance.status_code == 200
         body = balance.get_json()
-        assert body["credits_available_cents"] == 30_000
-        assert body["credits_available_brl"] == "R$ 300,00"
+        assert body["credits_available_cents"] == 4
+        assert body["credits_available_brl"] == "4 crédito(s)"
+
+    def test_balance_recovers_paid_legacy_plan_without_release_transaction(
+        self, api_client, client_user, db
+    ):
+        order = self._make_paid_order(
+            db,
+            client_user,
+            service_id="plano_teste_10_legacy",
+            amount=1_000,
+            credits_quantity=None,
+            petition_limit_monthly=2,
+            monthly_credits_cents=1_000,
+            price_per_service_cents=500,
+        )
+
+        response = api_client.get("/api/me/balance")
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["balances"]["common"] == 2
+
+        tx = CreditTransaction.query.filter_by(
+            user_id=client_user.id,
+            idempotency_key=f"checkout-{order.id}",
+            kind="common",
+        ).first()
+        assert tx is not None
+        assert tx.amount == 2
 
 
 # ---------------------------------------------------------------------------

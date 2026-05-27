@@ -1365,17 +1365,22 @@ def refund_credit_purchase(actor, purchase_id: object) -> dict:
     # não do livro-razão, então não podemos recusar a baixa.
     if purchase.credited_at is not None:
         from app.services import credit_ledger
+        from app.services.credit_payment_service import CREDIT_PACKAGES
 
         purchase_owner = db.session.get(User, purchase.user_id)
         if purchase_owner is not None:
+            package = CREDIT_PACKAGES.get(purchase.package_id) or {}
+            credit_units = int(package.get("credit_units") or 1)
+            credit_kind = str(package.get("credit_kind") or credit_ledger.KIND_COMMON)
             credit_ledger.debit(
                 purchase_owner,
-                amount=purchase.credit_cents,
+                amount=credit_units,
                 source=purchase.source,
                 description=f"Estorno Pagar.me - {purchase.package_name} (#{purchase.code})",
                 idempotency_key=f"purchase-reversal-{purchase.id}",
                 company_id=purchase.company_id,
                 allow_negative_balance=True,
+                kind=credit_kind,
             )
 
     log_action(
@@ -1398,5 +1403,70 @@ def refund_credit_purchase(actor, purchase_id: object) -> dict:
         "purchase": _serialize_credit_purchase(purchase),
         "gateway_status": gateway_status,
         "credits_reversed": purchase.credited_at is not None,
+        "message": "Estorno processado com sucesso pela Pagar.me.",
+    }
+
+
+def refund_checkout_order(actor, order_id: object) -> dict:
+    parsed_id = _to_int(order_id, field_name="id")
+    order = scoped_query(Order, actor).filter(Order.id == parsed_id).first()
+
+    if order is None:
+        raise NotFoundError("Compra de checkout não encontrada.")
+
+    if order.status == "refunded":
+        raise ConflictError("Esta compra já foi estornada.")
+
+    if order.status != "paid":
+        raise ValidationError(
+            f"Não é possível estornar uma compra com status '{order.status}'. "
+            "Apenas compras pagas podem ser estornadas."
+        )
+
+    if not order.pagarme_charge_id:
+        raise ValidationError(
+            "Esta compra não possui ID de cobrança da Pagar.me. "
+            "Verifique se o pagamento foi processado pelo gateway."
+        )
+
+    pagarme_response = PagarmeClient().cancel_charge(order.pagarme_charge_id)
+    gateway_status = str(pagarme_response.get("status") or "").lower()
+
+    if gateway_status not in {"canceled", "refunded", "voided"}:
+        raise ValidationError(
+            f"A Pagar.me retornou status inesperado: '{gateway_status}'. "
+            "Verifique no painel da Pagar.me se o estorno total foi processado."
+        )
+
+    from app.services.checkout_service import (
+        _checkout_release_tx_exists,
+        _reverse_released_order,
+    )
+
+    had_released_credit = order.released_at is not None
+    had_release_tx = _checkout_release_tx_exists(order)
+    _reverse_released_order(order, reason="admin_refund")
+    credits_reversed = had_released_credit and had_release_tx and order.released_at is None
+    order.status = "refunded"
+
+    log_action(
+        action="admin.refund_checkout_order",
+        entity_type="order",
+        entity_id=order.id,
+        user=actor,
+        metadata={
+            "amount_cents": order.amount,
+            "pagarme_charge_id": order.pagarme_charge_id,
+            "gateway_status": gateway_status,
+            "credits_reversed": credits_reversed,
+        },
+    )
+    db.session.commit()
+
+    return {
+        "refunded": True,
+        "purchase": _serialize_checkout_order_as_purchase(order),
+        "gateway_status": gateway_status,
+        "credits_reversed": credits_reversed,
         "message": "Estorno processado com sucesso pela Pagar.me.",
     }

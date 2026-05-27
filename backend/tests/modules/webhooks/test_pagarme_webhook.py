@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 
 from app.core.extensions import db as _db
-from app.models import CreditTransaction, Order, PaymentEvent
+from app.models import CreditPurchase, CreditTransaction, Order, PaymentEvent
 
 
 pytestmark = pytest.mark.checkout
@@ -84,6 +84,60 @@ class TestPagarmeWebhookHappyPath:
             user_id=pending_order.user_id, source="checkout"
         ).first()
         assert tx is not None, "Webhook 'paid' deve liberar crédito ao cliente"
+
+    def test_order_paid_event_credits_credit_purchase(self, client, client_user, db, app):
+        purchase = CreditPurchase(
+            user_id=client_user.id,
+            company_id=client_user.company_id,
+            code=f"CRED-{client_user.id}-webhooktest",
+            idempotency_key="credit-webhook-idemp-123",
+            package_id="essencial",
+            package_name="Plano Essencial",
+            kind="plan",
+            source="plano",
+            amount_cents=48_000,
+            credit_cents=48_000,
+            status="processing",
+            pagarme_order_id="or_credit_webhook_1",
+            pagarme_charge_id="ch_credit_webhook_1",
+        )
+        db.session.add(purchase)
+        db.session.commit()
+
+        payload = {
+            "id": "evt_credit_webhook_paid_1",
+            "type": "order.paid",
+            "data": {
+                "id": purchase.pagarme_order_id,
+                "status": "paid",
+                "code": purchase.code,
+            },
+        }
+        raw = json.dumps(payload).encode("utf-8")
+        signature = _make_signature(raw, app.config["PAGARME_WEBHOOK_TOKEN"])
+
+        response = client.post(
+            "/api/webhooks/pagarme",
+            data=raw,
+            content_type="application/json",
+            headers={"X-Hub-Signature-256": signature},
+        )
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["credit_purchase"]["matched"] is True
+        assert body["credit_purchase"]["status"] == "paid"
+
+        db.session.refresh(purchase)
+        assert purchase.status == "paid"
+        assert purchase.credited_at is not None
+
+        tx = CreditTransaction.query.filter_by(
+            user_id=client_user.id,
+            source="plano",
+            kind="common",
+        ).first()
+        assert tx is not None
+        assert tx.amount == 3
 
     def test_charge_failed_event_marks_order_failed(self, client, pending_order, db, app):
         payload = {

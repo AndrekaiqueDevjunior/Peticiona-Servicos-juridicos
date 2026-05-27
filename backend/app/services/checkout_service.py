@@ -244,12 +244,10 @@ def _credit_release_for_order(order: Order) -> tuple[str, int]:
 
     plan = Plan.query.filter_by(code=order.service_id).first()
     if plan:
-        units = int(getattr(plan, "credits_quantity", None) or 0)
+        units = _plan_credit_units(plan)
         if units <= 0:
-            # Fallback: plano sem credits_quantity explícito — não libera
-            # créditos (refuso silencioso). Log para investigação.
             logger.warning(
-                "checkout_plan_missing_credits_quantity order_id=%s plan_code=%s",
+                "checkout_plan_missing_credit_units order_id=%s plan_code=%s",
                 order.id,
                 plan.code,
             )
@@ -262,6 +260,38 @@ def _credit_release_for_order(order: Order) -> tuple[str, int]:
         order.service_id,
     )
     return KIND_COMMON, 0
+
+
+def _positive_int(value: object) -> int:
+    try:
+        parsed = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def _plan_credit_units(plan: Plan) -> int:
+    """Quantidade de créditos comuns que um plano libera.
+
+    `credits_quantity` é o campo canônico no modelo novo. Planos legados
+    criados antes desse campo podem ter apenas `petition_limit_monthly` ou
+    `monthly_credits_cents` + `price_per_service_cents`; esses fallbacks
+    recuperam compras já pagas sem inflar os planos canônicos.
+    """
+    credits_quantity = _positive_int(getattr(plan, "credits_quantity", None))
+    if credits_quantity:
+        return credits_quantity
+
+    petition_limit = _positive_int(getattr(plan, "petition_limit_monthly", None))
+    if petition_limit:
+        return petition_limit
+
+    monthly_credits = _positive_int(getattr(plan, "monthly_credits_cents", None))
+    price_per_service = _positive_int(getattr(plan, "price_per_service_cents", None))
+    if monthly_credits and price_per_service:
+        return max(1, monthly_credits // price_per_service)
+
+    return 0
 
 
 def _credit_amount_for_order(order: Order) -> int:
@@ -326,16 +356,55 @@ def _release_order(order: Order) -> None:
         if owner is None:
             logger.warning("release_order_owner_missing order_id=%s", order.id)
             return
+        if _checkout_release_tx_exists(order):
+            order.released_at = order.released_at or utcnow()
+            return
         credit_ledger.credit(
             owner,
             amount=units,
             source="checkout",
             description=f"Checkout #{order.id}",
-            idempotency_key=f"checkout-{order.id}",
+            idempotency_key=_checkout_release_idempotency_key(order),
             company_id=order.company_id,
             kind=kind,
         )
     order.released_at = order.released_at or utcnow()
+
+
+def _checkout_release_idempotency_key(order: Order) -> str:
+    return f"checkout-{order.id}"
+
+
+def _checkout_release_tx_exists(order: Order) -> bool:
+    return (
+        CreditTransaction.query.filter_by(
+            user_id=order.user_id,
+            idempotency_key=_checkout_release_idempotency_key(order),
+        ).first()
+        is not None
+    )
+
+
+def recover_paid_checkout_credits(user) -> int:
+    """Libera créditos de pedidos pagos que ficaram sem lançamento.
+
+    Isso cobre planos legados como `plano_teste_10`, em que o pagamento
+    foi aprovado mas `credits_quantity` estava vazio. A operação é
+    idempotente pelo mesmo `checkout-{order.id}` usado no fluxo normal.
+    """
+    recovered = 0
+    orders = Order.query.filter_by(user_id=user.id, status="paid").all()
+    for order in orders:
+        if getattr(order, "service_order_id", None):
+            continue
+        _kind, units = _credit_release_for_order(order)
+        if units <= 0 or _checkout_release_tx_exists(order):
+            continue
+        _release_order(order)
+        recovered += 1
+    if recovered:
+        db.session.commit()
+    return recovered
 
 
 def _reverse_released_order(order: Order, *, reason: str) -> None:
@@ -354,6 +423,9 @@ def _reverse_released_order(order: Order, *, reason: str) -> None:
 
     kind, units = _credit_release_for_order(order)
     if not order.released_at or units <= 0:
+        return
+    if not _checkout_release_tx_exists(order):
+        order.released_at = None
         return
     owner = order.user or db.session.get(User, order.user_id)
     if owner is None:

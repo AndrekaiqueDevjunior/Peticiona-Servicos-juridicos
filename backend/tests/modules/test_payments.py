@@ -73,7 +73,8 @@ class TestCreditOrders:
             user_id=client_user.id, source="plano"
         ).first()
         assert tx is not None
-        assert tx.amount == 48_000  # essencial = 48000
+        assert tx.amount == 3  # essencial = 3 créditos comuns
+        assert tx.kind == "common"
 
     def test_idempotency_returns_existing(self, api_client, fake_pagarme):
         first = api_client.post("/api/payments/credit-orders", json=VALID_PURCHASE)

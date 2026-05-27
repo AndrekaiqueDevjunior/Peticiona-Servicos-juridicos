@@ -89,7 +89,9 @@ export default function AdminFinancial() {
 
   const refundMutation = useMutation({
     mutationFn: (purchase: AdminCreditPurchase) =>
-      api.admin.financial.refundPurchase(purchase.id),
+      purchase.source_kind === "checkout_order"
+        ? api.admin.financial.refundCheckoutOrder(purchase.id)
+        : api.admin.financial.refundPurchase(purchase.id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-credit-purchases"] });
       queryClient.invalidateQueries({ queryKey: ["admin-financial"] });
@@ -109,7 +111,7 @@ export default function AdminFinancial() {
     const set = new Set<number>([hoje.getFullYear()]);
     purchases.forEach((p) => set.add(new Date(p.created_at).getFullYear()));
     orders.forEach((p) => {
-      if (p.criado_em) set.add(new Date(p.criado_em).getFullYear());
+      if (p.criado_em_iso) set.add(new Date(p.criado_em_iso).getFullYear());
     });
     return Array.from(set).sort((a, b) => b - a);
   }, [hoje, purchases, orders]);
@@ -134,8 +136,8 @@ export default function AdminFinancial() {
   const pedidosFiltrados = useMemo(
     () =>
       orders.filter((o) => {
-        if (!o.criado_em) return false;
-        const d = new Date(o.criado_em);
+        if (!o.criado_em_iso) return false;
+        const d = new Date(o.criado_em_iso);
         if (d.getMonth() !== mes || d.getFullYear() !== ano) return false;
         if (funcionarioFiltro === "todos") return true;
         if (funcionarioFiltro === "sem_vinculo") return !o.staff_user_id;
@@ -296,20 +298,18 @@ export default function AdminFinancial() {
                         </TableCell>
                         <TableCell className="text-right font-medium">{c.amount_brl}</TableCell>
                         <TableCell className="text-right">
-                          {c.status === "paid" &&
-                            c.pagarme_charge_id &&
-                            c.source_kind !== "checkout_order" && (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setRefundTarget(c)}
-                                className="gap-1 text-destructive hover:bg-destructive/10"
-                              >
-                                <Undo2 className="h-3.5 w-3.5" />
-                                Estornar
-                              </Button>
-                            )}
+                          {c.status === "paid" && c.pagarme_charge_id && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setRefundTarget(c)}
+                              className="gap-1 text-destructive hover:bg-destructive/10"
+                            >
+                              <Undo2 className="h-3.5 w-3.5" />
+                              Estornar
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -415,7 +415,7 @@ export default function AdminFinancial() {
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {formatDateTime(p.criado_em)}
+                          {p.criado_em_iso ? formatDateTime(p.criado_em_iso) : p.criado_em}
                         </TableCell>
                         <TableCell className="text-center text-xs">
                           {p.split_plataforma ?? 100} / {p.split_funcionario ?? 0}

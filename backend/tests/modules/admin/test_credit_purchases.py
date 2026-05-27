@@ -97,7 +97,7 @@ class TestRefundCreditPurchase:
             .first()
         )
         assert reversal is not None
-        assert reversal.amount == 30_000
+        assert reversal.amount == 1
 
         # fake_pagarme registrou a chamada
         calls = [c for c in fake_pagarme.calls if c["action"] == "cancel_charge"]
@@ -163,3 +163,62 @@ class TestRefundCreditPurchase:
         db.session.commit()
         response = api_client.post(f"/api/admin/credit-purchases/{purchase.id}/refund")
         assert response.status_code == 403
+
+
+class TestRefundCheckoutOrderPurchase:
+    def test_admin_refunds_checkout_order_purchase(self, api_admin, client_user, db, fake_pagarme):
+        from app.models import Order
+        from app.models.base import utcnow
+        from app.services import credit_ledger
+        from tests.factories import create_plan
+
+        plan = create_plan(
+            code="plano_checkout_refund",
+            monthly_price_cents=1_000,
+            credits_quantity=2,
+        )
+        order = Order(
+            user_id=client_user.id,
+            company_id=client_user.company_id,
+            service_id=plan.code,
+            amount=1_000,
+            status="paid",
+            idempotency_key="checkout-refund-test",
+            pagarme_order_id="or_checkout_refund",
+            pagarme_charge_id="ch_checkout_refund",
+            paid_at=utcnow(),
+            released_at=utcnow(),
+        )
+        db.session.add(order)
+        db.session.flush()
+        credit_ledger.credit(
+            client_user,
+            amount=2,
+            source="checkout",
+            description=f"Checkout #{order.id}",
+            idempotency_key=f"checkout-{order.id}",
+            company_id=client_user.company_id,
+            kind=credit_ledger.KIND_COMMON,
+        )
+        db.session.commit()
+
+        response = api_admin.post(f"/api/admin/checkout-orders/{order.id}/refund")
+        assert response.status_code == 200, response.get_json()
+        body = response.get_json()
+        assert body["refunded"] is True
+
+        db.session.refresh(order)
+        assert order.status == "refunded"
+
+        reversal = CreditTransaction.query.filter_by(
+            user_id=client_user.id,
+            source="checkout_refund",
+            type="out",
+            kind="common",
+        ).first()
+        assert reversal is not None
+        assert reversal.amount == 2
+
+        calls = [c for c in fake_pagarme.calls if c["action"] == "cancel_charge"]
+        assert len(calls) == 1
+        assert calls[0]["payload"]["charge_id"] == "ch_checkout_refund"
