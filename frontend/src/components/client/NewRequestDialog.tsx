@@ -236,8 +236,11 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const balance = useBalance();
 
   const temCreditoComum = hasCommonCredit(balance);
-  const podeProceder = temCreditoComum;
-  const mensagemBloqueio = !temCreditoComum
+  // Enquanto o saldo ainda está carregando não bloqueamos o botão nem exibimos
+  // a mensagem de bloqueio — evita falso-negativo quando o usuario abre o modal
+  // antes da primeira resposta de /api/me/balance chegar.
+  const podeProceder = balance.isLoading || temCreditoComum;
+  const mensagemBloqueio = !balance.isLoading && !temCreditoComum
     ? "Você não possui créditos. Adquira um plano para receber mais créditos."
     : null;
 

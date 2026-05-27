@@ -23,6 +23,13 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 
@@ -208,6 +215,17 @@ export default function Checkout() {
     return null;
   }, [serviceFromQuery, plansData, catalogData]);
 
+  // Máximo de parcelas por código de serviço/plano.
+  // Avulsos e express: 1x apenas. Planos: conforme contrato comercial.
+  const maxInstallments = useMemo((): number => {
+    const code = serviceFromQuery ?? order?.service_id ?? "";
+    if (code === "plano_estrategico") return 6;
+    if (code === "plano_profissional") return 4;
+    if (code === "plano_essencial") return 3;
+    // avulsos, express upgrade e qualquer serviço não-plano: 1x
+    return 1;
+  }, [serviceFromQuery, order?.service_id]);
+
   const [buyer, setBuyer] = useState<BuyerForm>({
     fullName: profile.fullName || user?.full_name || "",
     email: profile.email || user?.email || "",
@@ -331,6 +349,14 @@ export default function Checkout() {
   }, [orderIdParam, serviceFromQuery]);
 
   // Restaurar nextAction a partir de active_payment ao carregar pedido
+  // Garantir que o valor de parcelas selecionado não ultrapasse o limite do serviço.
+  useEffect(() => {
+    const current = Number(card.installments) || 1;
+    if (current > maxInstallments) {
+      setCard((p) => ({ ...p, installments: "1" }));
+    }
+  }, [maxInstallments]);
+
   useEffect(() => {
     if (order?.active_payment && !nextAction) {
       const ap = order.active_payment;
@@ -841,13 +867,21 @@ export default function Checkout() {
                         </div>
                         <div className="space-y-1.5">
                           <Label htmlFor="card-installments">Parcelas</Label>
-                          <Input
-                            id="card-installments"
-                            inputMode="numeric"
+                          <Select
                             value={card.installments}
-                            maxLength={2}
-                            onChange={(e) => setCard((p) => ({ ...p, installments: e.target.value.replace(/\D/g, "") }))}
-                          />
+                            onValueChange={(v) => setCard((p) => ({ ...p, installments: v }))}
+                          >
+                            <SelectTrigger id="card-installments">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {Array.from({ length: maxInstallments }, (_, i) => i + 1).map((n) => (
+                                <SelectItem key={n} value={String(n)}>
+                                  {n}x
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           {cardErrors.installments && <p className="text-xs text-destructive">{cardErrors.installments}</p>}
                         </div>
                       </div>
