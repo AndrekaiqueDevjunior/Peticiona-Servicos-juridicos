@@ -196,6 +196,28 @@ class TestPlanPurchaseCreditsClientBalance:
         ).count()
         assert count == 1, "Refresh repetido criou créditos duplicados"
 
+    def test_zero_amount_plan_does_not_release_wallet_credits(
+        self, api, client_user, db, fake_pagarme
+    ):
+        order = self._make_paid_order(
+            db,
+            client_user,
+            service_id="starter_zero",
+            amount=0,
+            credits_quantity=10,
+            petition_limit_monthly=10,
+        )
+
+        response = api(client_user).get(f"/api/checkout/status/{order.id}")
+        assert response.status_code == 200
+
+        count = CreditTransaction.query.filter_by(
+            user_id=client_user.id,
+            source="checkout",
+            description=f"Checkout #{order.id}",
+        ).count()
+        assert count == 0
+
     def test_status_release_recovers_stuck_paid_orders(
         self, api, client_user, db, fake_pagarme
     ):

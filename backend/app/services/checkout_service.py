@@ -239,6 +239,9 @@ def _credit_release_for_order(order: Order) -> tuple[str, int]:
     """
     from app.services.credit_ledger import KIND_COMMON
 
+    if int(order.amount or 0) <= 0:
+        return KIND_COMMON, 0
+
     if order.service_id in _EXPRESS_SERVICE_KIND:
         return _EXPRESS_SERVICE_KIND[order.service_id], 1
 
