@@ -256,6 +256,47 @@ class TestPlanPurchaseCreditsClientBalance:
         assert tx is not None
         assert tx.amount == 2
 
+    def test_balance_recovery_skips_legacy_checkout_row_without_idempotency(
+        self, api_client, client_user, db
+    ):
+        order = self._make_paid_order(
+            db,
+            client_user,
+            service_id="plano_checkout_legacy_row",
+            amount=1_000,
+            credits_quantity=2,
+        )
+        db.session.add(
+            CreditTransaction(
+                user_id=client_user.id,
+                company_id=client_user.company_id,
+                type="in",
+                source="checkout",
+                amount=1_000,
+                description=f"Checkout #{order.id}",
+                kind="legacy_cents",
+            )
+        )
+        db.session.commit()
+
+        response = api_client.get("/api/me/balance")
+        assert response.status_code == 200, response.get_json()
+        assert response.get_json()["balances"]["common"] == 0
+
+        checkout_rows = CreditTransaction.query.filter_by(
+            user_id=client_user.id,
+            source="checkout",
+            description=f"Checkout #{order.id}",
+        ).count()
+        assert checkout_rows == 1
+        assert (
+            CreditTransaction.query.filter_by(
+                user_id=client_user.id,
+                idempotency_key=f"checkout-{order.id}",
+            ).first()
+            is None
+        )
+
 
 # ---------------------------------------------------------------------------
 # B-4 — cache de g.current_user (já coberto em test_anonymous_cannot_download)

@@ -377,10 +377,17 @@ def _checkout_release_idempotency_key(order: Order) -> str:
 
 def _checkout_release_tx_exists(order: Order) -> bool:
     return (
-        CreditTransaction.query.filter_by(
-            user_id=order.user_id,
-            idempotency_key=_checkout_release_idempotency_key(order),
-        ).first()
+        CreditTransaction.query.filter(CreditTransaction.user_id == order.user_id)
+        .filter(
+            or_(
+                CreditTransaction.idempotency_key == _checkout_release_idempotency_key(order),
+                (
+                    (CreditTransaction.source == "checkout")
+                    & (CreditTransaction.description == f"Checkout #{order.id}")
+                ),
+            )
+        )
+        .first()
         is not None
     )
 
