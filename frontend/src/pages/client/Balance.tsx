@@ -59,12 +59,12 @@ export default function Balance() {
                 ) : (
                   <>
                     <p>
-                      Entrada: {balance?.totals_by_kind[kind].credits_in ?? 0}{" "}
-                      {balance?.totals_by_kind[kind].credits_in === 1 ? "crédito" : "créditos"}
+                      Entrada: {balance?.totals_by_kind?.[kind]?.credits_in ?? 0}{" "}
+                      {balance?.totals_by_kind?.[kind]?.credits_in === 1 ? "crédito" : "créditos"}
                     </p>
                     <p>
-                      Saída: {balance?.totals_by_kind[kind].credits_out ?? 0}{" "}
-                      {balance?.totals_by_kind[kind].credits_out === 1 ? "crédito" : "créditos"}
+                      Saída: {balance?.totals_by_kind?.[kind]?.credits_out ?? 0}{" "}
+                      {balance?.totals_by_kind?.[kind]?.credits_out === 1 ? "crédito" : "créditos"}
                     </p>
                   </>
                 )}
@@ -148,7 +148,7 @@ export default function Balance() {
                     }`}
                   >
                     {movement.type === "in" ? "+" : "-"}
-                    {movement.amount_brl}
+                    {movement.amount_brl ?? movement.amount}
                   </span>
                 </li>
               ))}
