@@ -707,14 +707,19 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     if amount < 0:
         raise ValidationError("Valor do serviço inválido.")
 
-    # Validar preço esperado enviado pelo frontend (proteção contra preços desatualizados)
+    # Validar preço esperado — obrigatório para qualquer serviço pago.
+    # Impede que um atacante via curl omita expected_amount e bypasse a
+    # conferência de preço. O frontend sempre envia o valor que exibiu ao
+    # usuário; se divergir do catálogo atual, a transação é bloqueada.
     expected_amount = data.get("expected_amount")
-    if expected_amount is not None:
+    if amount > 0:
+        if expected_amount is None:
+            raise ValidationError("expected_amount obrigatório.")
         try:
             expected_int = int(expected_amount)
-        except (ValueError, TypeError):
-            expected_int = None
-        if expected_int is not None and expected_int != amount:
+        except (TypeError, ValueError):
+            raise ValidationError("expected_amount inválido.")
+        if expected_int != amount:
             logger.warning(
                 "checkout_price_mismatch user_id=%s service_id=%s expected=%s actual=%s",
                 user.id,

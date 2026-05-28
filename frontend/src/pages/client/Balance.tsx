@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Component, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,33 @@ import { api } from "@/lib/api";
 import { CREDIT_KIND_LABEL, type CreditKind } from "@/lib/balance";
 import { cn } from "@/lib/utils";
 
+class BalanceErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { error: error.message };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-6 rounded-lg border border-destructive bg-destructive/10">
+          <p className="text-sm font-semibold text-destructive">Erro ao carregar saldos:</p>
+          <pre className="mt-2 text-xs text-destructive whitespace-pre-wrap">{this.state.error}</pre>
+          <button className="mt-3 text-xs underline" onClick={() => this.setState({ error: null })}>Tentar novamente</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const CREDIT_KINDS: { kind: CreditKind; color: string; icon: React.ComponentType<any> }[] = [
   { kind: "common", color: "bg-blue-50 dark:bg-blue-950/20", icon: Wallet },
 ];
 
-export default function Balance() {
+function BalanceContent() {
   const [openBuy, setOpenBuy] = useState(false);
   const { data: balance, isLoading } = useQuery({
     queryKey: ["balance"],
@@ -162,3 +184,10 @@ export default function Balance() {
   );
 }
 
+export default function Balance() {
+  return (
+    <BalanceErrorBoundary>
+      <BalanceContent />
+    </BalanceErrorBoundary>
+  );
+}

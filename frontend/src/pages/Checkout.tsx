@@ -319,6 +319,8 @@ export default function Checkout() {
     }
   };
 
+  const orderCreatedRef = useRef(false);
+
   const createOrder = async (serviceId: CheckoutServiceId, expectedAmount?: number, serviceOrderId?: number) => {
     setCreatingOrder(true);
     setErrorMsg(null);
@@ -337,16 +339,20 @@ export default function Checkout() {
   };
 
   // Boot: se tem orderId na URL → carrega; senão cria pedido a partir do query param `service`.
+  // Aguarda servicePreview para que expected_amount (obrigatório no backend) seja sempre enviado.
+  // orderCreatedRef evita disparo duplo quando servicePreview atualiza no mesmo ciclo.
   useEffect(() => {
     if (orderIdParam) {
       void loadOrder(orderIdParam);
       return;
     }
-    if (serviceFromQuery) {
-      void createOrder(serviceFromQuery, servicePreview?.amount, serviceOrderIdFromQuery);
-    }
+    if (!serviceFromQuery) return;
+    if (!servicePreview) return;
+    if (orderCreatedRef.current) return;
+    orderCreatedRef.current = true;
+    void createOrder(serviceFromQuery, servicePreview.amount, serviceOrderIdFromQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderIdParam, serviceFromQuery]);
+  }, [orderIdParam, serviceFromQuery, servicePreview]);
 
   // Restaurar nextAction a partir de active_payment ao carregar pedido
   // Garantir que o valor de parcelas selecionado não ultrapasse o limite do serviço.
