@@ -239,8 +239,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   // Enquanto o saldo ainda está carregando não bloqueamos o botão nem exibimos
   // a mensagem de bloqueio — evita falso-negativo quando o usuario abre o modal
   // antes da primeira resposta de /api/me/balance chegar.
-  const podeProceder = balance.isLoading || temCreditoComum;
-  const mensagemBloqueio = !balance.isLoading && !temCreditoComum
+  // Express vai para checkout separado — não bloqueia por crédito comum aqui.
+  const podeProceder = balance.isLoading || temCreditoComum || expressUpgrade;
+  const mensagemBloqueio = !balance.isLoading && !temCreditoComum && !expressUpgrade
     ? "Você não possui créditos. Adquira um plano para receber mais créditos."
     : null;
 
