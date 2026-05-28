@@ -237,8 +237,9 @@ def _credit_release_for_order(order: Order) -> tuple[str, int]:
     """Resolve (kind, units) que devem ser liberados ao confirmar pagamento.
 
     Para planos: kind='common', units = plan.credits_quantity (3/5/20).
-    Para pacotes express: kind='peticao_express' ou 'recurso_express', units=1.
-    Para qualquer outro service_id: (KIND_COMMON, 0) — não libera nada.
+    Para serviços avulsos (servico_peticao, servico_recurso, etc.): 1 crédito common.
+    Para pacotes express legados: kind='peticao_express'/'recurso_express', units=1.
+    Para qualquer outro service_id desconhecido: (KIND_COMMON, 0) — não libera nada.
     """
     from app.services.credit_ledger import KIND_COMMON
 
@@ -259,6 +260,12 @@ def _credit_release_for_order(order: Order) -> tuple[str, int]:
             )
             return KIND_COMMON, 0
         return KIND_COMMON, units
+
+    # Serviço avulso do catálogo (servico_peticao, servico_recurso, etc.):
+    # 1 crédito common por unidade paga — mesma moeda usada em planos.
+    service = ServiceCatalogItem.query.filter_by(code=order.service_id).first()
+    if service:
+        return KIND_COMMON, 1
 
     logger.warning(
         "checkout_unknown_service_id_no_credit_release order_id=%s service_id=%s",
