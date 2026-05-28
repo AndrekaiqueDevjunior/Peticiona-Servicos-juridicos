@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { CheckCircle2, Clock, FileText, Wallet, Zap } from "lucide-react";
+import { CheckCircle2, Clock, FileText, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,8 +42,6 @@ export default function Dashboard() {
 
   const creditKinds: { kind: CreditKind; color: string; icon: React.ComponentType<any> }[] = [
     { kind: "common", color: "bg-blue-50 dark:bg-blue-950/20", icon: Wallet },
-    { kind: "peticao_express", color: "bg-amber-50 dark:bg-amber-950/20", icon: Zap },
-    { kind: "recurso_express", color: "bg-orange-50 dark:bg-orange-950/20", icon: Zap },
   ];
 
   return (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, TrendingDown, TrendingUp, Wallet, Zap } from "lucide-react";
+import { Plus, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,8 +11,6 @@ import { cn } from "@/lib/utils";
 
 const CREDIT_KINDS: { kind: CreditKind; color: string; icon: React.ComponentType<any> }[] = [
   { kind: "common", color: "bg-blue-50 dark:bg-blue-950/20", icon: Wallet },
-  { kind: "peticao_express", color: "bg-amber-50 dark:bg-amber-950/20", icon: Zap },
-  { kind: "recurso_express", color: "bg-orange-50 dark:bg-orange-950/20", icon: Zap },
 ];
 
 export default function Balance() {
@@ -26,14 +24,14 @@ export default function Balance() {
     <div className="mx-auto max-w-6xl space-y-6">
       <div>
         <h1 className="font-display text-3xl font-semibold tracking-tight text-primary">
-          Meus Saldos
+          Meus Créditos
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Visualize seus saldos de créditos por tipo de serviço e as movimentações registradas.
+          Visualize seus créditos disponíveis e as movimentações registradas.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-1 max-w-sm">
         {CREDIT_KINDS.map(({ kind, color, icon: Icon }) => (
           <Card key={kind} className={cn("overflow-hidden", color)}>
             <CardHeader className="pb-3">

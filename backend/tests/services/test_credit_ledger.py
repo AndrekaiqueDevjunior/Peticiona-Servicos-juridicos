@@ -170,11 +170,11 @@ class TestDebitGate:
         original = credit_ledger.compute_balance
         calls = {"n": 0}
 
-        def fake(user_id: int) -> int:
+        def fake(user_id: int, kind: str = credit_ledger.KIND_COMMON) -> int:
             calls["n"] += 1
             # Primeira chamada (gate): mente que tem saldo infinito.
             # Segunda chamada (invariante pós-INSERT): retorna o real.
-            return 10_000_000 if calls["n"] == 1 else original(user_id)
+            return 10_000_000 if calls["n"] == 1 else original(user_id, kind=kind)
 
         monkeypatch.setattr(credit_ledger, "compute_balance", fake)
         with pytest.raises(credit_ledger.LedgerCorruption):

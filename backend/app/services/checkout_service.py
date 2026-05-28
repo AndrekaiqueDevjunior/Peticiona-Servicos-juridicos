@@ -154,14 +154,17 @@ def cancel_user_checkout_order(user, order_id: object) -> dict:
         return {"deleted": True, "order": serialize_checkout_order(order)}
     if order.status not in {"pending", "failed", "processing"}:
         raise ValidationError("Pedido em estado que não permite cancelamento.")
+    previous_status = order.status
     order.status = "canceled"
+    if getattr(order, "service_order_id", None):
+        _cancel_express_service_order(order, reason="client_cancel")
     log_action(
         action="checkout_order_canceled_by_client",
         entity_type="order",
         entity_id=order.id,
         user=user,
         company_id=order.company_id,
-        metadata={"previous_status": order.status},
+        metadata={"previous_status": previous_status},
     )
     db.session.commit()
     return {"deleted": True, "order": serialize_checkout_order(order)}
@@ -327,6 +330,44 @@ def _finalize_express_service_order(order: Order) -> None:
         entity_id=service_order.id,
         user=None,
         metadata={"checkout_order_id": order.id, "reference": service_order.reference},
+    )
+
+
+def _cancel_express_service_order(order: Order, *, reason: str) -> None:
+    """Cancela o ServiceOrder vinculado e reembolsa o crédito common quando
+    a Order de checkout express é cancelada ou expira sem pagamento."""
+    from app.models.orders import ServiceOrder
+    from app.services import credit_ledger
+
+    service_order = db.session.get(ServiceOrder, order.service_order_id)
+    if service_order is None:
+        return
+    if service_order.status != "pendente_pagamento_express":
+        return
+    debit = (
+        CreditTransaction.query
+        .filter_by(
+            user_id=service_order.user_id,
+            source="client_order",
+            type="out",
+            idempotency_key=f"order-debit-{service_order.reference}",
+        )
+        .first()
+    )
+    service_order.status = "cancelado"
+    if debit is not None and getattr(debit, "kind", None) != credit_ledger.KIND_LEGACY_CENTS:
+        credit_ledger.refund(
+            debit,
+            source="client_order_refund",
+            description=f"Estorno — {service_order.reference}",
+            idempotency_key=f"order-refund-{service_order.reference}",
+        )
+    log_action(
+        action="order.express_checkout_expired",
+        entity_type="service_order",
+        entity_id=service_order.id,
+        user=None,
+        metadata={"checkout_order_id": order.id, "reference": service_order.reference, "reason": reason},
     )
 
 
@@ -701,11 +742,14 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
             raise ValidationError("Pedido de serviço não encontrado.")
         if linked_service_order.status != "pendente_pagamento_express":
             raise ValidationError("Este pedido não está aguardando pagamento Express.")
-        # Idempotência: retorna checkout existente para o mesmo service_order
+        # Idempotência: retorna checkout existente para o mesmo service_order.
+        # Inclui 'paid' para não criar duplicata quando o webhook ainda não
+        # finalizou o ServiceOrder mas a Order já está paga.
         existing = (
             Order.query.filter(
                 Order.service_order_id == service_order_id,
-                Order.status.in_(["pending", "processing"]),
+                Order.user_id == user.id,
+                Order.status.in_(["pending", "processing", "paid"]),
             )
             .order_by(Order.id.desc())
             .first()
@@ -962,6 +1006,8 @@ def process_pagarme_webhook(payload: dict, *, raw_body: bytes) -> dict:
         else:
             if status in {"refunded", "canceled"}:
                 _reverse_released_order(order, reason=status)
+                if getattr(order, "service_order_id", None):
+                    _cancel_express_service_order(order, reason=status)
             order.status = status
         log_action(action="checkout_webhook_status", entity_type="order", entity_id=order.id, user=None, company_id=order.company_id, metadata={"event_type": event_type, "status": status})
     else:

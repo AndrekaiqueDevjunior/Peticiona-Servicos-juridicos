@@ -61,31 +61,22 @@ class TestCreditFlowCommonService:
         )
         assert balance_after_petition == 2, "Deveria ter debitado 1 crédito"
 
-        # 4. Verificar que outros kinds não foram afetados
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS) == 0
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS) == 0
+        # 4. Verificar saldo comum após criação
+        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 2
 
 
 class TestExpressDebitsCommon:
-    """Fluxo: express upgrade débita common, não mais peticao_express/recurso_express."""
+    """Express upgrade débita 1 crédito common e cria ordem pendente_pagamento_express."""
 
-    def test_express_debits_common_not_express_kind(self, api_client, client_user, db):
-        # Credita 1 common e 1 peticao_express
+    def test_express_debits_common_credit(self, api_client, client_user, db):
         credit_ledger.credit(
             client_user, amount=1,
             source="test", description="Common",
             idempotency_key="exp-common-1",
             kind=credit_ledger.KIND_COMMON,
         )
-        credit_ledger.credit(
-            client_user, amount=1,
-            source="test", description="Pet exp legado",
-            idempotency_key="exp-pet-legacy",
-            kind=credit_ledger.KIND_PETICAO_EXPRESS,
-        )
         db.session.flush()
 
-        # Cria petição express
         response = api_client.post(
             "/api/petitions",
             json={
@@ -105,10 +96,7 @@ class TestExpressDebitsCommon:
         assert response.status_code == 201, response.get_json()
         body = response.get_json()
         assert body["order"]["status"] == "pendente_pagamento_express"
-
-        # Common foi debitado; peticao_express não foi tocado
         assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_PETICAO_EXPRESS) == 1
 
     def test_express_grupo_b_also_debits_common(self, api_client, client_user, db):
         credit_ledger.credit(
@@ -116,12 +104,6 @@ class TestExpressDebitsCommon:
             source="test", description="Common",
             idempotency_key="exp-b-common-1",
             kind=credit_ledger.KIND_COMMON,
-        )
-        credit_ledger.credit(
-            client_user, amount=1,
-            source="test", description="Rec exp legado",
-            idempotency_key="exp-rec-legacy",
-            kind=credit_ledger.KIND_RECURSO_EXPRESS,
         )
         db.session.flush()
 
@@ -142,10 +124,7 @@ class TestExpressDebitsCommon:
         )
 
         assert response.status_code == 201, response.get_json()
-
-        # Common debitado; recurso_express intacto
         assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
-        assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_RECURSO_EXPRESS) == 1
 
 
 class TestCancelationRestoresCredit:

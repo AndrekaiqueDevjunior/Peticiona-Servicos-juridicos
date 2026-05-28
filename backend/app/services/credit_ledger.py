@@ -79,18 +79,16 @@ _VALID_TYPES = frozenset({_TYPE_IN, _TYPE_OUT})
 #: Kinds válidos para créditos. Espelha CHECK constraint
 #: `ck_credit_transactions_kind`. 'legacy_cents' é histórico; código novo
 #: NUNCA escreve com esse kind — só leitura para extrato.
+#: 'peticao_express' e 'recurso_express' existem no DB como dados legados
+#: mas não são mais utilizados para novas escritas — Express virou upgrade pago.
 KIND_COMMON = "common"
-KIND_PETICAO_EXPRESS = "peticao_express"
-KIND_RECURSO_EXPRESS = "recurso_express"
 KIND_LEGACY_CENTS = "legacy_cents"
-_VALID_KINDS = frozenset({KIND_COMMON, KIND_PETICAO_EXPRESS, KIND_RECURSO_EXPRESS})
-_ACTIVE_KINDS = (KIND_COMMON, KIND_PETICAO_EXPRESS, KIND_RECURSO_EXPRESS)
+_VALID_KINDS = frozenset({KIND_COMMON})
+_ACTIVE_KINDS = (KIND_COMMON,)
 
 #: Mapa de label humano por kind — usado em mensagens de erro/UI.
 KIND_LABELS = {
-    KIND_COMMON: "créditos comuns",
-    KIND_PETICAO_EXPRESS: "créditos de Petição Express",
-    KIND_RECURSO_EXPRESS: "créditos de Recurso Express",
+    KIND_COMMON: "créditos",
 }
 
 
@@ -192,34 +190,8 @@ def compute_balance(user_id: int, *, kind: str = KIND_COMMON) -> int:
 
 
 def compute_balances(user_id: int) -> dict[str, int]:
-    """Retorna `{common, peticao_express, recurso_express}` para o usuário.
-
-    Útil pra UI que exibe os 3 saldos lado a lado. Ignora 'legacy_cents'.
-    """
-    rows = db.session.execute(
-        text(
-            "SELECT kind, type, SUM(amount) AS total "
-            "FROM credit_transactions "
-            "WHERE user_id = :uid AND kind IN ('common','peticao_express','recurso_express') "
-            "GROUP BY kind, type"
-        ),
-        {"uid": int(user_id)},
-    ).fetchall()
-
-    balances = {k: 0 for k in _ACTIVE_KINDS}
-    for kind, ttype, total in rows:
-        if kind not in balances:
-            continue
-        if ttype == _TYPE_IN:
-            balances[kind] += int(total or 0)
-        elif ttype == _TYPE_OUT:
-            balances[kind] -= int(total or 0)
-        else:
-            raise LedgerCorruption(
-                f"credit_transactions.type={ttype!r} fora do whitelist "
-                f"(user_id={user_id})"
-            )
-    return balances
+    """Retorna `{common}` para o usuário. Ignora 'legacy_cents'."""
+    return {"common": compute_balance(user_id, kind=KIND_COMMON)}
 
 
 def compute_totals(user_id: int, *, kind: str = KIND_COMMON) -> dict[str, int]:
@@ -358,8 +330,6 @@ def _insert(params: _WriteParams) -> CreditTransaction:
     if params.ttype == _TYPE_OUT and not params.allow_negative_balance:
         # Gate de saldo DENTRO do lock — única forma segura de garantir
         # que dois débitos concorrentes não somem além do disponível.
-        # Importante: o saldo é POR KIND — só pode debitar 'peticao_express'
-        # de quem tem crédito 'peticao_express' (e assim por diante).
         current = compute_balance(params.user_id, kind=params.kind)
         if current < params.amount:
             raise InsufficientBalance(
@@ -404,13 +374,9 @@ def credit(
 ) -> CreditTransaction:
     """Adiciona créditos UNITÁRIOS ao saldo do usuário (`type='in'`).
 
-    O sistema novo opera em UNIDADES (1 crédito = 1 serviço), não centavos.
-    `kind` define o "bolso" de destino: 'common', 'peticao_express' ou
-    'recurso_express'. Saldos não se misturam entre kinds.
-
     Args:
         amount: quantidade de créditos (unidades, não centavos).
-        kind: tipo do crédito ('common' default).
+        kind: tipo do crédito ('common' default — único suportado atualmente).
     """
     params = _WriteParams(
         user_id=user.id,
@@ -438,13 +404,9 @@ def debit(
 ) -> CreditTransaction:
     """Subtrai créditos UNITÁRIOS do saldo (`type='out'`).
 
-    O débito é SEMPRE do bolso correspondente ao `kind`. Tentar debitar
-    'peticao_express' de quem só tem 'common' lança InsufficientBalance —
-    saldos não se misturam.
-
     Args:
         amount: quantidade de créditos a debitar.
-        kind: tipo do crédito ('common' default).
+        kind: tipo do crédito ('common' default — único suportado atualmente).
     """
     params = _WriteParams(
         user_id=user.id,

@@ -1,10 +1,10 @@
-"""Testes do endpoint GET /api/me/balance com 3 kinds segregados.
+"""Testes do endpoint GET /api/me/balance.
 
 Valida que a resposta contém:
-- balances: dict com common/peticao_express/recurso_express
-- totals_by_kind: dict com credits_in/out/balance por kind
+- balances: dict com 'common'
+- totals_by_kind: dict com credits_in/out/balance
 - movements: lista com campo kind
-- legacy_cents rows aparecem no extrato mas saldo = 0 em active kinds
+- legacy_cents rows aparecem no extrato mas saldo = 0
 """
 
 from __future__ import annotations
@@ -18,20 +18,16 @@ pytestmark = [pytest.mark.client, pytest.mark.integration]
 
 
 class TestBalanceResponseStructure:
-    """GET /api/me/balance → estrutura correta com 3 kinds."""
+    """GET /api/me/balance → estrutura correta."""
 
-    def test_response_has_balances_dict_with_three_keys(self, api_client):
+    def test_response_has_balances_dict(self, api_client):
         response = api_client.get("/api/me/balance")
         assert response.status_code == 200
 
         body = response.get_json()
         assert "balances" in body
         balances = body["balances"]
-        assert set(balances.keys()) == {
-            "common",
-            "peticao_express",
-            "recurso_express",
-        }
+        assert "common" in balances
 
     def test_response_has_totals_by_kind(self, api_client):
         response = api_client.get("/api/me/balance")
@@ -40,15 +36,12 @@ class TestBalanceResponseStructure:
         body = response.get_json()
         assert "totals_by_kind" in body
         totals = body["totals_by_kind"]
-
-        for kind in ["common", "peticao_express", "recurso_express"]:
-            assert kind in totals
-            assert "credits_in" in totals[kind]
-            assert "credits_out" in totals[kind]
-            assert "balance" in totals[kind]
+        assert "common" in totals
+        assert "credits_in" in totals["common"]
+        assert "credits_out" in totals["common"]
+        assert "balance" in totals["common"]
 
     def test_movements_have_kind_field(self, api_client, client_user, db):
-        # Add a transaction
         credit_ledger.credit(
             client_user,
             amount=10,
@@ -68,56 +61,30 @@ class TestBalanceResponseStructure:
 
         for movement in movements:
             assert "kind" in movement
-            assert movement["kind"] in [
-                "common",
-                "peticao_express",
-                "recurso_express",
-                "legacy_cents",
-            ]
 
 
-class TestBalancesWithDifferentKinds:
-    """balances dict reflete os 3 kinds com valores corretos."""
+class TestBalancesWithKinds:
+    """balances dict reflete common com valores corretos."""
 
-    def test_all_kinds_zero_for_new_user(self, api_client):
+    def test_common_zero_for_new_user(self, api_client):
         response = api_client.get("/api/me/balance")
         assert response.status_code == 200
-
         body = response.get_json()
-        balances = body["balances"]
-        assert balances["common"] == 0
-        assert balances["peticao_express"] == 0
-        assert balances["recurso_express"] == 0
+        assert body["balances"]["common"] == 0
 
-    def test_balances_reflect_credits_by_kind(self, api_client, client_user, db):
+    def test_balances_reflect_common_credits(self, api_client, client_user, db):
         credit_ledger.credit(
             client_user, amount=100,
             source="test", description="Common",
             idempotency_key="bal-comm",
             kind=credit_ledger.KIND_COMMON,
         )
-        credit_ledger.credit(
-            client_user, amount=50,
-            source="test", description="Pet exp",
-            idempotency_key="bal-pet",
-            kind=credit_ledger.KIND_PETICAO_EXPRESS,
-        )
-        credit_ledger.credit(
-            client_user, amount=25,
-            source="test", description="Rec exp",
-            idempotency_key="bal-rec",
-            kind=credit_ledger.KIND_RECURSO_EXPRESS,
-        )
         db.session.flush()
 
         response = api_client.get("/api/me/balance")
         assert response.status_code == 200
-
         body = response.get_json()
-        balances = body["balances"]
-        assert balances["common"] == 100
-        assert balances["peticao_express"] == 50
-        assert balances["recurso_express"] == 25
+        assert body["balances"]["common"] == 100
 
 
 class TestTotalsByKind:
@@ -149,12 +116,11 @@ class TestTotalsByKind:
 
 
 class TestLegacyCentsInMovements:
-    """legacy_cents rows aparecem em movements mas saldo = 0 em active kinds."""
+    """legacy_cents rows aparecem em movements mas saldo = 0."""
 
     def test_legacy_cents_in_movements_but_not_in_balance(self, api_client, client_user, db):
         from app.models import CreditTransaction
 
-        # Add legacy_cents row
         legacy = CreditTransaction(
             user_id=client_user.id,
             company_id=client_user.company_id,
@@ -171,17 +137,11 @@ class TestLegacyCentsInMovements:
         assert response.status_code == 200
 
         body = response.get_json()
-
-        # Movements should include legacy row
         movements = body.get("movements", [])
         legacy_movements = [m for m in movements if m["kind"] == "legacy_cents"]
         assert len(legacy_movements) > 0
 
-        # But balances should all be 0
-        balances = body["balances"]
-        assert balances["common"] == 0
-        assert balances["peticao_express"] == 0
-        assert balances["recurso_express"] == 0
+        assert body["balances"]["common"] == 0
 
 
 class TestLegacyCompatibilityFields:
@@ -200,7 +160,6 @@ class TestLegacyCompatibilityFields:
         assert response.status_code == 200
 
         body = response.get_json()
-        # These should exist for backwards compat
         assert "credits_available" in body
         assert "credits_available_brl" in body
         assert "credits_total" in body

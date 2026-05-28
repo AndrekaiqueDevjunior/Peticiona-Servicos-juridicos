@@ -357,47 +357,82 @@ def update_order(user, order_id: object, payload: dict) -> dict:
 
 
 def cancel_order(user, order_id: object) -> dict:
+    from app.models import Order
     from app.services import credit_ledger
 
     order = _scoped_client_order(user, order_id)
     if order.status == "concluido":
         raise ValidationError("Pedidos concluídos não podem ser cancelados pelo cliente.")
     if order.status != "cancelado":
+        is_pending_express = order.status == "pendente_pagamento_express"
+
         order.status = "cancelado"
-        # Estornar crédito do pedido. refund() respeita o kind original
-        # da transação (common para pedidos comuns, peticao_express/
-        # recurso_express para pedidos com upgrade Express). Idempotência
-        # garante que cancelamentos duplicados não dupliquem o estorno.
-        debit = (
-            CreditTransaction.query
-            .filter(
-                CreditTransaction.user_id == user.id,
-                CreditTransaction.source == "client_order",
-                CreditTransaction.type == "out",
-                CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
-            )
-            .first()
-        )
-        if debit is None:
-            # Fallback para pedidos legacy criados antes da migração
-            # pra credit_ledger — não tinham idempotency_key.
+
+        if is_pending_express:
+            # Crédito common foi debitado na criação mas o pagamento express
+            # não foi realizado — reembolsar 1 crédito common imediatamente.
             debit = (
                 CreditTransaction.query
                 .filter(
                     CreditTransaction.user_id == user.id,
                     CreditTransaction.source == "client_order",
                     CreditTransaction.type == "out",
-                    CreditTransaction.description.like(f"%{order.reference}%"),
+                    CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
                 )
                 .first()
             )
-        if debit is not None and getattr(debit, "kind", None) != credit_ledger.KIND_LEGACY_CENTS:
-            credit_ledger.refund(
-                debit,
-                source="client_order_refund",
-                description=f"Estorno — {order.reference}",
-                idempotency_key=f"order-refund-{order.reference}",
+            if debit is not None and getattr(debit, "kind", None) != credit_ledger.KIND_LEGACY_CENTS:
+                credit_ledger.refund(
+                    debit,
+                    source="client_order_refund",
+                    description=f"Estorno — {order.reference}",
+                    idempotency_key=f"order-refund-{order.reference}",
+                )
+            # Cancelar checkout Order vinculada caso ainda esteja pendente.
+            linked_checkout = (
+                Order.query
+                .filter(
+                    Order.service_order_id == order.id,
+                    Order.status.in_(["pending", "processing"]),
+                )
+                .first()
             )
+            if linked_checkout is not None:
+                linked_checkout.status = "canceled"
+        else:
+            # Estornar crédito do pedido. refund() respeita o kind original
+            # da transação (common para pedidos comuns). Idempotência
+            # garante que cancelamentos duplicados não dupliquem o estorno.
+            debit = (
+                CreditTransaction.query
+                .filter(
+                    CreditTransaction.user_id == user.id,
+                    CreditTransaction.source == "client_order",
+                    CreditTransaction.type == "out",
+                    CreditTransaction.idempotency_key == f"order-debit-{order.reference}",
+                )
+                .first()
+            )
+            if debit is None:
+                # Fallback para pedidos legacy criados antes da migração
+                # pra credit_ledger — não tinham idempotency_key.
+                debit = (
+                    CreditTransaction.query
+                    .filter(
+                        CreditTransaction.user_id == user.id,
+                        CreditTransaction.source == "client_order",
+                        CreditTransaction.type == "out",
+                        CreditTransaction.description.like(f"%{order.reference}%"),
+                    )
+                    .first()
+                )
+            if debit is not None and getattr(debit, "kind", None) != credit_ledger.KIND_LEGACY_CENTS:
+                credit_ledger.refund(
+                    debit,
+                    source="client_order_refund",
+                    description=f"Estorno — {order.reference}",
+                    idempotency_key=f"order-refund-{order.reference}",
+                )
         log_action(
             action="order.cancelled_by_client",
             entity_type="service_order",

@@ -79,7 +79,7 @@ class TestBalance:
         assert response.status_code == 200
         body = response.get_json()
         assert body["credits_available_cents"] == 0
-        assert body["credits_available_brl"] == "R$ 0,00"
+        assert body["credits_available_brl"] == "0 crédito(s)"
         assert body["movements"] == []
 
     def test_reflects_credit_transactions(self, api_client, client_user, db):

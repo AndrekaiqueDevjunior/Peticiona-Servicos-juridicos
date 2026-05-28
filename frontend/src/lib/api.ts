@@ -38,7 +38,7 @@ export interface BalanceMovement {
   amount: number;
   amount_cents: number;
   amount_brl: string;
-  kind: "common" | "peticao_express" | "recurso_express" | "legacy_cents";
+  kind: "common" | "legacy_cents";
   description: string;
   source: string | null;
   date: string;
@@ -61,17 +61,11 @@ export interface BalanceData {
   credits_used: number;
   credits_used_cents: number;
   credits_used_brl: string;
-  // Segregated balances by kind (source of truth for new system)
   balances: {
     common: number;
-    peticao_express: number;
-    recurso_express: number;
   };
-  // Detailed totals per kind
   totals_by_kind: {
     common: CreditKindTotals;
-    peticao_express: CreditKindTotals;
-    recurso_express: CreditKindTotals;
   };
   // All transactions (including legacy_cents) with kind field
   movements: BalanceMovement[];
@@ -623,7 +617,7 @@ export const api = {
   petitions: {
     list: () => request<{ petitions: Petition[] }>("/petitions"),
     create: (payload: PetitionPayload) =>
-      request<{ message: string; petition: Petition; order?: unknown; express_checkout_order_id?: string }>("/petitions", {
+      request<{ message: string; petition: Petition; order?: { id: number }; express_checkout_order_id?: string }>("/petitions", {
         method: "POST",
         body: JSON.stringify(payload),
       }),

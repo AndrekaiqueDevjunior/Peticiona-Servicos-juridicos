@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { Check, Zap } from "lucide-react";
+import { Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
@@ -118,10 +118,8 @@ const Pricing = () => {
             </div>
           ) : (() => {
             const standard = services.find((s) => s.code === "servico_peticao");
-            const express = services.find((s) => s.code === "servico_peticao_express");
             return (
-              <div className="mt-10 grid gap-6 sm:grid-cols-2 max-w-2xl mx-auto">
-                {/* Card padrão */}
+              <div className="mt-10 max-w-sm mx-auto">
                 <div className="flex flex-col border border-border bg-card p-8 shadow-card transition-elegant hover:border-accent/40">
                   <p className="font-display text-xl text-foreground">Petição ou Recurso</p>
                   <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
@@ -138,29 +136,6 @@ const Pricing = () => {
                   </p>
                   <Button asChild variant="outline" className="mt-8">
                     <Link to="/auth?mode=signup">Solicitar agora</Link>
-                  </Button>
-                </div>
-
-                {/* Card Express */}
-                <div className="flex flex-col border border-accent/40 bg-card p-8 shadow-card transition-elegant hover:border-accent">
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-accent" />
-                    <p className="font-display text-xl text-foreground">Petição ou Recurso Express</p>
-                  </div>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
-                    Avulso · Entrega prioritária
-                  </p>
-                  <div className="mt-6 flex items-baseline gap-1">
-                    <span className="font-display text-4xl">
-                      {express?.price_formatted ?? "R$ 220,00"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-sm text-accent">cada serviço</p>
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    Entrega em até 24 horas.
-                  </p>
-                  <Button asChild className="mt-8 bg-accent text-accent-foreground hover:bg-accent/90">
-                    <Link to="/auth?mode=signup">Solicitar Express</Link>
                   </Button>
                 </div>
               </div>

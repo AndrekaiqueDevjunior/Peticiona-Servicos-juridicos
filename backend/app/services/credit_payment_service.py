@@ -20,14 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 # Catálogo de pacotes adquiridos no checkout via Pagar.me.
-#
-# SISTEMA NOVO: cada pacote libera N créditos UNITÁRIOS de um `credit_kind`
-# específico após confirmação do pagamento. `credit_cents` é mantido como
-# campo legado (mesmo valor que amount_cents) para compatibilidade com
-# código antigo. O que importa para o saldo é:
-#   * credit_units → quantidade de créditos a creditar
-#   * credit_kind  → bolso onde os créditos entram ('common',
-#                    'peticao_express' ou 'recurso_express')
+# Express não é mais pacote avulso — virou upgrade pago no momento do pedido.
 CREDIT_PACKAGES: dict[str, dict] = {
     "essencial": {
         "id": "essencial",
@@ -38,7 +31,7 @@ CREDIT_PACKAGES: dict[str, dict] = {
         "credit_cents": 48000,
         "credit_units": 3,
         "credit_kind": "common",
-        "description": "R$ 480,00 — 3 créditos comuns (R$ 160,00 por serviço).",
+        "description": "R$ 480,00 — 3 créditos (R$ 160,00 por serviço).",
     },
     "profissional": {
         "id": "profissional",
@@ -49,7 +42,7 @@ CREDIT_PACKAGES: dict[str, dict] = {
         "credit_cents": 75000,
         "credit_units": 5,
         "credit_kind": "common",
-        "description": "R$ 750,00 — 5 créditos comuns (R$ 150,00 por serviço).",
+        "description": "R$ 750,00 — 5 créditos (R$ 150,00 por serviço).",
     },
     "estrategico": {
         "id": "estrategico",
@@ -60,29 +53,7 @@ CREDIT_PACKAGES: dict[str, dict] = {
         "credit_cents": 280000,
         "credit_units": 20,
         "credit_kind": "common",
-        "description": "R$ 2.800,00 — 20 créditos comuns (R$ 140,00 por serviço).",
-    },
-    "peticao_express": {
-        "id": "peticao_express",
-        "name": "Crédito Petição Express",
-        "kind": "single",
-        "source": "avulso",
-        "amount_cents": 23000,
-        "credit_cents": 23000,
-        "credit_units": 1,
-        "credit_kind": "peticao_express",
-        "description": "1 crédito para Petição Express (entrega em até 24h).",
-    },
-    "recurso_express": {
-        "id": "recurso_express",
-        "name": "Crédito Recurso Express",
-        "kind": "single",
-        "source": "avulso",
-        "amount_cents": 26000,
-        "credit_cents": 26000,
-        "credit_units": 1,
-        "credit_kind": "recurso_express",
-        "description": "1 crédito para Recurso Express (entrega em até 24h).",
+        "description": "R$ 2.800,00 — 20 créditos (R$ 140,00 por serviço).",
     },
 }
 

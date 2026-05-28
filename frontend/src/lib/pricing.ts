@@ -13,8 +13,7 @@ interface PricingSnapshot {
   planLabels: Record<Exclude<PlanoAtivo, null>, string>;
   avulsoGrupoA: number;
   avulsoGrupoB: number;
-  peticaoExpress: number;
-  recursoExpress: number;
+  expressUpgrade: number;
   loaded: boolean;
 }
 
@@ -26,8 +25,7 @@ const EMPTY_SNAPSHOT: PricingSnapshot = {
   planLabels: { essencial: "", profissional: "", estrategico: "" },
   avulsoGrupoA: 0,
   avulsoGrupoB: 0,
-  peticaoExpress: 0,
-  recursoExpress: 0,
+  expressUpgrade: 0,
   loaded: false,
 };
 
@@ -80,8 +78,7 @@ const derivePricingSnapshot = (
     planLabels: { ...EMPTY_SNAPSHOT.planLabels },
     avulsoGrupoA: 0,
     avulsoGrupoB: 0,
-    peticaoExpress: 0,
-    recursoExpress: 0,
+    expressUpgrade: 0,
     loaded: Boolean(plans && plans.length > 0),
   };
 
@@ -98,16 +95,12 @@ const derivePricingSnapshot = (
     section.items.forEach((item) => {
       const key = `${normalize(item.code)} ${normalize(item.title)} ${sectionKey}`;
       const price = roundCurrency(item.unit_price / 100);
-      const isExpress = key.includes("express");
       const isRecurso = key.includes("recurso");
       const isPeticao = key.includes("peticao") || key.includes("peticoes");
 
-      if (isExpress && isPeticao) {
-        next.peticaoExpress = price;
-        return;
-      }
-      if (isExpress && isRecurso) {
-        next.recursoExpress = price;
+      // Taxa de upgrade Express (servico_express_upgrade)
+      if (item.code === "servico_express_upgrade") {
+        next.expressUpgrade = price;
         return;
       }
       if (isRecurso || sectionKey.includes("recursos")) {
@@ -168,8 +161,7 @@ export const isPricingLoaded = () => pricingSnapshot.loaded;
 
 export const getPrecoAvulsoGrupoA = () => pricingSnapshot.avulsoGrupoA;
 export const getPrecoAvulsoGrupoB = () => pricingSnapshot.avulsoGrupoB;
-export const getPrecoPeticaoExpress = () => pricingSnapshot.peticaoExpress;
-export const getPrecoRecursoExpress = () => pricingSnapshot.recursoExpress;
+export const getPrecoExpressUpgrade = () => pricingSnapshot.expressUpgrade;
 
 // Grupo A — Petição Avulsa padrão / Petição Express
 const GRUPO_A = new Set<string>([
@@ -252,15 +244,9 @@ export const calcularPrecoPedido = (
     }
   }
 
-  // Express é uma taxa separada — não debita da carteira de créditos.
-  let precoExpressUpgrade: number | null = null;
-  if (grupo === "A") {
-    const p = getPrecoPeticaoExpress();
-    if (p > 0) precoExpressUpgrade = p;
-  } else if (grupo === "B") {
-    const p = getPrecoRecursoExpress();
-    if (p > 0) precoExpressUpgrade = p;
-  }
+  // Express é uma taxa de upgrade separada — não debita da carteira de créditos.
+  const p = getPrecoExpressUpgrade();
+  const precoExpressUpgrade = p > 0 ? p : null;
 
   return {
     precoPadrao,

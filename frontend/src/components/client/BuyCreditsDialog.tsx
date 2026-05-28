@@ -171,20 +171,15 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 {services.map((service) => {
-                  const isExpress =
-                    !!service.delivery_label && /24h/i.test(service.delivery_label);
                   return (
                     <div
                       key={service.code}
-                      className={`flex flex-col rounded-lg border bg-card p-4 ${
-                        isExpress ? "border-accent/50" : "border-border"
-                      }`}
+                      className="flex flex-col rounded-lg border bg-card p-4 border-border"
                     >
                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
                         {service.section}
                       </p>
                       <div className="mt-1 flex items-center gap-2">
-                        {isExpress && <Zap className="h-4 w-4 text-accent" />}
                         <h4 className="font-medium text-foreground">{service.title}</h4>
                       </div>
                       <p className="mt-2 font-display text-xl font-semibold text-primary">

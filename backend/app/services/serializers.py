@@ -91,6 +91,15 @@ def serialize_petition(petition) -> dict:
     }
 
 
+def _order_status_label(order) -> str:
+    if (
+        bool(getattr(order, "express_upgrade", False))
+        and getattr(order, "status", None) in ("pendente", "em_andamento")
+    ):
+        return "Express — entrega em 24h"
+    return STATUS_LABELS.get(order.status, order.status.title())
+
+
 def serialize_order(order) -> dict:
     item_titles = [item.title for item in order.items if item.title]
     split_funcionario = int(getattr(order, "split_funcionario", 0) or 0)
@@ -100,7 +109,7 @@ def serialize_order(order) -> dict:
         "id": order.id,
         "reference": order.reference,
         "status": order.status,
-        "status_label": STATUS_LABELS.get(order.status, order.status.title()),
+        "status_label": _order_status_label(order),
         "total_amount": order.total_amount,
         "total_brl": format_brl_from_cents(order.total_amount),
         "client_name": order.user.full_name if getattr(order, "user", None) else None,

@@ -22,13 +22,9 @@ describe("Balance", () => {
             credits_used_brl: "R$ 150,00",
             balances: {
               common: 450,
-              peticao_express: 0,
-              recurso_express: 0,
             },
             totals_by_kind: {
-              common: { credits_in: 600, credits_out: 150 },
-              peticao_express: { credits_in: 0, credits_out: 0 },
-              recurso_express: { credits_in: 0, credits_out: 0 },
+              common: { credits_in: 600, credits_out: 150, balance: 450 },
             },
             movements: [
               {

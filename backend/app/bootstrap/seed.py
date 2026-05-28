@@ -91,22 +91,6 @@ CANONICAL_SERVICES: list[dict] = [
         "delivery_label": "Entrega em até 3 dias úteis",
     },
     {
-        "code": "servico_peticao_express",
-        "section": "Petições",
-        "title": "Petição Express",
-        "description": "Petição jurídica entregue em 24 horas.",
-        "unit_price": 22000,
-        "delivery_label": "Entrega em 24h",
-    },
-    {
-        "code": "servico_recurso_express",
-        "section": "Recursos",
-        "title": "Recurso Express",
-        "description": "Recurso jurídico entregue em 24 horas.",
-        "unit_price": 22000,
-        "delivery_label": "Entrega em 24h",
-    },
-    {
         "code": "servico_express_upgrade",
         "section": "Express",
         "title": "Entrega Express (upgrade)",
