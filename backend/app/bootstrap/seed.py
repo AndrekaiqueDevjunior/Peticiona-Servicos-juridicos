@@ -102,6 +102,7 @@ CANONICAL_SERVICES: list[dict] = [
 
 
 LEGACY_PLAN_CODES = {"starter", "pro"}
+LEGACY_SERVICE_CODES = {"servico_peticao_express", "servico_recurso_express"}
 CANONICAL_SERVICE_CODES = {entry["code"] for entry in CANONICAL_SERVICES}
 
 
@@ -159,6 +160,12 @@ def _deactivate_legacy_plans() -> None:
         plan.is_active = False
 
 
+def _deactivate_legacy_services() -> None:
+    legacy = ServiceCatalogItem.query.filter(ServiceCatalogItem.code.in_(LEGACY_SERVICE_CODES)).all()
+    for service in legacy:
+        service.is_active = False
+
+
 def seed_reference_data() -> None:
     if not Company.query.filter_by(slug="public").first():
         db.session.add(Company(name="Public", slug="public"))
@@ -170,5 +177,7 @@ def seed_reference_data() -> None:
 
     for entry in CANONICAL_SERVICES:
         _upsert_service(entry)
+
+    _deactivate_legacy_services()
 
     db.session.commit()

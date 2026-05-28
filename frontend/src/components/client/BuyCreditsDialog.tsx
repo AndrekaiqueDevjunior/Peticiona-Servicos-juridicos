@@ -52,7 +52,7 @@ export const BuyCreditsDialog = ({ open, onOpenChange }: BuyCreditsDialogProps) 
     catalogData?.catalog.flatMap((section) =>
       section.items.map((item) => ({ ...item, section: section.section })),
     ) ?? []
-  ).filter((s) => s.code !== "servico_express_upgrade");
+  ).filter((s) => !["servico_express_upgrade", "servico_peticao_express", "servico_recurso_express"].includes(s.code));
 
   const goToCheckout = (serviceId: string) => {
     onOpenChange(false);
