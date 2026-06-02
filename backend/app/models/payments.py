@@ -33,6 +33,7 @@ class Order(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
     released_at = db.Column(db.DateTime(timezone=True), nullable=True)
     service_order_id = db.Column(db.Integer, nullable=True, index=True)
+    express_upgrade = db.Column(db.Boolean, nullable=False, default=False)
 
     user = db.relationship("User")
     events = db.relationship("PaymentEvent", back_populates="order", lazy="select")

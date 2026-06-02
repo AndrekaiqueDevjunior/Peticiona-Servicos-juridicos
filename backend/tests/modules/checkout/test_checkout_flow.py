@@ -329,3 +329,68 @@ class TestCheckoutStatus:
 
     def test_anonymous_blocked(self, api_anonymous):
         assert api_anonymous.get("/api/checkout/status/1").status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Express Upgrade as Add-On
+# ---------------------------------------------------------------------------
+
+
+class TestExpressUpgradeAddOn:
+    def test_order_with_express_upgrade_adds_fee(self, api_client):
+        """Express upgrade adiciona R$ 40,00 (4000 centavos) ao valor."""
+        response = api_client.post(
+            "/api/checkout/create-order",
+            json={
+                "service_id": "servico_peticao",
+                "express_upgrade": True,
+                "expected_amount": 22_000,  # 18000 + 4000
+            },
+        )
+        assert response.status_code == 201
+        order = response.get_json()["order"]
+        assert order["amount"] == 22_000
+        assert order["express_upgrade"] is True
+
+    def test_order_without_express_upgrade(self, api_client):
+        """Order sem express_upgrade tem apenas o valor base."""
+        response = api_client.post(
+            "/api/checkout/create-order",
+            json={
+                "service_id": "servico_peticao",
+                "express_upgrade": False,
+                "expected_amount": 18_000,
+            },
+        )
+        assert response.status_code == 201
+        order = response.get_json()["order"]
+        assert order["amount"] == 18_000
+        assert order["express_upgrade"] is False
+
+    def test_express_upgrade_price_validation(self, api_client):
+        """expected_amount deve incluir a taxa express se express_upgrade=true."""
+        response = api_client.post(
+            "/api/checkout/create-order",
+            json={
+                "service_id": "servico_peticao",
+                "express_upgrade": True,
+                "expected_amount": 18_000,  # ERRADO: deveria ser 22_000
+            },
+        )
+        assert response.status_code == 400
+        assert "preço" in response.get_json()["message"].lower()
+
+    def test_express_upgrade_with_plan(self, api_client):
+        """Express upgrade funciona com planos também."""
+        response = api_client.post(
+            "/api/checkout/create-order",
+            json={
+                "service_id": "plano_essencial",
+                "express_upgrade": True,
+                "expected_amount": 52_000,  # 48000 + 4000
+            },
+        )
+        assert response.status_code == 201
+        order = response.get_json()["order"]
+        assert order["amount"] == 52_000
+        assert order["express_upgrade"] is True

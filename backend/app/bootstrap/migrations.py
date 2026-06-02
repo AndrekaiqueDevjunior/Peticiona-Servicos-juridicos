@@ -552,6 +552,17 @@ def _add_orders_service_order_id() -> None:
     )
 
 
+def _add_orders_express_upgrade() -> None:
+    """Adiciona flag express_upgrade para rastrear upgrades express."""
+    if "orders" not in _table_names():
+        return
+    if "express_upgrade" in _column_names("orders"):
+        return
+    _execute(
+        "ALTER TABLE orders ADD COLUMN express_upgrade BOOLEAN NOT NULL DEFAULT FALSE"
+    )
+
+
 def _add_orders_payment_attempts() -> None:
     """Adiciona contador estável de tentativas de pagamento em `orders`.
 
@@ -864,6 +875,7 @@ def run_runtime_migrations() -> None:
     _fix_petition_document_links_timestamps()
     _add_orders_payment_attempts()
     _add_orders_service_order_id()
+    _add_orders_express_upgrade()
     _add_credit_transactions_kind()
     _normalize_credit_transaction_types()
     _harden_credit_transactions_schema()

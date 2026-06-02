@@ -714,6 +714,12 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     if amount < 0:
         raise ValidationError("Valor do serviço inválido.")
 
+    # Express upgrade add-on: R$ 40,00 (4000 centavos)
+    EXPRESS_UPGRADE_CENTS = 4000
+    express_upgrade = bool(data.get("express_upgrade", False))
+    if express_upgrade:
+        amount += EXPRESS_UPGRADE_CENTS
+
     # Validar preço esperado — obrigatório para qualquer serviço pago.
     # Impede que um atacante via curl omita expected_amount e bypasse a
     # conferência de preço. O frontend sempre envia o valor que exibiu ao
@@ -790,6 +796,7 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
         idempotency_key=f"checkout-order-{user.id}-{code}-{uuid4().hex[:16]}",
         company_id=getattr(user, "company_id", None),
         service_order_id=service_order_id,
+        express_upgrade=express_upgrade,
     )
     if amount == 0:
         order.status = "paid"
@@ -804,7 +811,7 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
         entity_id=order.id,
         user=user,
         company_id=order.company_id,
-        metadata={"service_id": code, "amount": amount, "service_order_id": service_order_id},
+        metadata={"service_id": code, "amount": amount, "service_order_id": service_order_id, "express_upgrade": express_upgrade},
     )
     db.session.commit()
     return {"order": serialize_checkout_order(order)}, 201

@@ -46,6 +46,22 @@ export function useContactInfo(): ContactInfo {
     const handler = () => setInfo(getContactInfo());
     window.addEventListener(EVENT, handler);
     window.addEventListener("storage", handler);
+
+    // Sincronizar com servidor na montagem
+    fetch("/api/contact-info")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.email) {
+          setContactInfo({
+            email: data.email,
+            whatsappDisplay: data.whatsappDisplay || data.whatsapp_display || "",
+            whatsappRaw: data.whatsappRaw || data.whatsapp_raw || "",
+          });
+          setInfo(getContactInfo());
+        }
+      })
+      .catch(() => {}); // silenciar erros de fetch
+
     return () => {
       window.removeEventListener(EVENT, handler);
       window.removeEventListener("storage", handler);

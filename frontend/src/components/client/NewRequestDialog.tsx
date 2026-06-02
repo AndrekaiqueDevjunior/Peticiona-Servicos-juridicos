@@ -390,8 +390,10 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
       if (expressUpgrade && result.order?.id) {
         onOpenChange(false);
+        // Ir para o checkout com express_upgrade=true no serviço de petição base
+        // (não para um serviço separado "servico_express_upgrade")
         navigate(
-          `/checkout?service=servico_express_upgrade&service_order_id=${result.order.id}`,
+          `/checkout?service=servico_peticao&service_order_id=${result.order.id}&express_upgrade=true`,
         );
         return;
       }

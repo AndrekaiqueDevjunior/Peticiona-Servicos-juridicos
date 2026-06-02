@@ -143,11 +143,26 @@ export default function AdminProfile() {
 }
 
 function ContactSettingsCard() {
-  const current = useContactInfo();
-  const [email, setEmail] = useState(current.email);
-  const [whatsapp, setWhatsapp] = useState(current.whatsappDisplay);
+  const [email, setEmail] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const onSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    api.admin.settings.contact.get().then((data) => {
+      setEmail(data.email);
+      setWhatsapp(data.whatsappDisplay);
+      setIsLoading(false);
+    }).catch((error) => {
+      console.error("Erro ao carregar contato:", error);
+      const current = useContactInfo();
+      setEmail(current.email);
+      setWhatsapp(current.whatsappDisplay);
+      setIsLoading(false);
+    });
+  }, []);
+
+  const onSave = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedEmail = email.trim();
     const trimmedWhats = whatsapp.trim();
@@ -159,12 +174,25 @@ function ContactSettingsCard() {
       toast({ title: "WhatsApp inválido", variant: "destructive" });
       return;
     }
-    setContactInfo({
-      email: trimmedEmail,
-      whatsappDisplay: trimmedWhats,
-      whatsappRaw: whatsappDisplayToRaw(trimmedWhats),
-    });
-    toast({ title: "Contato atualizado em todo o site." });
+    setIsSaving(true);
+    try {
+      await api.admin.settings.contact.update({
+        email: trimmedEmail,
+        whatsappDisplay: trimmedWhats,
+        whatsappRaw: whatsappDisplayToRaw(trimmedWhats),
+      });
+      setContactInfo({
+        email: trimmedEmail,
+        whatsappDisplay: trimmedWhats,
+        whatsappRaw: whatsappDisplayToRaw(trimmedWhats),
+      });
+      toast({ title: "Contato atualizado em todo o site." });
+    } catch (error) {
+      console.error("Erro ao salvar contato:", error);
+      toast({ title: "Erro ao salvar contato", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

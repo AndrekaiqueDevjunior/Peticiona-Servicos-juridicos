@@ -1038,5 +1038,18 @@ export const api = {
           { method: "POST" },
         ),
     },
+    settings: {
+      contact: {
+        get: () =>
+          request<{ email: string; whatsappDisplay: string; whatsappRaw: string }>(
+            "/admin/settings/contact",
+          ),
+        update: (data: { email: string; whatsappDisplay: string; whatsappRaw: string }) =>
+          request<{ email: string; whatsappDisplay: string; whatsappRaw: string }>(
+            "/admin/settings/contact",
+            { method: "PUT", body: JSON.stringify(data) },
+          ),
+      },
+    },
   },
 };

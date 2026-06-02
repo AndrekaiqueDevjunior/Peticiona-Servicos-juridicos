@@ -479,6 +479,8 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
     total_amount = preview["total_amount"]
 
     from app.core.references import human_reference
+    from app.services.prazos_service import calcular_prazo_entrega
+    from datetime import datetime, timezone
 
     order = ServiceOrder(
         user_id=getattr(user, "id", None),
@@ -491,6 +493,13 @@ def create_order(payload: dict, *, user=None) -> tuple[dict, int]:
     deadline_at = payload.get("deadline_at")
     if deadline_at:
         order.deadline_at = _parse_datetime(deadline_at, field_name="deadline_at")
+    else:
+        # Calcular prazo automaticamente (padrão: avulso = 3 dias úteis)
+        try:
+            order.deadline_at = calcular_prazo_entrega("avulso", datetime.now(timezone.utc))
+        except Exception:
+            # Fallback seguro em caso de erro no cálculo
+            pass
 
     db.session.add(order)
     db.session.flush()

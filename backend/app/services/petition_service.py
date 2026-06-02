@@ -135,6 +135,8 @@ def _create_service_order_for_petition(
         _placeholder_order_reference,
         _preview_service_request,
     )
+    from app.services.prazos_service import calcular_prazo_entrega
+    from datetime import datetime, timezone
 
     preview = _preview_service_request(
         {
@@ -146,8 +148,19 @@ def _create_service_order_for_petition(
     )
 
     # Express: prazo definido após pagamento confirmado pelo webhook.
-    # Comum: prazo definido pelo cliente (opcional).
-    deadline_at = None if express_upgrade else _parse_deadline(payload.get("deadline_at"))
+    # Comum: calcular automaticamente baseado no tipo (defau avulso 3 dias úteis)
+    if express_upgrade:
+        deadline_at = None
+    else:
+        # Tenta usar prazo enviado pelo cliente
+        deadline_at = _parse_deadline(payload.get("deadline_at"))
+        # Se não há prazo customizado, calcular automaticamente (avulso = 3 dias úteis)
+        if deadline_at is None:
+            try:
+                deadline_at = calcular_prazo_entrega("avulso", datetime.now(timezone.utc))
+            except Exception:
+                # Fallback seguro em caso de erro no cálculo
+                pass
 
     # Express aguarda pagamento da taxa; comum vai direto para fila de trabalho.
     status = "pendente_pagamento_express" if express_upgrade else "pendente"

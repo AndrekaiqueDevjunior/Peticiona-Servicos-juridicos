@@ -158,6 +158,7 @@ export default function Checkout() {
   const serviceOrderIdFromQuery = search.get("service_order_id")
     ? Number(search.get("service_order_id"))
     : undefined;
+  const expressUpgradeFromQuery = search.get("express_upgrade") === "true";
 
   const { user } = useAuth();
   const profile = useClientProfile();
@@ -176,6 +177,8 @@ export default function Checkout() {
   const [nextAction, setNextAction] = useState<PaymentNextAction | null>(null);
   const [pollingStopped, setPollingStopped] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [includeExpress, setIncludeExpress] = useState(expressUpgradeFromQuery);
+  const EXPRESS_UPGRADE_CENTS = 4000;
 
   // Buscar dados do serviço/plano da API pública para exibir no resumo
   // antes de criar a ordem (evita discrepância entre modal e checkout).
@@ -321,11 +324,12 @@ export default function Checkout() {
 
   const orderCreatedRef = useRef(false);
 
-  const createOrder = async (serviceId: CheckoutServiceId, expectedAmount?: number, serviceOrderId?: number) => {
+  const createOrder = async (serviceId: CheckoutServiceId, baseAmount?: number, serviceOrderId?: number) => {
     setCreatingOrder(true);
     setErrorMsg(null);
     try {
-      const { order } = await checkoutApi.createOrder(serviceId, expectedAmount, serviceOrderId);
+      const totalAmount = baseAmount ? baseAmount + (includeExpress ? EXPRESS_UPGRADE_CENTS : 0) : undefined;
+      const { order } = await checkoutApi.createOrder(serviceId, totalAmount, serviceOrderId, includeExpress);
       setOrder(order);
       // Atualiza a URL para conter o orderId, para o usuário poder voltar.
       navigate(`/checkout/${order.id}`, { replace: true });
@@ -790,6 +794,29 @@ export default function Checkout() {
 
               <Card>
                 <CardHeader>
+                  <CardTitle className="text-base">Entrega Express</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-muted/30 p-4 transition hover:bg-muted/50">
+                    <input
+                      type="checkbox"
+                      checked={includeExpress}
+                      onChange={(e) => setIncludeExpress(e.target.checked)}
+                      className="h-4 w-4 cursor-pointer"
+                    />
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">Adicionar Entrega Express</p>
+                      <p className="text-xs text-muted-foreground">Entrega em até 24 horas</p>
+                    </div>
+                    <span className="font-semibold text-amber-600 dark:text-amber-400">
+                      +R$ 40,00
+                    </span>
+                  </label>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
                   <CardTitle className="text-base">Forma de pagamento</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -1076,6 +1103,22 @@ export default function Checkout() {
                     </p>
                   </div>
 
+                  {order.express_upgrade && (
+                    <>
+                      <Separator />
+                      <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/30 dark:bg-amber-950/20">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-amber-900 dark:text-amber-100">
+                            Entrega Express
+                          </span>
+                          <span className="font-semibold text-amber-700 dark:text-amber-400">
+                            +R$ 40,00
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   <Separator />
 
                   <div className="flex items-baseline justify-between">
@@ -1327,9 +1370,17 @@ function ConfirmationScreen({
                 {isExpressUpgrade ? "Entrega Express (upgrade)" : (order.service_name || order.service_id)}
               </span>
             </div>
+            {order.express_upgrade && !isExpressUpgrade && (
+              <div className="flex items-center justify-between border-b border-border py-3">
+                <span className="text-muted-foreground">Adicional: Entrega Express</span>
+                <span className="font-semibold text-amber-600 dark:text-amber-400">
+                  R$ 40,00
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between border-b border-border py-3">
               <span className="text-muted-foreground">Valor pago</span>
-              <span className={`font-semibold ${isExpressUpgrade ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              <span className={`font-semibold ${isExpressUpgrade || order.express_upgrade ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                 {formatAmountFromCents(order.amount)}
               </span>
             </div>

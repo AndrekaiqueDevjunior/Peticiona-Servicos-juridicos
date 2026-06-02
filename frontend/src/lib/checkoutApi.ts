@@ -58,6 +58,8 @@ export interface CheckoutOrder {
   /** ISO de quando o crédito foi liberado ao saldo do cliente. Preenchido
    *  pelo _release_order após o pagamento ser confirmado. */
   released_at: string | null;
+  /** Express upgrade add-on foi adicionado a este pedido. */
+  express_upgrade?: boolean;
   /** Dados da cobrança ativa (PIX/boleto) para restaurar após refresh.
    *  Não é devolvido pelo backend atual — o frontend deriva localmente
    *  quando refaz a cobrança. */
@@ -145,10 +147,11 @@ export const checkoutApi = {
     service_id: CheckoutServiceId,
     expected_amount?: number,
     service_order_id?: number,
+    express_upgrade?: boolean,
   ) =>
     request<{ order: CheckoutOrder }>("/checkout/create-order", {
       method: "POST",
-      body: JSON.stringify({ service_id, expected_amount, service_order_id }),
+      body: JSON.stringify({ service_id, expected_amount, service_order_id, express_upgrade }),
     }),
 
   createPayment: (input: {
