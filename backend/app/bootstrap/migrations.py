@@ -858,6 +858,30 @@ def _create_email_events_table() -> None:
     _execute("CREATE INDEX IF NOT EXISTS ix_email_events_event_type ON email_events (event_type)")
 
 
+def _create_platform_settings_table() -> None:
+    """Cria tabela para armazenar configurações globais (contato, etc.)."""
+    if "platform_settings" in _table_names():
+        return
+
+    ts = "TIMESTAMP WITH TIME ZONE" if db.engine.dialect.name == "postgresql" else "DATETIME"
+    pk = "SERIAL PRIMARY KEY" if db.engine.dialect.name == "postgresql" else "INTEGER PRIMARY KEY"
+    now_expr = "NOW()" if db.engine.dialect.name == "postgresql" else "CURRENT_TIMESTAMP"
+
+    _execute(
+        f"""
+        CREATE TABLE platform_settings (
+            id {pk},
+            key VARCHAR(80) NOT NULL UNIQUE,
+            value TEXT NOT NULL,
+            created_at {ts} NOT NULL DEFAULT {now_expr},
+            updated_at {ts} NOT NULL DEFAULT {now_expr}
+        )
+        """
+    )
+    if db.engine.dialect.name == "postgresql":
+        _execute("CREATE INDEX idx_platform_settings_key ON platform_settings(key)")
+
+
 def run_runtime_migrations() -> None:
     _acquire_runtime_migrations_lock()
     _add_user_columns()
@@ -884,4 +908,5 @@ def run_runtime_migrations() -> None:
     _audit_users_missing_admin_fields()
     _create_email_events_table()
     _reset_orphan_processing_orders()
+    _create_platform_settings_table()
     db.session.commit()
