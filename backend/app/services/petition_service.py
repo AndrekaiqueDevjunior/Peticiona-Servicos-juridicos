@@ -162,8 +162,9 @@ def _create_service_order_for_petition(
                 # Fallback seguro em caso de erro no cálculo
                 pass
 
-    # Express aguarda pagamento da taxa; comum vai direto para fila de trabalho.
-    status = "pendente_pagamento_express" if express_upgrade else "pendente"
+    # Express é um upgrade aplicável em qualquer serviço via checkout
+    # Não há status especial — o upgrade é apenas um add-on de R$40 no checkout
+    status = "pendente"
 
     order = ServiceOrder(
         user_id=user.id,

@@ -326,10 +326,11 @@ def _finalize_express_service_order(order: Order) -> None:
             order.service_order_id,
         )
         return
-    if service_order.status != "pendente_pagamento_express":
+    # Se já tem express_upgrade, significa que já foi processado
+    if service_order.express_upgrade:
         return
+    # Marcar como express confirmado e preencher prazo (24h para express)
     service_order.express_upgrade = True
-    service_order.status = "pendente"
     service_order.deadline_at = utcnow() + timedelta(hours=24)
     log_action(
         action="order.express_upgrade_confirmed",
@@ -349,7 +350,8 @@ def _cancel_express_service_order(order: Order, *, reason: str) -> None:
     service_order = db.session.get(ServiceOrder, order.service_order_id)
     if service_order is None:
         return
-    if service_order.status != "pendente_pagamento_express":
+    # Se já foi cancelado, não fazer nada
+    if service_order.status == "cancelado":
         return
     debit = (
         CreditTransaction.query
@@ -745,7 +747,7 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
                 f"Valor atual: {format_brl_from_cents(amount)}"
             )
 
-    # Vincular ao ServiceOrder para upgrades Express
+    # Vincular ao ServiceOrder para upgrades Express (express_upgrade=true)
     service_order_id = data.get("service_order_id")
     linked_service_order = None
     if service_order_id is not None:
@@ -758,8 +760,9 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
         ).first()
         if linked_service_order is None:
             raise ValidationError("Pedido de serviço não encontrado.")
-        if linked_service_order.status != "pendente_pagamento_express":
-            raise ValidationError("Este pedido não está aguardando pagamento Express.")
+        # Express upgrade deve vir com express_upgrade=true
+        if not express_upgrade:
+            raise ValidationError("Serviço vinculado requer upgrade Express (express_upgrade=true).")
         # Idempotência: retorna checkout existente para o mesmo service_order.
         # Inclui 'paid' para não criar duplicata quando o webhook ainda não
         # finalizou o ServiceOrder mas a Order já está paga.
