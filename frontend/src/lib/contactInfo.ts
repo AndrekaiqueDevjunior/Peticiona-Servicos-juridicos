@@ -40,27 +40,33 @@ export function whatsappDisplayToRaw(display: string): string {
 }
 
 export function useContactInfo(): ContactInfo {
+  // Inicializa com localStorage, mas será sobrescrito pelo fetch
   const [info, setInfo] = useState<ContactInfo>(() => getContactInfo());
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     const handler = () => setInfo(getContactInfo());
     window.addEventListener(EVENT, handler);
     window.addEventListener("storage", handler);
 
-    // Sincronizar com servidor na montagem
+    // Sempre sincronizar com servidor na montagem (maior prioridade que localStorage)
     fetch("/api/contact-info")
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (data?.email) {
-          setContactInfo({
+          const serverData: ContactInfo = {
             email: data.email,
             whatsappDisplay: data.whatsappDisplay || data.whatsapp_display || "",
             whatsappRaw: data.whatsappRaw || data.whatsapp_raw || "",
-          });
-          setInfo(getContactInfo());
+          };
+          setContactInfo(serverData);
+          setInfo(serverData);
         }
+        setLoaded(true);
       })
-      .catch(() => {}); // silenciar erros de fetch
+      .catch(() => {
+        setLoaded(true); // continuar mesmo com erro
+      });
 
     return () => {
       window.removeEventListener(EVENT, handler);
