@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_STATUSES = {"paid", "failed", "canceled", "refunded"}
 PAYMENT_METHODS = {"credit_card", "pix", "boleto"}
+EXPRESS_UPGRADE_CENTS = 4000
 
 
 def utcnow():
@@ -725,8 +726,6 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     if amount < 0:
         raise ValidationError("Valor do serviço inválido.")
 
-    # Express upgrade add-on: R$ 40,00 (4000 centavos)
-    EXPRESS_UPGRADE_CENTS = 4000
     express_upgrade = bool(data.get("express_upgrade", False))
     if express_upgrade:
         amount += EXPRESS_UPGRADE_CENTS
