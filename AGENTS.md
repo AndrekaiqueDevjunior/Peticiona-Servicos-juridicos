@@ -213,7 +213,42 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 
 ---
 
-## 11. Padrões de logs e auditoria
+## 11. Padrões de deploy na VPS
+
+> **Regra obrigatória:** `docker compose restart` **NÃO é deploy**. Ele recria o container com
+> a imagem antiga — o código novo nunca entra. Toda mudança de código exige rebuild da imagem.
+
+### Comando canônico (único correto):
+
+```bash
+# Deploya tudo (backend + frontend)
+make deploy
+
+# Só backend (mais comum)
+make deploy-backend
+
+# Só frontend
+make deploy-frontend
+```
+
+O `make deploy` executa `scripts/deploy.sh`, que faz em ordem:
+1. `git pull origin main` na VPS
+2. `docker compose up -d --build --no-deps <serviço>` — rebuild obrigatório
+3. Healthcheck em `https://peticiona.app.br/api/health` até HTTP 200
+4. Smoke test básico
+
+### Nunca usar para deploy:
+
+```bash
+# ❌ ERRADO — roda imagem antiga, código novo não entra
+docker compose restart backend
+docker compose restart
+docker compose up -d   # sem --build
+```
+
+---
+
+## 12. Padrões de logs e auditoria
 
 - Ações críticas (pagamento, crédito/débito, reembolso, mudança de status de pedido, mudança de
   role/perfil, reset de senha, eventos de webhook) registram **auditoria** (`models/audit.py`,
