@@ -349,10 +349,10 @@ def _insert(params: _WriteParams) -> CreditTransaction:
     db.session.add(tx)
     db.session.flush()
 
-    # Defesa em profundidade: se algum bug nosso (ou um INSERT cru de
-    # outro lugar fora deste módulo) deixou o saldo negativo, fail-fast
-    # antes de continuar. Não substitui o gate acima — complementa.
-    if not params.allow_negative_balance:
+    # Defesa em profundidade: só aplica a débitos (OUT). Créditos num
+    # saldo preexistente negativo são válidos (o saldo melhora); proibir
+    # o crédito impediria o usuário de pagar e receber créditos de volta.
+    if not params.allow_negative_balance and params.ttype == _TYPE_OUT:
         final = compute_balance(params.user_id, kind=params.kind)
         if final < 0:
             raise LedgerCorruption(
