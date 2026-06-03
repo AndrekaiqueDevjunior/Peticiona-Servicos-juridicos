@@ -28,6 +28,16 @@ backend-dev:
 frontend-dev:
 	cd frontend && npm run dev
 
+smoke-vps:
+	@SMOKE_EMAIL=$${SMOKE_EMAIL:-clarissanjosino@gmail.com} \
+	 SMOKE_PASSWORD=$${SMOKE_PASSWORD} \
+	 python3 scripts/smoke_vps.py --url https://peticiona.app.br
+
+smoke-local:
+	@SMOKE_EMAIL=$${SMOKE_EMAIL:-clarissanjosino@gmail.com} \
+	 SMOKE_PASSWORD=$${SMOKE_PASSWORD} \
+	 python3 scripts/smoke_vps.py --url http://localhost:5000
+
 lint-frontend:
 	cd frontend && npm run lint
 
