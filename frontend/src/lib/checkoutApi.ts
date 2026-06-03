@@ -183,6 +183,12 @@ export const checkoutApi = {
       body: JSON.stringify(input),
     }),
 
+  updateExpressUpgrade: (orderId: string, express_upgrade: boolean) =>
+    request<{ order: CheckoutOrder }>(`/client-area/checkout-orders/${encodeURIComponent(orderId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ express_upgrade }),
+    }),
+
   getStatus: (orderId: string) =>
     request<{ order: CheckoutOrder }>(`/checkout/status/${encodeURIComponent(orderId)}`),
 

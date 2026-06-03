@@ -131,6 +131,15 @@ def update_user_checkout_order(user, order_id: object, payload: dict) -> dict:
         # Permite ajustar quantidade somente quando service_id NÃO muda — derivado do catálogo.
         raise ValidationError("Para alterar valor, envie service_id (preço deriva do catálogo).")
 
+    if "express_upgrade" in data:
+        want_express = bool(data["express_upgrade"])
+        if want_express != bool(order.express_upgrade):
+            # Isola o valor base (sem express) para somar/subtrair de forma idempotente.
+            base_amount = int(order.amount) - (EXPRESS_UPGRADE_CENTS if order.express_upgrade else 0)
+            order.amount = base_amount + (EXPRESS_UPGRADE_CENTS if want_express else 0)
+            order.express_upgrade = want_express
+            changed.append("express_upgrade")
+
     if not changed:
         raise ValidationError("Nenhum campo editável foi enviado.")
 
