@@ -34,7 +34,6 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "@/hooks/use-toast";
 
 import { useAuth } from "@/lib/auth";
-import { useClientProfile } from "@/lib/clientProfile";
 import { api } from "@/lib/api";
 import {
   CheckoutApiError,
@@ -161,7 +160,6 @@ export default function Checkout() {
   const expressUpgradeFromQuery = search.get("express_upgrade") === "true";
 
   const { user } = useAuth();
-  const profile = useClientProfile();
 
   const [order, setOrder] = useState<CheckoutOrder | null>(null);
   const [loadingOrder, setLoadingOrder] = useState(false);
@@ -230,13 +228,10 @@ export default function Checkout() {
   }, [serviceFromQuery, order?.service_id]);
 
   const [buyer, setBuyer] = useState<BuyerForm>({
-    fullName: profile.fullName || user?.full_name || "",
-    email: profile.email || user?.email || "",
-    // Fallback para user.cpf/phone (vindos do /api/me): o profile local é um
-    // mock keyed por id fixo "c1" — sem isso CPF/telefone ficam vazios mesmo
-    // quando o backend já tem esses dados do cliente.
-    cpf: profile.cpf || user?.cpf || "",
-    phone: profile.phone || user?.phone || "",
+    fullName: user?.full_name || "",
+    email: user?.email || "",
+    cpf: user?.cpf || "",
+    phone: user?.phone || "",
   });
   const [buyerErrors, setBuyerErrors] = useState<Partial<Record<keyof BuyerForm, string>>>({});
   const [billingAddress, setBillingAddress] = useState<BillingAddressForm>({
@@ -280,15 +275,16 @@ export default function Checkout() {
     return () => window.clearTimeout(timer);
   }, [retryCooldownLeft]);
 
-  // Sincroniza com perfil quando ele carregar.
+  // Preenche campos do comprador quando o user carrega (vem do /api/me).
   useEffect(() => {
+    if (!user) return;
     setBuyer((prev) => ({
-      fullName: prev.fullName || profile.fullName || user?.full_name || "",
-      email: prev.email || profile.email || user?.email || "",
-      cpf: prev.cpf || profile.cpf || user?.cpf || "",
-      phone: prev.phone || profile.phone || user?.phone || "",
+      fullName: prev.fullName || user.full_name || "",
+      email: prev.email || user.email || "",
+      cpf: prev.cpf || user.cpf || "",
+      phone: prev.phone || user.phone || "",
     }));
-  }, [profile, user]);
+  }, [user]);
 
   // Pré-preenche endereço de cobrança a partir do user (vem do /api/me).
   // Pagar.me exige billing_address em pagamentos de cartão; melhor já trazer
