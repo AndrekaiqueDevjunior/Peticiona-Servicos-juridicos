@@ -22,7 +22,8 @@ def get_balance(user) -> dict:
     balances = compute_balances(user.id)
     totals_common = compute_totals(user.id, kind=KIND_COMMON)
 
-    credits_available = balances[KIND_COMMON]
+    credits_available_raw = balances[KIND_COMMON]
+    credits_available = max(0, credits_available_raw)
     credits_total = totals_common["credits_in"]
     credits_used = totals_common["credits_out"]
 
