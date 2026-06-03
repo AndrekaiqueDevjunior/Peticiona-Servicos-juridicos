@@ -91,6 +91,7 @@ const Auth = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       maxLength={255}
+                      autoComplete="username"
                       required
                     />
                   </div>
@@ -115,6 +116,7 @@ const Auth = () => {
                       className="pl-9"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
                       required
                     />
                   </div>

@@ -118,3 +118,21 @@ def calcular_prazo_interno(prazo_cliente: datetime) -> datetime:
     O prazo interno é sempre 2 dias corridos antes do prazo do cliente.
     """
     return prazo_cliente - timedelta(days=2)
+
+
+_PLAN_CODE_TO_MODALIDADE: dict[str, str] = {
+    "plano_essencial": "essencial",
+    "plano_profissional": "profissional",
+    "plano_estrategico": "estrategico",
+}
+
+
+def modalidade_para_prazo(user) -> str:
+    """Retorna a modalidade de prazo conforme o plano ativo do usuário.
+
+    Sem plano ou plano desconhecido → 'avulso' (3 dias úteis).
+    """
+    plan = getattr(user, "active_plan", None)
+    if plan is None:
+        return "avulso"
+    return _PLAN_CODE_TO_MODALIDADE.get(getattr(plan, "code", ""), "avulso")

@@ -135,7 +135,7 @@ def _create_service_order_for_petition(
         _placeholder_order_reference,
         _preview_service_request,
     )
-    from app.services.prazos_service import calcular_prazo_entrega
+    from app.services.prazos_service import calcular_prazo_entrega, modalidade_para_prazo
     from datetime import datetime, timezone
 
     preview = _preview_service_request(
@@ -157,7 +157,7 @@ def _create_service_order_for_petition(
         # Se não há prazo customizado, calcular automaticamente (avulso = 3 dias úteis)
         if deadline_at is None:
             try:
-                deadline_at = calcular_prazo_entrega("avulso", datetime.now(timezone.utc))
+                deadline_at = calcular_prazo_entrega(modalidade_para_prazo(user), datetime.now(timezone.utc))
             except Exception:
                 # Fallback seguro em caso de erro no cálculo
                 pass
