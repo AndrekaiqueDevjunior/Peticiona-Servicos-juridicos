@@ -150,7 +150,13 @@ export default function AdminOrders() {
                       </span>
                     </TableCell>
                     <TableCell className="text-sm">{o.valor_brl}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{o.prazo_cliente ?? "—"}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {o.prazo_cliente
+                        ? o.prazo_cliente
+                        : o.express_upgrade
+                          ? <span className="text-amber-600 font-medium">⚡ 24h após pagamento</span>
+                          : "—"}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="icon" onClick={() => setSelectedId(o.id)}>
                         <Search className="h-4 w-4" />
@@ -659,7 +665,10 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
             <Field label="Tipo" value={order.tipo_servico} />
             <Field label="Cliente" value={order.cliente} />
             <Field label="Valor" value={order.valor_brl} />
-            <Field label="Prazo cliente" value={order.prazo_cliente ?? "—"} />
+            <Field
+              label="Prazo cliente"
+              value={order.prazo_cliente ?? (order.express_upgrade ? "⚡ 24h após pagamento express" : "—")}
+            />
             <Field label="Criado em" value={order.criado_em} />
             <Field label="Finalizado em" value={order.finalizado_em ?? "—"} />
             {order.split_plataforma != null && (

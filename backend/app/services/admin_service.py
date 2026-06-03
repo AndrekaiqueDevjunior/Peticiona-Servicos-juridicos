@@ -128,6 +128,7 @@ def _serialize_order(order: ServiceOrder) -> dict:
         "funcionario": order.staff_user.full_name if order.staff_user else None,
         "prazo_cliente": _format_date(order.deadline_at),
         "prazo_cliente_iso": order.deadline_at.isoformat() if order.deadline_at else None,
+        "express_upgrade": bool(getattr(order, "express_upgrade", False)),
         "valor": order.total_amount,
         "valor_brl": format_brl_from_cents(order.total_amount),
         "criado_em": _format_datetime(order.created_at),
