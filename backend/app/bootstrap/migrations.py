@@ -758,7 +758,7 @@ def _backfill_missing_order_debits() -> None:
     insert_prefix = "INSERT INTO" if db.engine.dialect.name == "postgresql" else "INSERT OR IGNORE INTO"
 
     _execute(f"""
-        {insert_prefix} credit_transactions (user_id, company_id, type, source, amount, description, created_at, updated_at)
+        {insert_prefix} credit_transactions (user_id, company_id, type, source, amount, description, kind, created_at, updated_at)
         SELECT
             so.user_id,
             so.company_id,
@@ -766,6 +766,7 @@ def _backfill_missing_order_debits() -> None:
             'client_order' as source,
             so.total_amount as amount,
             'Debito - ' || so.reference || ' (Servico juridico)' as description,
+            'common' as kind,
             COALESCE(so.created_at, {now_expr}) as created_at,
             COALESCE(so.updated_at, {now_expr}) as updated_at
         FROM service_orders so

@@ -397,6 +397,18 @@ def create_admin_order(actor, payload: dict) -> dict:
     from app.core.references import human_reference
 
     admin_provided_ref = str(payload.get("numero") or "").strip()
+    deadline_at = _parse_datetime(payload.get("prazo_cliente"), field_name="prazo_cliente")
+
+    # Se admin não informou prazo, calcular automaticamente (padrão: avulso 3 dias úteis)
+    if deadline_at is None:
+        try:
+            from app.services.prazos_service import calcular_prazo_entrega
+            from datetime import datetime, timezone
+            deadline_at = calcular_prazo_entrega("avulso", datetime.now(timezone.utc))
+        except Exception:
+            # Fallback seguro em caso de erro no cálculo
+            pass
+
     order = ServiceOrder(
         user_id=client.id,
         company_id=client.company_id,
@@ -404,7 +416,7 @@ def create_admin_order(actor, payload: dict) -> dict:
         reference=admin_provided_ref or _placeholder_admin_order_reference(),
         status=status,
         total_amount=total_amount,
-        deadline_at=_parse_datetime(payload.get("prazo_cliente"), field_name="prazo_cliente"),
+        deadline_at=deadline_at,
         completed_at=_parse_datetime(payload.get("finalizado_em"), field_name="finalizado_em"),
         split_plataforma=split_plataforma,
         split_funcionario=split_funcionario,

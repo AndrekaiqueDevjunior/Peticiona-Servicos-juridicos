@@ -150,12 +150,14 @@ function ContactSettingsCard() {
 
   useEffect(() => {
     api.admin.settings.contact.get().then((data) => {
+      console.log("✅ Contato carregado da API:", data);
       setEmail(data.email);
       setWhatsapp(data.whatsappDisplay);
       setIsLoading(false);
     }).catch((error) => {
-      console.error("Erro ao carregar contato:", error);
+      console.error("❌ Erro ao carregar contato:", error);
       const current = useContactInfo();
+      console.log("↪️ Usando fallback do localStorage:", current);
       setEmail(current.email);
       setWhatsapp(current.whatsappDisplay);
       setIsLoading(false);

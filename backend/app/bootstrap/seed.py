@@ -94,8 +94,8 @@ CANONICAL_SERVICES: list[dict] = [
         "code": "servico_express_upgrade",
         "section": "Express",
         "title": "Entrega Express (upgrade)",
-        "description": "Taxa de upgrade para entrega do serviço em até 24 horas.",
-        "unit_price": 9900,
+        "description": "Taxa de upgrade para entrega do serviço em até 24 horas (sempre +R$40).",
+        "unit_price": 4000,
         "delivery_label": "Entrega em 24h",
     },
 ]

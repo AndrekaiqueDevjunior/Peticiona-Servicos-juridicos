@@ -197,7 +197,7 @@ export function useContactInfo() {
    - Criação/edição/exclusão
    - Operações críticas
 
-3. **Nunca mockar** se backend real existe
+3. **Nunca mockar** se backend real existe ou não,  nunca mockar features no UI / UX
 
 4. **Sempre ter**:
    - Loading state
@@ -488,7 +488,7 @@ Seguir esta ordem:
 ## 10. Checklist de Integração Frontend + Backend
 
 ### Frontend
-- [ ] Usa API real ou mock?
+- [ ] Usa API real ou mock? se mock, usar API REAL IMEDIATAMENTE
 - [ ] localStorage usado indevidamente?
 - [ ] Form envia todos campos necessários?
 - [ ] Payload bate com schema backend?
@@ -508,7 +508,7 @@ Seguir esta ordem:
 - [ ] Validação de permissão?
 - [ ] Tratamento de erro?
 - [ ] Serialização de resposta correta?
-
+- [ ] Testes Unitários Passaram ?
 ### Banco
 - [ ] Tabela existe?
 - [ ] Campos batem com frontend?
