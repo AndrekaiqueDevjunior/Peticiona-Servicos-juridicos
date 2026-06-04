@@ -230,6 +230,14 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Chave de idempotência: estável por "tentativa de pedido". Sobrevive a
+  // double-click e a retries após erro; só é renovada quando o formulário é
+  // limpo (reset) — aí passa a valer para um pedido novo.
+  const idempotencyKeyRef = useRef<string | null>(null);
+  if (idempotencyKeyRef.current === null) {
+    idempotencyKeyRef.current = crypto.randomUUID();
+  }
+
   // Toggle de upgrade Express — quando ativo, o pedido é redirecionado para checkout separado
   const [expressUpgrade, setExpressUpgrade] = useState(false);
 
@@ -338,6 +346,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
     setComentarios([]);
     setNovoComentario("");
     setSuccess(false);
+    // Novo formulário = nova tentativa lógica → nova chave de idempotência.
+    idempotencyKeyRef.current = crypto.randomUUID();
   };
 
   // Cancelar = mantém rascunho (apenas fecha o modal sem reset).
@@ -381,6 +391,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         partes: partes.map((parte) => ({ nome: parte.nome, tipo: parte.tipo })),
         document_ids: uploadedDocuments.documents.map((document) => document.id),
         express_upgrade: expressUpgrade || undefined,
+        idempotency_key: idempotencyKeyRef.current ?? undefined,
       });
 
       queryClient.invalidateQueries({ queryKey: ["petitions"] });

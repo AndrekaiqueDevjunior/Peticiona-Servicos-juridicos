@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.errors import PermissionDenied, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
@@ -35,6 +37,20 @@ def _validate_document_ids(user, document_ids: list[int]) -> list[Document]:
 
 
 
+def _existing_petition_response(petition: Petition) -> dict:
+    """Resposta para um submit já processado (idempotência)."""
+    order = (
+        ServiceOrder.query.filter_by(petition_id=petition.id)
+        .order_by(ServiceOrder.id.desc())
+        .first()
+    )
+    return {
+        "message": "Petição já registrada.",
+        "petition": serialize_petition(petition),
+        "order": serialize_order(order) if order is not None else None,
+    }
+
+
 def create_petition(user, payload: dict) -> dict:
     area_direito = (payload.get("area_direito") or "").strip()
     if not area_direito:
@@ -43,6 +59,18 @@ def create_petition(user, payload: dict) -> dict:
     parties = payload.get("partes") or []
     if not isinstance(parties, list) or not parties:
         raise ValidationError("Informe ao menos uma parte.")
+
+    # Idempotência do submit: se o frontend reenviar a MESMA chave (double-click,
+    # retry de rede), devolvemos o pedido já criado em vez de duplicar/debitar 2x.
+    idempotency_key = (payload.get("idempotency_key") or "").strip() or None
+    if idempotency_key:
+        existing = (
+            scoped_query(Petition, user)
+            .filter(Petition.idempotency_key == idempotency_key)
+            .first()
+        )
+        if existing is not None:
+            return _existing_petition_response(existing)
 
     ensure_plan_allows_new_petition(user)
     documents = _validate_document_ids(user, [int(item) for item in payload.get("document_ids", [])])
@@ -65,6 +93,7 @@ def create_petition(user, payload: dict) -> dict:
         resumo_caso=(payload.get("resumo_caso") or "").strip() or None,
         detalhes=(payload.get("detalhes") or "").strip() or None,
         status="pendente",
+        idempotency_key=idempotency_key,
     )
     db.session.add(petition)
     db.session.flush()
@@ -108,7 +137,22 @@ def create_petition(user, payload: dict) -> dict:
         user=user,
         metadata={"reference": petition.reference, "status": petition.status},
     )
-    db.session.commit()
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Corrida: dois submits idênticos passaram pela checagem inicial e o
+        # segundo bateu no índice único. Rollback desfaz INSERTs + débito desta
+        # transação; devolvemos o pedido vencedor.
+        db.session.rollback()
+        if idempotency_key:
+            winner = (
+                scoped_query(Petition, user)
+                .filter(Petition.idempotency_key == idempotency_key)
+                .first()
+            )
+            if winner is not None:
+                return _existing_petition_response(winner)
+        raise
     return {
         "message": "Petição criada com sucesso.",
         "petition": serialize_petition(petition),

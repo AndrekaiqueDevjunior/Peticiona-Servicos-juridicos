@@ -23,6 +23,10 @@ class Petition(BaseModel, TimestampMixin, CompanyScopedMixin, db.Model):
     resumo_caso = db.Column(db.Text, nullable=True)
     detalhes = db.Column(db.Text, nullable=True)
     status = db.Column(db.String(30), nullable=False, default="pendente", index=True)
+    # Chave de idempotência do submit (UUID gerado pelo frontend por tentativa de
+    # criação). Garante que double-click / retry de rede não crie pedido duplicado
+    # nem debite crédito duas vezes. Unique global (UUID); NULL para legados.
+    idempotency_key = db.Column(db.String(80), nullable=True, unique=True, index=True)
 
     user = db.relationship("User", back_populates="petitions")
     parties = db.relationship(

@@ -419,17 +419,26 @@ def _add_audit_log_columns() -> None:
 
 
 def _add_petition_columns() -> None:
-    """Garante colunas opcionais (competencia/comarca_uf) na tabela petitions."""
+    """Garante colunas opcionais (competencia/comarca_uf/idempotency_key)."""
     if "petitions" not in _table_names():
         return
     columns = _column_names("petitions")
     statements = {
         "competencia": "ALTER TABLE petitions ADD COLUMN competencia VARCHAR(160)",
         "comarca_uf": "ALTER TABLE petitions ADD COLUMN comarca_uf VARCHAR(120)",
+        "idempotency_key": "ALTER TABLE petitions ADD COLUMN idempotency_key VARCHAR(80)",
     }
     for name, sql in statements.items():
         if name not in columns:
             _execute(sql)
+
+    # Índice único garante idempotência mesmo sob dois submits concorrentes:
+    # o segundo INSERT estoura IntegrityError e o serviço devolve o existente.
+    if "idempotency_key" in _column_names("petitions"):
+        _execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_petitions_idempotency_key "
+            "ON petitions (idempotency_key)"
+        )
 
 
 def _fix_petition_document_links_timestamps() -> None:

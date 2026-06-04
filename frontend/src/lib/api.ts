@@ -130,6 +130,8 @@ export interface PetitionPayload {
   partes: PetitionParty[];
   document_ids: number[];
   express_upgrade?: boolean;
+  /** UUID por tentativa de submit — backend deduplica double-click/retry. */
+  idempotency_key?: string;
 }
 
 export interface DashboardData {

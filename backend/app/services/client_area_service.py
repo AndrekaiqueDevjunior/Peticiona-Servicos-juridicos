@@ -277,6 +277,20 @@ def preview_service_request(payload: dict) -> dict:
 
 
 def list_orders(user) -> dict:
+    # Rebaixa, de forma preguiçosa, pedidos Express não pagos que passaram da
+    # carência (sem cron): o cliente que abandona o pagamento Express passa a
+    # ter o pedido com prazo PADRÃO em vez de ficar preso sem prazo.
+    try:
+        from app.services.checkout_service import expire_stale_express_orders
+
+        expire_stale_express_orders(user)
+    except Exception:  # nunca quebrar a listagem por causa do fallback
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "expire_stale_express_orders_failed user_id=%s", getattr(user, "id", None)
+        )
+
     orders = scoped_query(ServiceOrder, user).order_by(ServiceOrder.created_at.desc()).all()
     return {"orders": [serialize_order(order) for order in orders]}
 

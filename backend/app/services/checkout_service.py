@@ -337,10 +337,12 @@ def _finalize_express_service_order(order: Order) -> None:
             order.service_order_id,
         )
         return
-    # Se já tem express_upgrade, significa que já foi processado
-    if service_order.express_upgrade:
-        return
-    # Marcar como express confirmado e preencher prazo (24h para express)
+    # Marca como express confirmado e preenche o prazo (24h para express).
+    # A idempotência é garantida em _release_order, que só chama esta função
+    # enquanto order.released_at ainda é None — por isso NÃO devemos retornar
+    # cedo quando express_upgrade já é True (no novo fluxo o pedido nasce com
+    # express_upgrade=True/deadline=None, e era isso que impedia o prazo de 24h
+    # de ser aplicado ao confirmar o pagamento).
     service_order.express_upgrade = True
     service_order.deadline_at = utcnow() + timedelta(hours=24)
     log_action(
@@ -410,8 +412,11 @@ def _release_order(order: Order) -> None:
     # finalizar pedidos legados pendentes. NOVO sistema usa créditos express
     # pré-comprados, sem service_order_id no checkout.
     if getattr(order, "service_order_id", None):
-        _finalize_express_service_order(order)
-        order.released_at = order.released_at or utcnow()
+        # Finaliza o express uma única vez (idempotência por released_at):
+        # replay de webhook não re-aplica o prazo de 24h.
+        if not order.released_at:
+            _finalize_express_service_order(order)
+            order.released_at = utcnow()
         return
 
     kind, units = _credit_release_for_order(order)
@@ -476,6 +481,101 @@ def recover_paid_checkout_credits(user) -> int:
     if recovered:
         db.session.commit()
     return recovered
+
+
+# Janela de carência (a partir da criação do pedido) antes de um Express não
+# pago ser rebaixado para entrega padrão. Alinha com a validade típica de
+# PIX/boleto, dando tempo de pagar por qualquer método.
+EXPRESS_FALLBACK_GRACE_HOURS = 24
+
+
+def _has_paid_express_checkout(service_order_id: int) -> bool:
+    """Há um checkout express PAGO para este ServiceOrder?
+
+    Só consideramos 'paid' (confirmado pelo webhook/gateway). Um checkout
+    apenas 'processing' (PIX/boleto emitido mas não pago) não bloqueia o
+    rebaixamento — se for pago depois, _finalize_express_service_order
+    reaplica as 24h normalmente.
+    """
+    return (
+        Order.query.filter(
+            Order.service_order_id == service_order_id,
+            Order.status == "paid",
+        ).first()
+        is not None
+    )
+
+
+def _apply_express_fallback(service_order) -> bool:
+    """Rebaixa um Express não pago para entrega PADRÃO após a carência.
+
+    Mantém o pedido pendente e o crédito já consumido (é um pedido real),
+    grava o prazo padrão contado da criação e remove a flag express (para o
+    badge "Express 24h" não enganar). Idempotente: só age quando
+    express_upgrade=True e deadline_at é None.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from app.services.prazos_service import calcular_prazo_entrega, modalidade_para_prazo
+
+    if not getattr(service_order, "express_upgrade", False):
+        return False
+    if service_order.deadline_at is not None:
+        return False
+    if service_order.status in {"cancelado", "concluido"}:
+        return False
+    created = service_order.created_at
+    if created is None:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    if utcnow() - created < timedelta(hours=EXPRESS_FALLBACK_GRACE_HOURS):
+        return False
+    if _has_paid_express_checkout(service_order.id):
+        return False
+
+    owner = service_order.user or db.session.get(User, service_order.user_id)
+    try:
+        modalidade = modalidade_para_prazo(owner) if owner is not None else "avulso"
+        service_order.deadline_at = calcular_prazo_entrega(modalidade, created)
+    except Exception:
+        logger.exception(
+            "express_fallback_deadline_failed service_order_id=%s", service_order.id
+        )
+        return False
+    service_order.express_upgrade = False
+    log_action(
+        action="order.express_fallback_to_standard",
+        entity_type="service_order",
+        entity_id=service_order.id,
+        user=None,
+        metadata={"reference": service_order.reference},
+    )
+    return True
+
+
+def expire_stale_express_orders(user=None) -> int:
+    """Aplica o fallback de Express a pedidos elegíveis (de um user ou global).
+
+    Chamado de forma preguiçosa quando o cliente lista seus pedidos e também
+    pode ser disparado em varreduras administrativas. Idempotente.
+    """
+    from app.models.orders import ServiceOrder
+
+    query = ServiceOrder.query.filter(
+        ServiceOrder.express_upgrade.is_(True),
+        ServiceOrder.deadline_at.is_(None),
+    )
+    if user is not None:
+        query = query.filter(ServiceOrder.user_id == user.id)
+
+    changed = 0
+    for service_order in query.all():
+        if _apply_express_fallback(service_order):
+            changed += 1
+    if changed:
+        db.session.commit()
+    return changed
 
 
 def _reverse_released_order(order: Order, *, reason: str) -> None:
