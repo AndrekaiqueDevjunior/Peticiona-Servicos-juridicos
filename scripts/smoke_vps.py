@@ -78,6 +78,9 @@ class Session:
     def patch(self, path: str, json: dict | None = None, **kw) -> requests.Response:
         return self._session.patch(f"{self.base}{path}", json=json, headers=self._headers(), timeout=15, **kw)
 
+    def delete(self, path: str, **kw) -> requests.Response:
+        return self._session.delete(f"{self.base}{path}", headers=self._headers(), timeout=15, **kw)
+
     def login(self, email: str, password: str) -> bool:
         r = self.post("/api/auth/login", json={"email": email, "password": password})
         if r.status_code == 200:
@@ -142,7 +145,7 @@ def test_balance(s: Session) -> None:
     section("5. Saldo")
     r = s.get("/api/me/balance")
     if r.status_code == 200:
-        b = r.json().get("balance", {})
+        b = r.json().get("balances", {})
         ok(f"GET /api/me/balance → common={b.get('common',0)} crédito(s)")
     else:
         fail("GET /api/me/balance falhou", f"status={r.status_code}")
@@ -169,9 +172,9 @@ def test_prazo_pedidos_existentes(s: Session, role: str) -> None:
         orders = r.json().get("orders", []) if r.status_code == 200 else []
         rota = "/api/admin/orders"
     else:
-        r = s.get("/api/orders")
+        r = s.get("/api/client-area/orders")
         orders = r.json().get("orders", []) if r.status_code == 200 else []
-        rota = "/api/orders"
+        rota = "/api/client-area/orders"
 
     if r.status_code != 200:
         fail(f"GET {rota} falhou", f"status={r.status_code} body={r.text[:200]}")
@@ -203,7 +206,7 @@ def test_prazo_peticao(s: Session, role: str) -> str | None:
     section("7. Prazo ao criar nova petição")
 
     r = s.get("/api/me/balance")
-    saldo = r.json().get("balance", {}).get("common", 0) if r.status_code == 200 else 0
+    saldo = r.json().get("balances", {}).get("common", 0) if r.status_code == 200 else 0
 
     if saldo == 0:
         ok("Sem créditos disponíveis — pulando criação (use cliente com crédito para testar)")
@@ -244,7 +247,7 @@ def test_prazo_express(s: Session, role: str) -> str | None:
     section("8. Prazo express (deve ser None até pagamento)")
 
     r = s.get("/api/me/balance")
-    saldo = r.json().get("balance", {}).get("common", 0) if r.status_code == 200 else 0
+    saldo = r.json().get("balances", {}).get("common", 0) if r.status_code == 200 else 0
 
     if saldo == 0:
         ok("Sem créditos — pulando teste express")
@@ -274,7 +277,7 @@ def test_prazo_express(s: Session, role: str) -> str | None:
 
 def test_list_orders(s: Session, role: str) -> None:
     section("9. Listagem de pedidos")
-    rota = "/api/admin/orders" if role == "admin" else "/api/orders"
+    rota = "/api/admin/orders" if role == "admin" else "/api/client-area/orders"
     r = s.get(rota)
     if r.status_code == 200:
         orders = r.json().get("orders", [])
@@ -288,12 +291,12 @@ def cleanup_orders(s: Session, order_ids: list[int | str]) -> None:
     for oid in order_ids:
         if oid is None:
             continue
-        r = s.patch(f"/api/orders/{oid}", json={"status": "cancelado"})
+        r = s.delete(f"/api/client-area/orders/{oid}")
         if r.status_code in (200, 204):
             ok(f"Pedido {oid} cancelado")
         else:
             # Tentar via admin se cliente não puder
-            r2 = s.patch(f"/api/admin/orders/{oid}", json={"status": "cancelado"})
+            r2 = s.delete(f"/api/admin/orders/{oid}")
             if r2.status_code in (200, 204):
                 ok(f"Pedido {oid} cancelado via admin")
             else:
