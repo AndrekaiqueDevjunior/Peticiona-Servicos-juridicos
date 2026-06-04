@@ -49,7 +49,7 @@ class TestCreateCheckoutOrder:
     def test_client_creates_order_for_seeded_plan(self, api_client):
         response = api_client.post(
             "/api/checkout/create-order",
-            json={"service_id": "plano_essencial"},
+            json={"service_id": "plano_essencial", "expected_amount": 48_000},
         )
         assert response.status_code == 201, response.get_json()
         body = response.get_json()
@@ -61,7 +61,7 @@ class TestCreateCheckoutOrder:
     def test_client_creates_order_for_avulso_service(self, api_client):
         response = api_client.post(
             "/api/checkout/create-order",
-            json={"service_id": "servico_peticao"},
+            json={"service_id": "servico_peticao", "expected_amount": 18_000},
         )
         assert response.status_code == 201
         body = response.get_json()
@@ -84,13 +84,13 @@ class TestCreateCheckoutOrder:
         reaproveita o pedido pendente."""
         first = api_client.post(
             "/api/checkout/create-order",
-            json={"service_id": "plano_essencial"},
+            json={"service_id": "plano_essencial", "expected_amount": 48_000},
         )
         order_id = first.get_json()["order"]["id"]
 
         second = api_client.post(
             "/api/checkout/create-order",
-            json={"service_id": "plano_essencial"},
+            json={"service_id": "plano_essencial", "expected_amount": 48_000},
         )
         assert second.status_code == 200, "Pedido pendente existente deve retornar 200"
         assert second.get_json()["order"]["id"] == order_id
@@ -119,8 +119,11 @@ class TestCreateCheckoutOrder:
 
 class TestCreateCheckoutPayment:
     def _create_order(self, api_client, service_id="plano_essencial"):
+        amounts = {"plano_essencial": 48_000, "servico_peticao": 18_000}
+        expected = amounts.get(service_id, 48_000)
         resp = api_client.post(
-            "/api/checkout/create-order", json={"service_id": service_id}
+            "/api/checkout/create-order",
+            json={"service_id": service_id, "expected_amount": expected},
         )
         return resp.get_json()["order"]
 
@@ -280,7 +283,8 @@ class TestCreateCheckoutPayment:
 
         # cliente A cria o pedido
         first = api(client_user).post(
-            "/api/checkout/create-order", json={"service_id": "plano_essencial"}
+            "/api/checkout/create-order",
+            json={"service_id": "plano_essencial", "expected_amount": 48_000},
         ).get_json()["order"]
 
         # cliente B (outro) tenta pagar — _get_user_order escopa por user_id
@@ -317,7 +321,8 @@ class TestCreateCheckoutPayment:
 class TestCheckoutStatus:
     def test_returns_order_state(self, api_client, fake_pagarme):
         first = api_client.post(
-            "/api/checkout/create-order", json={"service_id": "plano_essencial"}
+            "/api/checkout/create-order",
+            json={"service_id": "plano_essencial", "expected_amount": 48_000},
         ).get_json()["order"]
 
         response = api_client.get(f"/api/checkout/status/{first['id']}")

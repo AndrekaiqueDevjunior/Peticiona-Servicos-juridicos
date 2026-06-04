@@ -126,7 +126,7 @@ class TestCreatePetitionWithoutCredit:
 
 
 class TestCreateExpressPetition:
-    """POST express → débita 1 crédito common e cria ordem com pendente_pagamento_express."""
+    """POST express → débita 1 crédito common e cria ordem com express_upgrade=True."""
 
     def test_express_debits_common_credit(self, api, client_user, db):
         credit_ledger.credit(
@@ -157,7 +157,7 @@ class TestCreateExpressPetition:
         body = response.get_json()
         order = body["order"]
         assert order["express_upgrade"] is True
-        assert order["status"] == "pendente_pagamento_express"
+        assert order["status"] == "pendente"
         assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
 
     def test_express_with_grupo_b_also_debits_common(self, api, client_user, db):
@@ -189,7 +189,7 @@ class TestCreateExpressPetition:
         body = response.get_json()
         order = body["order"]
         assert order["express_upgrade"] is True
-        assert order["status"] == "pendente_pagamento_express"
+        assert order["status"] == "pendente"
         assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
 
     def test_express_without_common_credit_returns_error(self, api, client_user, db):

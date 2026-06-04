@@ -95,6 +95,7 @@ def serialize_checkout_order(order: Order) -> dict:
         "updated_at": order.updated_at.isoformat(),
         "paid_at": order.paid_at.isoformat() if order.paid_at else None,
         "released_at": order.released_at.isoformat() if order.released_at else None,
+        "express_upgrade": bool(getattr(order, "express_upgrade", False)),
     }
 
 

@@ -66,7 +66,7 @@ class TestCreditFlowCommonService:
 
 
 class TestExpressDebitsCommon:
-    """Express upgrade débita 1 crédito common e cria ordem pendente_pagamento_express."""
+    """Express upgrade débita 1 crédito common e cria ordem com express_upgrade=True."""
 
     def test_express_debits_common_credit(self, api_client, client_user, db):
         credit_ledger.credit(
@@ -95,7 +95,8 @@ class TestExpressDebitsCommon:
 
         assert response.status_code == 201, response.get_json()
         body = response.get_json()
-        assert body["order"]["status"] == "pendente_pagamento_express"
+        assert body["order"]["status"] == "pendente"
+        assert body["order"]["express_upgrade"] is True
         assert credit_ledger.compute_balance(client_user.id, kind=credit_ledger.KIND_COMMON) == 0
 
     def test_express_grupo_b_also_debits_common(self, api_client, client_user, db):
