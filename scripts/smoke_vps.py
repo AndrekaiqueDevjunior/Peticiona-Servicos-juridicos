@@ -182,10 +182,13 @@ def test_prazo_pedidos_existentes(s: Session, role: str) -> None:
 
     ok(f"GET {rota} → {len(orders)} pedido(s) retornados")
 
-    # Verifica que pedidos não-express têm deadline_at definido
-    sem_prazo = [o for o in orders if not o.get("express_upgrade") and not o.get("deadline_at") and not o.get("prazo_cliente")]
-    com_prazo = [o for o in orders if o.get("deadline_at") or o.get("prazo_cliente")]
-    express_pendente = [o for o in orders if o.get("express_upgrade") and not (o.get("deadline_at") or o.get("prazo_cliente"))]
+    # Verifica que pedidos ATIVOS não-express têm deadline_at definido.
+    # Status terminais (cancelado/concluído) legitimamente podem não ter prazo.
+    TERMINAIS = {"cancelado", "concluido"}
+    ativos = [o for o in orders if o.get("status") not in TERMINAIS]
+    sem_prazo = [o for o in ativos if not o.get("express_upgrade") and not o.get("deadline_at") and not o.get("prazo_cliente")]
+    com_prazo = [o for o in ativos if o.get("deadline_at") or o.get("prazo_cliente")]
+    express_pendente = [o for o in ativos if o.get("express_upgrade") and not (o.get("deadline_at") or o.get("prazo_cliente"))]
 
     if com_prazo:
         ok(f"{len(com_prazo)} pedido(s) com prazo definido ✓")
