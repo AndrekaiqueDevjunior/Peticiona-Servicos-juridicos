@@ -238,9 +238,10 @@ def _create_service_order_for_petition(
             )
         )
 
-    # Débito: sempre 1 crédito comum, independente de express_upgrade.
-    # O upgrade Express é cobrado separadamente via checkout/pagamento.
-    if user is not None:
+    # Débito de crédito:
+    # - Express: NÃO debita agora. Será debitado após pagamento confirmado pelo webhook.
+    # - Padrão: Debita imediatamente (pedido é real e não precisa de checkout).
+    if not express_upgrade and user is not None:
         service_title = petition.tipo_peticao or petition.area_direito or "Serviço jurídico"
         description = f"Débito — {order.reference} ({service_title})"
         try:

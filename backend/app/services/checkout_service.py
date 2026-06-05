@@ -326,8 +326,14 @@ def _credit_amount_for_order(order: Order) -> int:
 
 
 def _finalize_express_service_order(order: Order) -> None:
-    """Finaliza o ServiceOrder vinculado quando o pagamento express é confirmado."""
+    """Finaliza o ServiceOrder vinculado quando o pagamento express é confirmado.
+
+    Responsabilidades:
+    1. Aplica prazo de 24h corridas
+    2. Debita 1 crédito common do saldo do cliente
+    """
     from app.models.orders import ServiceOrder
+    from app.services import credit_ledger
 
     service_order = db.session.get(ServiceOrder, order.service_order_id)
     if service_order is None:
@@ -337,6 +343,12 @@ def _finalize_express_service_order(order: Order) -> None:
             order.service_order_id,
         )
         return
+
+    owner = service_order.user or db.session.get(User, service_order.user_id)
+    if owner is None:
+        logger.warning("express_service_order_owner_missing service_order_id=%s", service_order.id)
+        return
+
     # Marca como express confirmado e preenche o prazo (24h para express).
     # A idempotência é garantida em _release_order, que só chama esta função
     # enquanto order.released_at ainda é None — por isso NÃO devemos retornar
@@ -345,6 +357,30 @@ def _finalize_express_service_order(order: Order) -> None:
     # de ser aplicado ao confirmar o pagamento).
     service_order.express_upgrade = True
     service_order.deadline_at = utcnow() + timedelta(hours=24)
+
+    # Débito do crédito common: só acontece quando o pagamento express é confirmado.
+    # Idempotência por order-debit-{reference}: retry de webhook não duplica.
+    try:
+        credit_ledger.debit(
+            owner,
+            amount=1,
+            source="client_order",
+            description=f"Débito — {service_order.reference} (Express confirmado)",
+            idempotency_key=f"order-debit-{service_order.reference}",
+            kind=credit_ledger.KIND_COMMON,
+        )
+    except credit_ledger.InsufficientBalance as exc:
+        # Neste ponto, o pagamento já foi confirmado pelo gateway, então não podemos
+        # recusar. Registramos como erro e retornamos para suporte humano revisar.
+        logger.error(
+            "express_insufficient_balance_after_payment service_order_id=%s user_id=%s available=%s",
+            service_order.id,
+            owner.id,
+            exc.available,
+        )
+        # Mesmo assim, prosseguimos com o prazo — melhor entregar o serviço
+        # com saldo negativo do que reter o pedido indefinidamente.
+
     log_action(
         action="order.express_upgrade_confirmed",
         entity_type="service_order",
