@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, FileText, Inbox, Loader2, Search } from "lucide-react";
+import { CalendarClock, FileText, Inbox, Loader2, Search, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -174,6 +174,12 @@ function StaffOrderRow({ order, onOpen }: { order: StaffOrder; onOpen: () => voi
             Prazo: {formatDT(order.deadline_at)}
             {!concluido && sufixo}
           </p>
+          {order.express_upgrade && (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+              <Zap className="h-3 w-3" />
+              Express — prioridade máxima
+            </span>
+          )}
         </div>
       </div>
 

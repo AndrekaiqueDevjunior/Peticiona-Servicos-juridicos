@@ -225,30 +225,29 @@ export default function Orders() {
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {order.express_upgrade && (
+                    {order.express_upgrade && order.deadline_at && (
                       <span className="inline-flex w-fit items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                         <Zap className="h-3 w-3" />
                         Express 24h
                       </span>
                     )}
-                    {order.status === "pendente_pagamento_express" && (
+                    {order.express_upgrade && !order.deadline_at && (
                       <span className="inline-flex w-fit items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-900/30 dark:text-orange-300">
+                        <Zap className="h-3 w-3" />
                         Aguardando pgto. Express
                       </span>
                     )}
-                    {order.status !== "pendente_pagamento_express" && (
-                      <span className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
-                        {order.status_label || order.status}
-                      </span>
-                    )}
-                    {order.status === "pendente_pagamento_express" && (
+                    <span className="inline-flex w-fit items-center rounded-full bg-secondary px-3 py-1 text-xs font-medium text-foreground">
+                      {order.status_label || order.status}
+                    </span>
+                    {order.express_upgrade && !order.deadline_at && (
                       <Button
                         type="button"
                         size="sm"
                         className="bg-amber-500 text-white hover:bg-amber-600"
                         onClick={() =>
                           navigate(
-                            `/checkout?service=servico_express_upgrade&service_order_id=${order.id}`,
+                            `/checkout?service=servico_peticao&service_order_id=${order.id}&express_upgrade=true`,
                           )
                         }
                       >

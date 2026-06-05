@@ -92,11 +92,10 @@ def serialize_petition(petition) -> dict:
 
 
 def _order_status_label(order) -> str:
-    if (
-        bool(getattr(order, "express_upgrade", False))
-        and getattr(order, "status", None) in ("pendente", "em_andamento")
-    ):
-        return "Express — entrega em 24h"
+    if bool(getattr(order, "express_upgrade", False)) and getattr(order, "status", None) in ("pendente", "em_andamento"):
+        if getattr(order, "deadline_at", None) is not None:
+            return "Express — entrega em 24h"
+        return "Express — aguardando pagamento"
     return STATUS_LABELS.get(order.status, order.status.title())
 
 

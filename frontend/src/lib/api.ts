@@ -279,6 +279,7 @@ export interface AdminOrder {
   finalizado_em_iso: string | null;
   split_plataforma: number | null;
   split_funcionario: number | null;
+  express_upgrade: boolean;
   petition: Petition | null;
 }
 
@@ -300,6 +301,7 @@ export interface StaffOrder {
   split_funcionario: number;
   staff_payout_cents: number;
   staff_payout_brl: string;
+  express_upgrade: boolean;
   items: { code: string; title: string; quantity: number; unit_price: number; line_total: number }[];
 }
 
