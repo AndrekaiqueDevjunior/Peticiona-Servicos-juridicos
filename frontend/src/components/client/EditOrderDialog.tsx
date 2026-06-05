@@ -326,7 +326,7 @@ export function EditOrderDialog({
               {statusCfg && (
                 <Badge variant="outline" className={cn("flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium", statusCfg.className)}>
                   {statusCfg.icon}
-                  {displayOrder?.status_label ?? statusCfg.label}
+                  {statusCfg.label}
                 </Badge>
               )}
               {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
@@ -346,6 +346,36 @@ export function EditOrderDialog({
         </DialogHeader>
 
         <Separator />
+
+        {/* ── Banner CTA Express pendente (topo) ── */}
+        {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
+          <div className="flex flex-col gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:bg-amber-950/20">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-amber-400 p-2 text-white">
+                <Zap className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-100">
+                  Pagamento Express pendente
+                </p>
+                <p className="text-sm text-amber-800 dark:text-amber-200">
+                  Finalize o checkout de <strong>R$ 40,00</strong> para garantir entrega em até 24 horas.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => {
+                onOpenChange(false);
+                navigate(`/checkout?service=servico_peticao&service_order_id=${displayOrder.id}&express_upgrade=true`);
+              }}
+            >
+              <Zap className="mr-2 h-4 w-4" />
+              Finalizar pagamento Express — R$ 40,00
+            </Button>
+          </div>
+        )}
 
         <div className="space-y-8 pt-2">
 
@@ -647,7 +677,20 @@ export function EditOrderDialog({
 
           {/* ── Ações ── */}
           <Separator />
-          <div className="flex justify-end">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
+              <Button
+                type="button"
+                className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => {
+                  onOpenChange(false);
+                  navigate(`/checkout?service=servico_peticao&service_order_id=${displayOrder.id}&express_upgrade=true`);
+                }}
+              >
+                <Zap className="mr-2 h-4 w-4" />
+                Finalizar pagamento Express — R$ 40,00
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               <X className="mr-2 h-4 w-4" />
               Fechar
