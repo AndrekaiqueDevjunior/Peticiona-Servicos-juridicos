@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
+  Zap,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -22,8 +23,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { api, ApiError, type UploadedDocument, type OrderComment } from "@/lib/api";
+import { checkoutApi, CheckoutApiError } from "@/lib/checkoutApi";
 import {
   Dialog,
   DialogContent,
@@ -177,10 +180,34 @@ export function EditOrderDialog({
   const [uploading, setUploading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [updatingExpress, setUpdatingExpress] = useState(false);
+  const [expressUpgrade, setExpressUpgrade] = useState(order?.express_upgrade ?? false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const petition = order?.petition ?? null;
   const statusCfg = order ? (STATUS_CONFIG[order.status] ?? null) : null;
+
+  const handleToggleExpress = async (checked: boolean) => {
+    if (!order || updatingExpress) return;
+    setExpressUpgrade(checked);
+    setUpdatingExpress(true);
+    try {
+      await checkoutApi.updateExpressUpgrade(String(order.id), checked);
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      toast({
+        title: checked ? "Express ativado" : "Express desativado",
+        description: checked
+          ? "Você será redirecionado ao checkout para pagar a taxa de entrega Express."
+          : "O pedido voltou para entrega padrão.",
+      });
+    } catch (err) {
+      setExpressUpgrade(!checked);
+      const msg = err instanceof CheckoutApiError ? err.message : "Não foi possível atualizar Express.";
+      toast({ title: "Erro", description: msg, variant: "destructive" });
+    } finally {
+      setUpdatingExpress(false);
+    }
+  };
 
   const commentsQuery = useQuery({
     queryKey: ["order-comments", order?.id],
@@ -282,6 +309,60 @@ export function EditOrderDialog({
               />
             </div>
           </section>
+
+          {/* ── Toggle Express ── */}
+          {order && order.status === "pendente" && (
+            <>
+              <Separator />
+              <section className="space-y-3">
+                <div
+                  className={cn(
+                    "flex flex-col gap-3 rounded-lg border-2 p-4 transition-colors",
+                    expressUpgrade
+                      ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20"
+                      : "border-border bg-muted/20",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={cn(
+                          "mt-0.5 rounded-full p-1.5",
+                          expressUpgrade ? "bg-amber-400 text-white" : "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        <Zap className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">
+                          Desejo entrega Express{" "}
+                          <span className="font-normal text-muted-foreground text-sm">
+                            (até 24 horas)
+                          </span>
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-0.5">
+                          Seu pedido terá prioridade máxima e será entregue em até 24 horas.
+                          Taxa: R$ 40,00 (pago no checkout).
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={expressUpgrade}
+                      onCheckedChange={handleToggleExpress}
+                      disabled={updatingExpress}
+                      aria-label="Ativar entrega Express"
+                    />
+                  </div>
+
+                  {expressUpgrade && (
+                    <div className="rounded-md border border-amber-300 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                      <strong>Atenção:</strong> ao ativar, você será redirecionado ao checkout para pagar a taxa de entrega Express.
+                    </div>
+                  )}
+                </div>
+              </section>
+            </>
+          )}
 
           {/* ── Dados da petição ── */}
           {petition && (
