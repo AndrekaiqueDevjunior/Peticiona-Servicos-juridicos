@@ -281,12 +281,26 @@ export function EditOrderDialog({
                 {order?.reference} — {order?.service_type}
               </p>
             </div>
-            {statusCfg && (
-              <Badge variant="outline" className={cn("flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium", statusCfg.className)}>
-                {statusCfg.icon}
-                {order?.status_label ?? statusCfg.label}
-              </Badge>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {statusCfg && (
+                <Badge variant="outline" className={cn("flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium", statusCfg.className)}>
+                  {statusCfg.icon}
+                  {order?.status_label ?? statusCfg.label}
+                </Badge>
+              )}
+              {order?.express_upgrade && !order?.deadline_at && (
+                <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
+                  <Zap className="h-3.5 w-3.5" />
+                  Express — pagamento pendente
+                </Badge>
+              )}
+              {order?.express_upgrade && order?.deadline_at && (
+                <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
+                  <Zap className="h-3.5 w-3.5" />
+                  Express — entrega em 24h
+                </Badge>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
@@ -308,7 +322,7 @@ export function EditOrderDialog({
               />
               <InfoField
                 label="Data do pedido"
-                value={order?.created_at ? format(parseISO(order.created_at), "dd/MM/yyyy", { locale: ptBR }) : undefined}
+                value={order?.created_at ? format(parseISO(order.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : undefined}
               />
             </div>
           </section>
