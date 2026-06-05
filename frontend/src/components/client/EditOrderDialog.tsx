@@ -189,8 +189,49 @@ export function EditOrderDialog({
     setExpressUpgrade(order?.express_upgrade ?? false);
   }, [order?.id, order?.express_upgrade]);
 
-  const petition = order?.petition ?? null;
-  const statusCfg = order ? (STATUS_CONFIG[order.status] ?? null) : null;
+  // Polling para detectar confirmação de pagamento Express.
+  // Só ativa quando express_upgrade=true e deadline_at=null (não pago).
+  const isExpressPending = !!(order?.express_upgrade && !order?.deadline_at);
+  const prevDeadlineRef = useRef<string | null>(order?.deadline_at ?? null);
+
+  const { data: liveOrder } = useQuery({
+    queryKey: ["order-live", order?.id],
+    queryFn: async () => {
+      const { order: o } = await api.clientArea.getOrder(order!.id);
+      return o;
+    },
+    enabled: open && !!order?.id && isExpressPending,
+    refetchInterval: 5000,
+  });
+
+  // Detecta a transição null → deadline_at (pagamento confirmado).
+  useEffect(() => {
+    if (!liveOrder) return;
+    if (!liveOrder.deadline_at) {
+      prevDeadlineRef.current = null;
+      return;
+    }
+    if (prevDeadlineRef.current === null) {
+      prevDeadlineRef.current = liveOrder.deadline_at;
+      toast({
+        title: "Express confirmado!",
+        description: "Prioridade máxima ativada. Entrega em até 24 horas.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["client-service-orders"] });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveOrder?.deadline_at]);
+
+  // Reseta a ref quando outro pedido abre.
+  useEffect(() => {
+    prevDeadlineRef.current = order?.deadline_at ?? null;
+  }, [order?.id]);
+
+  // Usa dado ao vivo se disponível, cai no prop caso contrário.
+  const displayOrder = liveOrder ?? order;
+
+  const petition = displayOrder?.petition ?? null;
+  const statusCfg = displayOrder ? (STATUS_CONFIG[displayOrder.status] ?? null) : null;
 
   const handleToggleExpress = (checked: boolean) => {
     if (!order) return;
@@ -285,16 +326,16 @@ export function EditOrderDialog({
               {statusCfg && (
                 <Badge variant="outline" className={cn("flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium", statusCfg.className)}>
                   {statusCfg.icon}
-                  {order?.status_label ?? statusCfg.label}
+                  {displayOrder?.status_label ?? statusCfg.label}
                 </Badge>
               )}
-              {order?.express_upgrade && !order?.deadline_at && (
+              {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
                 <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
                   <Zap className="h-3.5 w-3.5" />
                   Express — pagamento pendente
                 </Badge>
               )}
-              {order?.express_upgrade && order?.deadline_at && (
+              {displayOrder?.express_upgrade && displayOrder?.deadline_at && (
                 <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
                   <Zap className="h-3.5 w-3.5" />
                   Express — entrega em 24h
@@ -314,11 +355,11 @@ export function EditOrderDialog({
               Informações do pedido
             </h3>
             <div className="grid gap-4 sm:grid-cols-3">
-              <InfoField label="Referência" value={order?.reference} />
-              <InfoField label="Valor" value={order?.total_brl} />
+              <InfoField label="Referência" value={displayOrder?.reference} />
+              <InfoField label="Valor" value={displayOrder?.total_brl} />
               <InfoField
                 label="Prazo de entrega"
-                value={order?.deadline_at ? format(parseISO(order.deadline_at), "dd/MM/yyyy", { locale: ptBR }) : undefined}
+                value={displayOrder?.deadline_at ? format(parseISO(displayOrder.deadline_at), "dd/MM/yyyy", { locale: ptBR }) : undefined}
               />
               <InfoField
                 label="Data do pedido"
