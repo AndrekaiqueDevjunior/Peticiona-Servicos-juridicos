@@ -867,6 +867,11 @@ def create_checkout_order(user, payload: dict) -> tuple[dict, int]:
     if express_upgrade:
         amount += EXPRESS_UPGRADE_CENTS
 
+    # Express upgrade on an existing service order: only R$40 is charged.
+    # The base service was already paid via credit at service order creation.
+    if data.get("service_order_id") is not None and express_upgrade:
+        amount = EXPRESS_UPGRADE_CENTS
+
     # Validar preço esperado — obrigatório para qualquer serviço pago.
     # Impede que um atacante via curl omita expected_amount e bypasse a
     # conferência de preço. O frontend sempre envia o valor que exibiu ao

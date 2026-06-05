@@ -326,7 +326,10 @@ export default function Checkout() {
     setCreatingOrder(true);
     setErrorMsg(null);
     try {
-      const totalAmount = baseAmount ? baseAmount + (includeExpress ? EXPRESS_UPGRADE_CENTS : 0) : undefined;
+      const isExpressOnly = !!serviceOrderId && includeExpress;
+      const totalAmount = isExpressOnly
+        ? EXPRESS_UPGRADE_CENTS
+        : baseAmount ? baseAmount + (includeExpress ? EXPRESS_UPGRADE_CENTS : 0) : undefined;
       const { order } = await checkoutApi.createOrder(serviceId, totalAmount, serviceOrderId, includeExpress);
       setOrder(order);
       // Atualiza a URL para conter o orderId, para o usuário poder voltar.
