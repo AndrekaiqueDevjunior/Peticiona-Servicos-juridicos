@@ -446,26 +446,6 @@ export default function Checkout() {
     };
   }, [order, pollingStopped]);
 
-  // ---------- Express upgrade toggle ---------------------------------------
-
-  const [updatingExpress, setUpdatingExpress] = useState(false);
-
-  const handleToggleExpress = async (checked: boolean) => {
-    if (!order || updatingExpress) return;
-    setIncludeExpress(checked);
-    setUpdatingExpress(true);
-    try {
-      const { order: updated } = await checkoutApi.updateExpressUpgrade(order.id, checked);
-      setOrder(updated);
-    } catch {
-      // Reverte o estado local se o backend rejeitar
-      setIncludeExpress(!checked);
-      toast({ title: "Não foi possível atualizar entrega express.", variant: "destructive" });
-    } finally {
-      setUpdatingExpress(false);
-    }
-  };
-
   // ---------- Submit -------------------------------------------------------
 
   const handlePay = async () => {
@@ -807,32 +787,6 @@ export default function Checkout() {
                       <p className="text-xs text-destructive">{buyerErrors.phone}</p>
                     )}
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Entrega Express</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <label className={`flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-muted/30 p-4 transition hover:bg-muted/50 ${updatingExpress ? "opacity-60 cursor-wait" : ""}`}>
-                    <input
-                      type="checkbox"
-                      checked={includeExpress}
-                      disabled={updatingExpress}
-                      onChange={(e) => void handleToggleExpress(e.target.checked)}
-                      className="h-4 w-4 cursor-pointer"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">Adicionar Entrega Express</p>
-                      <p className="text-xs text-muted-foreground">
-                        {updatingExpress ? "Atualizando..." : "Entrega em até 24 horas"}
-                      </p>
-                    </div>
-                    <span className="font-semibold text-amber-600 dark:text-amber-400">
-                      +R$ 40,00
-                    </span>
-                  </label>
                 </CardContent>
               </Card>
 
