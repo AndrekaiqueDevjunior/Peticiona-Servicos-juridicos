@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Download,
   Eye,
@@ -26,7 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { api, ApiError, type UploadedDocument, type OrderComment } from "@/lib/api";
-import { checkoutApi, CheckoutApiError } from "@/lib/checkoutApi";
+import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -176,36 +176,39 @@ export function EditOrderDialog({
   onOpenChange,
   onUploadDocuments,
 }: EditOrderDialogProps) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [updatingExpress, setUpdatingExpress] = useState(false);
   const [expressUpgrade, setExpressUpgrade] = useState(order?.express_upgrade ?? false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Sincroniza estado local quando o pedido muda (ex: abrir modal com outro pedido)
+  useEffect(() => {
+    setExpressUpgrade(order?.express_upgrade ?? false);
+  }, [order?.id, order?.express_upgrade]);
 
   const petition = order?.petition ?? null;
   const statusCfg = order ? (STATUS_CONFIG[order.status] ?? null) : null;
 
-  const handleToggleExpress = async (checked: boolean) => {
-    if (!order || updatingExpress) return;
-    setExpressUpgrade(checked);
-    setUpdatingExpress(true);
-    try {
-      await checkoutApi.updateExpressUpgrade(String(order.id), checked);
-      queryClient.invalidateQueries({ queryKey: ["orders"] });
-      toast({
-        title: checked ? "Express ativado" : "Express desativado",
-        description: checked
-          ? "Você será redirecionado ao checkout para pagar a taxa de entrega Express."
-          : "O pedido voltou para entrega padrão.",
-      });
-    } catch (err) {
-      setExpressUpgrade(!checked);
-      const msg = err instanceof CheckoutApiError ? err.message : "Não foi possível atualizar Express.";
-      toast({ title: "Erro", description: msg, variant: "destructive" });
-    } finally {
-      setUpdatingExpress(false);
+  const handleToggleExpress = (checked: boolean) => {
+    if (!order) return;
+    if (checked) {
+      // Redireciona para o checkout express vinculado a este service_order
+      onOpenChange(false);
+      navigate(`/checkout?service=servico_peticao&service_order_id=${order.id}&express_upgrade=true`);
+    } else {
+      // Só permite desativar se ainda não foi pago (express_order_id = null)
+      if (order.express_order_id) {
+        toast({
+          title: "Express já pago",
+          description: "O pagamento Express já foi confirmado e não pode ser desativado.",
+          variant: "destructive",
+        });
+        return;
+      }
+      setExpressUpgrade(false);
     }
   };
 
@@ -349,7 +352,6 @@ export function EditOrderDialog({
                     <Switch
                       checked={expressUpgrade}
                       onCheckedChange={handleToggleExpress}
-                      disabled={updatingExpress}
                       aria-label="Ativar entrega Express"
                     />
                   </div>
