@@ -1311,7 +1311,7 @@ function ConfirmationScreen({
   onGoToBalance: () => void;
   onGoToOrders?: () => void;
 }) {
-  const isExpressUpgrade = order.service_id === "servico_express_upgrade";
+  const isExpressUpgrade = order.service_id === "servico_express_upgrade" || !!order.express_upgrade;
 
   const paidAt = order.paid_at
     ? new Date(order.paid_at).toLocaleString("pt-BR", {
