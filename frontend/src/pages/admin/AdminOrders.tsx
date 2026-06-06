@@ -198,6 +198,8 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
     tipoPeticao: "",
     numeroProcesso: "",
     dataPublicacao: "",
+    competencia: "",
+    comarcaUf: "",
     justicaGratuita: false,
     tutelaUrgencia: false,
     advogadoSubscritor: "",
@@ -243,6 +245,8 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
       tipoPeticao: order.petition?.tipo_peticao ?? "",
       numeroProcesso: order.petition?.numero_processo ?? "",
       dataPublicacao: order.petition?.data_publicacao ?? "",
+      competencia: order.petition?.competencia ?? "",
+      comarcaUf: order.petition?.comarca_uf ?? "",
       justicaGratuita: !!order.petition?.justica_gratuita,
       tutelaUrgencia: !!order.petition?.tutela_urgencia,
       advogadoSubscritor: order.petition?.advogado_subscritor ?? "",
@@ -433,6 +437,8 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
               tipo_peticao: petitionForm.tipoPeticao.trim() || null,
               numero_processo: petitionForm.numeroProcesso.trim() || null,
               data_publicacao: petitionForm.dataPublicacao.trim() || null,
+              competencia: petitionForm.competencia.trim() || null,
+              comarca_uf: petitionForm.comarcaUf.trim() || null,
               justica_gratuita: petitionForm.justicaGratuita,
               tutela_urgencia: petitionForm.tutelaUrgencia,
               advogado_subscritor: petitionForm.advogadoSubscritor.trim() || null,
@@ -710,6 +716,24 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
                   <Input
                     value={petitionForm.numeroProcesso}
                     onChange={(e) => setPetitionForm((prev) => ({ ...prev, numeroProcesso: e.target.value }))}
+                    disabled={updateMutation.isPending}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Competência</Label>
+                  <Input
+                    value={petitionForm.competencia}
+                    onChange={(e) => setPetitionForm((prev) => ({ ...prev, competencia: e.target.value }))}
+                    placeholder="Ex.: Vara Cível, Juizado Especial..."
+                    disabled={updateMutation.isPending}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label>Comarca que será distribuída a ação</Label>
+                  <Input
+                    value={petitionForm.comarcaUf}
+                    onChange={(e) => setPetitionForm((prev) => ({ ...prev, comarcaUf: e.target.value }))}
+                    placeholder="Cidade/UF"
                     disabled={updateMutation.isPending}
                   />
                 </div>

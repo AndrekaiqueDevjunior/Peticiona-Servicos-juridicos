@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
+import { useAuth } from "@/lib/auth";
+import { dashboardPathForRole, mapBackendRole } from "@/lib/roles";
 import logo from "@/assets/peticiona-logo.png";
 
 const links = [
@@ -13,6 +15,13 @@ const links = [
 
 const Navbar = () => {
   const [open, setOpen] = useState(false);
+  const { isAuthenticated, user } = useAuth();
+
+  // Com sessão ativa, "Área do cliente" leva direto ao painel do papel —
+  // sem passar pelo /auth (que pediria login de novo desnecessariamente).
+  const areaHref =
+    isAuthenticated && user ? dashboardPathForRole(mapBackendRole(user.role)) : "/auth";
+  const areaLabel = isAuthenticated ? "Minha conta" : "Área do cliente";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/60 bg-background/85 backdrop-blur-md">
@@ -37,7 +46,7 @@ const Navbar = () => {
         {/* Desktop actions */}
         <div className="hidden items-center gap-2 md:flex">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/auth">Área do cliente</Link>
+            <Link to={areaHref}>{areaLabel}</Link>
           </Button>
           <Button asChild size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
             <Link to="/auth?mode=signup">Adquirir</Link>
@@ -84,7 +93,7 @@ const Navbar = () => {
 
             <div className="mt-2 flex flex-col gap-2 border-t border-border/60 px-5 py-5">
               <Button asChild variant="outline" onClick={() => setOpen(false)}>
-                <Link to="/auth">Área do cliente</Link>
+                <Link to={areaHref}>{areaLabel}</Link>
               </Button>
               <Button
                 asChild

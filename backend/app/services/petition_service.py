@@ -7,7 +7,6 @@ from sqlalchemy.exc import IntegrityError
 from app.core.errors import PermissionDenied, ValidationError
 from app.core.extensions import db
 from app.domain.permissions import scoped_query
-from app.domain.plan_rules import ensure_plan_allows_new_petition
 from app.models import Document, Petition, PetitionDocumentLink, PetitionParty, ServiceOrder, ServiceOrderItem
 from app.services.audit_service import log_action
 from app.services.serializers import serialize_order, serialize_petition
@@ -72,7 +71,9 @@ def create_petition(user, payload: dict) -> dict:
         if existing is not None:
             return _existing_petition_response(existing)
 
-    ensure_plan_allows_new_petition(user)
+    # Não há limite mensal de petições: o saldo de créditos da carteira é o
+    # único teto. O débito de crédito acontece em _create_service_order_for_petition
+    # (ou no webhook, no caso Express).
     documents = _validate_document_ids(user, [int(item) for item in payload.get("document_ids", [])])
 
     from app.core.references import human_reference

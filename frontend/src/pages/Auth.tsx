@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ArrowLeft, Lock, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,7 +12,7 @@ import logo from "@/assets/peticiona-logo.png";
 
 const Auth = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isLoading, user } = useAuth();
   const { toast } = useToast();
 
   const [email, setEmail] = useState("");
@@ -36,6 +36,13 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  // Já autenticado: não faz sentido mostrar o formulário de login de novo
+  // (ex.: clicou em "Área do cliente" na landing com sessão ativa). Manda
+  // direto pro painel do papel correspondente.
+  if (!isLoading && isAuthenticated && user) {
+    return <Navigate to={dashboardPathForRole(mapBackendRole(user.role))} replace />;
+  }
 
   return (
     <div className="relative min-h-screen bg-background">

@@ -138,20 +138,24 @@ class TestCreatePetition:
         response = api_client.post("/api/petitions", json=payload)
         assert response.status_code in (400, 404, 403)
 
-    def test_plan_limit_blocks_extra_petitions(self, api_client, client_with_balance, db):
-        """Plano com limite mensal definido deve bloquear quando atingido."""
+    def test_monthly_petition_limit_is_not_enforced(self, api_client, client_with_balance, db):
+        """Não existe limite mensal de petições: o saldo de créditos é o único teto.
+
+        Mesmo com um plano que tenha petition_limit_monthly definido (campo legado)
+        e petições já criadas no mês, novas petições continuam sendo aceitas enquanto
+        houver saldo.
+        """
         from tests.factories import create_petition, create_plan
 
         plan = create_plan(petition_limit_monthly=1)
         client_with_balance.active_plan_id = plan.id
 
-        # já tem 1 petição este mês
+        # já tem 1 petição este mês — o antigo gate bloquearia aqui
         create_petition(user=client_with_balance)
         db.session.commit()
 
         response = api_client.post("/api/petitions", json=VALID_PAYLOAD)
-        assert response.status_code == 422  # PLAN_LIMIT_EXCEEDED
-        assert response.get_json()["error"] == "PLAN_LIMIT_EXCEEDED"
+        assert response.status_code == 201, response.get_json()
 
     def test_anonymous_blocked(self, api_anonymous):
         response = api_anonymous.post("/api/petitions", json=VALID_PAYLOAD)

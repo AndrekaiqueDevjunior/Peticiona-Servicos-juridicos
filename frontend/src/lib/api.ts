@@ -909,6 +909,8 @@ export const api = {
             tipo_peticao: string | null;
             numero_processo: string | null;
             data_publicacao: string | null;
+            competencia: string | null;
+            comarca_uf: string | null;
             justica_gratuita: boolean;
             tutela_urgencia: boolean;
             advogado_subscritor: string | null;

@@ -473,6 +473,8 @@ def _update_order_petition(actor, order: ServiceOrder, payload: dict) -> None:
         "tipo_peticao",
         "numero_processo",
         "data_publicacao",
+        "competencia",
+        "comarca_uf",
         "advogado_subscritor",
         "resumo_caso",
         "detalhes",
