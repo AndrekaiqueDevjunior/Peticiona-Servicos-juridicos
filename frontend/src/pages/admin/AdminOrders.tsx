@@ -74,9 +74,10 @@ const formatDT = (iso: string | null | undefined) =>
 
 const isoToInput = (iso: string | null | undefined) => {
   if (!iso) return "";
+  // Use UTC parts to avoid timezone shift in datetime-local input
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 };
 
 // ---------------------------------------------------------------------------
@@ -305,6 +306,16 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
       toast({ title: "Documentos enviados com sucesso." });
     },
     onError: () => toast({ title: "Erro no upload.", variant: "destructive" }),
+  });
+
+  // Mutation: delete document
+  const deleteDocumentMutation = useMutation({
+    mutationFn: (documentId: number) => api.admin.orders.deleteDocument(order!.id, documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-orders"] });
+      toast({ title: "Documento removido." });
+    },
+    onError: () => toast({ title: "Erro ao remover documento.", variant: "destructive" }),
   });
 
   // Mutation: add comment
@@ -860,6 +871,17 @@ function PedidoModal({ order, onClose }: { order: AdminOrder | null; onClose: ()
                     >
                       <Download className="h-3 w-3" />
                       Baixar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-1 h-8 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10"
+                      onClick={() => deleteDocumentMutation.mutate(d.id)}
+                      disabled={deleteDocumentMutation.isPending}
+                      aria-label={`Remover ${d.file_name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
                     </Button>
                   </li>
                 ))}

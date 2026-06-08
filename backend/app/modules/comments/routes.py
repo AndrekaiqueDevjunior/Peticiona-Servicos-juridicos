@@ -7,6 +7,7 @@ from app.permissions import auth_required, current_actor, roles_required
 from app.services.order_comment_service import (
     add_comment,
     delete_comment,
+    delete_order_document,
     list_comments,
     upload_order_document,
 )
@@ -34,6 +35,13 @@ def post_comment(order_id: int):
 def remove_comment(order_id: int, comment_id: int):
     actor = current_actor()
     return jsonify(delete_comment(order_id, comment_id, actor))
+
+
+@comments_bp.delete("/<int:order_id>/documents/<int:document_id>")
+@auth_required
+def remove_document(order_id: int, document_id: int):
+    actor = current_actor()
+    return jsonify(delete_order_document(order_id, document_id, actor))
 
 
 @comments_bp.post("/<int:order_id>/documents")

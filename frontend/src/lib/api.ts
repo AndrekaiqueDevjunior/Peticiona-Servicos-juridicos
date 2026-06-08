@@ -20,6 +20,7 @@ export interface AuthUser {
   city: string | null;
   state: string | null;
   active_plan_id?: number | null;
+  active_plan_code?: string | null;
   created_at?: string;
 }
 
@@ -942,6 +943,10 @@ export const api = {
           body: form,
         });
       },
+      deleteDocument: (orderId: number, documentId: number) =>
+        request<{ deleted: boolean }>(`/orders/${orderId}/documents/${documentId}`, {
+          method: "DELETE",
+        }),
       listComments: (id: number) =>
         request<{ comments: OrderComment[] }>(`/orders/${id}/comments`),
       addComment: (id: number, text: string) =>
@@ -951,6 +956,10 @@ export const api = {
         }),
       deleteComment: (orderId: number, commentId: number) =>
         request<{ deleted: boolean }>(`/orders/${orderId}/comments/${commentId}`, {
+          method: "DELETE",
+        }),
+      deleteDocument: (orderId: number, documentId: number) =>
+        request<{ deleted: boolean }>(`/orders/${orderId}/documents/${documentId}`, {
           method: "DELETE",
         }),
     },

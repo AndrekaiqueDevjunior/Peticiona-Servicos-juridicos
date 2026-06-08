@@ -665,7 +665,7 @@ docker compose logs -f db        # Database logs
 8. **Não criar endpoint** sem schema claro
 9. **Não criar tela** sem conectar com API real
 10. **Não finalizar tarefa** sem checklist de validação
-
+11. **(docker compose down -v NUNCA USAR **
 ---
 
 **Última atualização**: 2 de junho, 2026  

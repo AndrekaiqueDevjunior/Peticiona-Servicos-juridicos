@@ -206,9 +206,10 @@ const formatBytes = (bytes: number) => {
 interface NewRequestDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onOpenBuyCredits?: () => void;
 }
 
-export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) => {
+export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRequestDialogProps) => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [areaDireito, setAreaDireito] = useState("");
@@ -371,6 +372,63 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
       });
       return;
     }
+    if (!tipoPeticao) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Selecione o tipo de petição.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!competencia.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe a competência.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!comarca.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe a comarca.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const partesValidas = partes.filter((p) => p.nome.trim() && p.tipo);
+    if (partesValidas.length === 0) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe ao menos uma parte com nome e tipo.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!resumoCaso.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Descreva brevemente o objeto do processo.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!detalhes.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe os tópicos imprescindíveis na petição.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!advogadoSubscritor.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe o advogado subscritor.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -388,7 +446,7 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
         advogado_subscritor: advogadoSubscritor,
         resumo_caso: resumoCaso,
         detalhes,
-        partes: partes.map((parte) => ({ nome: parte.nome, tipo: parte.tipo })),
+        partes: partes.filter((p) => p.nome.trim() && p.tipo).map((parte) => ({ nome: parte.nome, tipo: parte.tipo })),
         document_ids: uploadedDocuments.documents.map((document) => document.id),
         express_upgrade: expressUpgrade || undefined,
         idempotency_key: idempotencyKeyRef.current ?? undefined,
@@ -496,7 +554,10 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tipo-peticao">Qual o tipo de petição?</Label>
+              <Label htmlFor="tipo-peticao">
+                Qual o tipo de petição?{" "}
+                <span className="text-destructive">*</span>
+              </Label>
               <Select
                 value={tipoPeticao}
                 onValueChange={(v) => {
@@ -578,7 +639,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="competencia">Competência</Label>
+                <Label htmlFor="competencia">
+                  Competência <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="competencia"
                   placeholder="Ex.: Vara Cível, Juizado Especial..."
@@ -593,7 +656,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
               <div className="space-y-2">
                 <Label htmlFor="comarca">
-                  Qual a comarca que será distribuída a ação?
+                  Qual a comarca que será distribuída a ação?{" "}
+                  <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="comarca"
@@ -720,7 +784,10 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="resumo">Do que se trata o processo?</Label>
+              <Label htmlFor="resumo">
+                Do que se trata o processo?{" "}
+                <span className="text-destructive">*</span>
+              </Label>
               <Textarea
                 id="resumo"
                 placeholder="Descreva brevemente o objeto do processo"
@@ -733,7 +800,8 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
 
             <div className="space-y-2">
               <Label htmlFor="detalhes">
-                Quais tópicos são imprescindíveis em sua petição?
+                Quais tópicos são imprescindíveis em sua petição?{" "}
+                <span className="text-destructive">*</span>
               </Label>
               <p className="text-xs text-muted-foreground">
                 As teses levantadas na petição são de inteira responsabilidade
@@ -773,7 +841,9 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="advogado">Advogado subscritor</Label>
+              <Label htmlFor="advogado">
+                Advogado subscritor <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="advogado"
                 placeholder="Nome do(a) advogado(a) que assinará a peça"
@@ -1085,8 +1155,12 @@ export const NewRequestDialog = ({ open, onOpenChange }: NewRequestDialogProps) 
                       <button
                         type="button"
                         onClick={() => {
-                          onOpenChange(false);
-                          navigate("/area-cliente/comprar-creditos");
+                          if (onOpenBuyCredits) {
+                            onOpenBuyCredits();
+                          } else {
+                            onOpenChange(false);
+                            navigate("/area-cliente/comprar-creditos");
+                          }
                         }}
                         className="font-semibold underline underline-offset-2 hover:opacity-80"
                       >

@@ -7,6 +7,13 @@
 > Em caso de conflito entre este arquivo e `README.md`/`docs/architecture.md`,
 > **este arquivo vence** e a documentação desatualizada deve ser corrigida
 > (ver `skills/documentation-architect`).
+>
+> **Prioridades (em ordem):**
+> 1. Segurança sempre: validação, autorização, uploads e auditoria devem ficar no backend.
+> 2. Backend autoritativo: valores, saldos, preços e regras de negócio são oficiais no backend.
+> 3. Auditoria e finanças: toda ação crítica gera registro e toda mutação de saldo passa por `credit_ledger`.
+> 4. Integrações reais: não usar mocks em produção; implemente retry/backoff, circuit breaker e idempotência para provedores externos.
+> 5. Compatibilidade: versionar APIs e usar migrações de deploy-safe para evitar quebras em produção.
 
 ---
 
@@ -53,6 +60,8 @@
 - **Pagar.me** — pagamentos e **split payment** (`services/pagarme_service.py`, módulo `split_payment`, `webhooks`)
 - **Resend** — e-mail transacional + webhook (`services/email_service.py`, `RESEND_*`)
 - **Nemotron (NVIDIA)** — geração/assistência de IA (`services/nemotron_service.py`)
+- Para cada integração externa, implemente retry/backoff, circuit breaker e fallback de fila persistente. No 5xx ou timeout, marque a operação como `pending`, enfileire retry exponencial e alerte ops após 3 falhas.
+- Em reconciliação de transações Pagar.me x ledger, coloque o pedido em estado frozen, crie um ticket de reconciliação com provider_id, expected_amount e actual_amount, e notifique finanças. Não ajuste o ledger automaticamente sem aprovação manual.
 
 ---
 
@@ -118,16 +127,18 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 ## 4. Regras obrigatórias (resumo executivo)
 
 1. Toda regra de negócio nasce e vive no **backend**. O frontend nunca é a fonte da verdade.
-2. **Valores monetários, saldos, preços e split são autoritativamente do backend.** O
+2. APIs públicas devem ser namespaced em `/api/v1/`. Mudanças breaking devem introduzir `/api/v2/` e manter v1 por pelo menos 90 dias. Documentar alterações em `docs/api-changelog.md`.
+3. **Valores monetários, saldos, preços e split são autoritativamente do backend.** O
    frontend pode formatar para exibição, nunca calcular o valor oficial.
-3. **Toda mutação de saldo passa SOMENTE por `app/services/credit_ledger.py`.** Nunca
+4. **Toda mutação de saldo passa SOMENTE por `app/services/credit_ledger.py`.** Nunca
    escrever em `credit_transactions` em outro lugar. Tipos aceitos: **apenas `'in'` e `'out'`**.
-4. Todo endpoint novo nasce dentro de um **módulo de domínio** (`modules/<dominio>/`).
-5. Toda rota autenticada valida **autenticação + autorização (role + escopo de dados)** no backend.
-6. **Proibido mocks/fake data em código de produção** (ver seção 9).
-7. Toda ação crítica (pagamento, mudança de saldo, mudança de status de pedido, mudança de
+5. Todo endpoint novo nasce dentro de um **módulo de domínio** (`modules/<dominio>/`).
+6. Toda rota autenticada valida **autenticação + autorização (role + escopo de dados)** no backend.
+7. **Proibido mocks/fake data em código de produção** (ver seção 9).
+8. Toda ação crítica (pagamento, mudança de saldo, mudança de status de pedido, mudança de
    role, reembolso) gera **registro de auditoria** (`models/audit.py` / `services/audit_service.py`).
-8. Dinheiro é tratado em **centavos (inteiros)** no backend; nunca usar `float` para valor financeiro.
+9. Para features críticas, siga templates de implementação: pagamento = rota + schema + service + provider + auditoria + testes; upload de documento = rota + schema de upload seguro + validação de magic bytes + storage + auditoria + testes.
+10. Dinheiro é tratado em **centavos (inteiros)** no backend; nunca usar `float` para valor financeiro.
 
 ---
 
@@ -139,8 +150,8 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 - **Frontend (TS):** componentes funcionais + hooks; estado de servidor via **TanStack Query**
   (sem `fetch` solto espalhado); formulários com **react-hook-form + zod**; tipos vindos do
   backend declarados em `lib/api.ts`. Sem `any` desnecessário.
-- **Nomes claros, em PT-BR para domínio** (pedido, saldo, prazo, crédito) e padrão técnico em inglês quando convém.
-- **Sem arquivos `utils`/`helpers`/`misc` genéricos** sem contexto. Cada arquivo tem responsabilidade clara.
+- Use PT-BR apenas para nomes de domínio visíveis ao usuário: pedido, saldo, prazo, crédito. Use inglês snake_case para identificadores técnicos, nomes de pacotes, colunas/tabelas do banco e tipos. Documente exceções aprovadas em `docs/conventions.md` com tabela de mapeamento domínio → identificador técnico.
+- Proibido criar pastas monolíticas chamadas `utils`/`helpers`/`misc`. Shared utilities só são permitidos em módulos claramente escopados, como `app/lib/formatting/README.md`, com propósito documentado e lista de importadores autorizados.
 
 ---
 
@@ -171,6 +182,7 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 - Modelos em `models/` por agregado. Chaves estrangeiras, índices em colunas de filtro/busca.
 - **Migrações:** alterações de schema entram em `migrations/` e/ou `bootstrap/migrations.py`
   (migração de runtime idempotente). Nunca quebrar `db.create_all()` do boot.
+- Use migrações de deploy-safe em múltiplas etapas: 1) adicionar coluna nullable, 2) backfill, 3) mudar leituras para a nova coluna, 4) tornar não-null e 5) remover a coluna antiga. Documentar em `migrations/README.md`.
 - Valores financeiros em **inteiro (centavos)**. Datas em UTC com timezone.
 - `company_id` existe nas tabelas mas **NÃO filtra visibilidade** hoje (workspace único —
   ver `domain/permissions.py`). Não reintroduzir filtro por `company_id` sem decisão explícita documentada.
@@ -205,7 +217,7 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 - **Headers:** definidos em `app/__init__.py` (`X-Content-Type-Options`, `X-Frame-Options`,
   `Referrer-Policy`, `Permissions-Policy`; CSP + HSTS em produção).
 - **CORS:** allowlist via `CORS_ALLOWED_ORIGINS` (sem allowlist em produção → erro de boot).
-- **Rate limit:** login e cadastro (`core/rate_limit.py`).
+- **Rate limit:** login = 10 tentativas por 10 minutos por IP e por conta; cadastro = 5 tentativas por 1 hora por IP. Expor variáveis de ambiente `RATE_LIMIT_LOGIN=10/10m` e `RATE_LIMIT_SIGNUP=5/1h`.
 - **Upload:** allowlist de extensão + bloqueio de extensões perigosas + **validação por magic bytes**
   + limite de tamanho + `secure_filename` (`core/security.py`). Nunca confiar na extensão do cliente.
 - **Erros:** mensagens seguras, sem stack trace para o cliente; logs estruturados no servidor.
@@ -255,6 +267,7 @@ docker compose up -d   # sem --build
   `services/audit_service.py`) e/ou eventos (`models/email_event.py`).
 - Logs de aplicação via `LOG_LEVEL`/`LOG_FILE`. **Nunca** logar segredos, tokens, senhas, dados de cartão.
 - Webhooks (Pagar.me/Resend) validam assinatura/segredo antes de processar.
+- Todos os webhooks devem implementar idempotência: persistir `event_id` + status antes de processar e ignorar duplicatas. Se o `webhook_id` já existir, retornar 200 sem reprocessar.
 
 ---
 

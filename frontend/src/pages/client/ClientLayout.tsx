@@ -5,6 +5,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ClientSidebar } from "@/components/client/ClientSidebar";
 import { NewRequestDialog } from "@/components/client/NewRequestDialog";
+import { BuyCreditsDialog } from "@/components/client/BuyCreditsDialog";
 import { HelpContactDialog } from "@/components/client/HelpContactDialog";
 import { NotificationsBell } from "@/components/client/NotificationsBell";
 
@@ -39,6 +40,7 @@ class ClientErrorBoundary extends Component<{ children: ReactNode }, { error: st
 const ClientLayout = () => {
   const [openNewRequest, setOpenNewRequest] = useState(false);
   const [openHelp, setOpenHelp] = useState(false);
+  const [openBuyCredits, setOpenBuyCredits] = useState(false);
 
   return (
     <SidebarProvider>
@@ -73,7 +75,12 @@ const ClientLayout = () => {
         </div>
       </div>
 
-      <NewRequestDialog open={openNewRequest} onOpenChange={setOpenNewRequest} />
+      <NewRequestDialog
+        open={openNewRequest}
+        onOpenChange={setOpenNewRequest}
+        onOpenBuyCredits={() => { setOpenNewRequest(false); setOpenBuyCredits(true); }}
+      />
+      <BuyCreditsDialog open={openBuyCredits} onOpenChange={setOpenBuyCredits} />
       <HelpContactDialog open={openHelp} onOpenChange={setOpenHelp} />
     </SidebarProvider>
   );

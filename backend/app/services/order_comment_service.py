@@ -101,6 +101,38 @@ def delete_comment(order_id: int, comment_id: int, actor) -> dict:
     return {"deleted": True}
 
 
+def delete_order_document(order_id: int, document_id: int, actor) -> dict:
+    """Admin/staff can delete any document linked to an order; clients cannot."""
+    if getattr(actor, "role", None) not in ("admin", "staff"):
+        raise PermissionDenied("Apenas administradores podem remover documentos de pedidos.")
+    order = _get_order(order_id, actor)
+    doc = db.session.get(Document, document_id)
+    if not doc:
+        raise NotFoundError("Documento não encontrado.")
+    link = PetitionDocumentLink.query.filter_by(
+        document_id=document_id,
+        petition_id=order.petition_id,
+    ).first()
+    if link is None:
+        raise NotFoundError("Documento não vinculado a este pedido.")
+    stored_name = doc.stored_name
+    db.session.delete(link)
+    db.session.delete(doc)
+    log_action(
+        action="order.document_deleted",
+        entity_type="service_order",
+        entity_id=order_id,
+        user=actor,
+        metadata={"document_id": document_id, "file_name": doc.file_name},
+    )
+    db.session.commit()
+    try:
+        (upload_folder() / stored_name).unlink(missing_ok=True)
+    except OSError:
+        pass
+    return {"deleted": True}
+
+
 def upload_order_document(order_id: int, actor, files) -> list[dict]:
     order = _get_order(order_id, actor)
     if not files:

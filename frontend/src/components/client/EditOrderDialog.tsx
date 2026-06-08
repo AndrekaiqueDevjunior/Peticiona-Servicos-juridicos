@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
   Download,
   Eye,
@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Zap,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -23,10 +22,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/hooks/use-toast";
 import { api, ApiError, type UploadedDocument, type OrderComment } from "@/lib/api";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -89,12 +86,12 @@ function DocumentDownloadRow({ doc }: { doc: UploadedDocument }) {
 
 const STATUS_CONFIG: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
   pendente: {
-    label: "Pendente",
+    label: "Em análise",
     icon: <Clock className="h-3.5 w-3.5" />,
     className: "bg-yellow-100 text-yellow-800 border-yellow-200",
   },
   em_andamento: {
-    label: "Em andamento",
+    label: "Aguardando dados",
     icon: <Clock className="h-3.5 w-3.5" />,
     className: "bg-blue-100 text-blue-800 border-blue-200",
   },
@@ -176,82 +173,19 @@ export function EditOrderDialog({
   onOpenChange,
   onUploadDocuments,
 }: EditOrderDialogProps) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [commentText, setCommentText] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [expressUpgrade, setExpressUpgrade] = useState(order?.express_upgrade ?? false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Sincroniza estado local quando o pedido muda (ex: abrir modal com outro pedido)
-  useEffect(() => {
-    setExpressUpgrade(order?.express_upgrade ?? false);
-  }, [order?.id, order?.express_upgrade]);
-
-  // Polling para detectar confirmação de pagamento Express.
-  // Só ativa quando express_upgrade=true e deadline_at=null (não pago).
-  const isExpressPending = !!(order?.express_upgrade && !order?.deadline_at);
-  const prevDeadlineRef = useRef<string | null>(order?.deadline_at ?? null);
-
-  const { data: liveOrder } = useQuery({
-    queryKey: ["order-live", order?.id],
-    queryFn: async () => {
-      const { order: o } = await api.clientArea.getOrder(order!.id);
-      return o;
-    },
-    enabled: open && !!order?.id && isExpressPending,
-    refetchInterval: 5000,
-  });
-
-  // Detecta a transição null → deadline_at (pagamento confirmado).
-  useEffect(() => {
-    if (!liveOrder) return;
-    if (!liveOrder.deadline_at) {
-      prevDeadlineRef.current = null;
-      return;
-    }
-    if (prevDeadlineRef.current === null) {
-      prevDeadlineRef.current = liveOrder.deadline_at;
-      toast({
-        title: "Express confirmado!",
-        description: "Prioridade máxima ativada. Entrega em até 24 horas.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["client-service-orders"] });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveOrder?.deadline_at]);
-
-  // Reseta a ref quando outro pedido abre.
-  useEffect(() => {
-    prevDeadlineRef.current = order?.deadline_at ?? null;
-  }, [order?.id]);
-
-  // Usa dado ao vivo se disponível, cai no prop caso contrário.
-  const displayOrder = liveOrder ?? order;
+  const displayOrder = order;
 
   const petition = displayOrder?.petition ?? null;
-  const statusCfg = displayOrder ? (STATUS_CONFIG[displayOrder.status] ?? null) : null;
-
-  const handleToggleExpress = (checked: boolean) => {
-    if (!order) return;
-    if (checked) {
-      // Redireciona para o checkout express vinculado a este service_order
-      onOpenChange(false);
-      navigate(`/checkout?service=servico_peticao&service_order_id=${order.id}&express_upgrade=true`);
-    } else {
-      // Só permite desativar se ainda não foi pago (express_order_id = null)
-      if (order.express_order_id) {
-        toast({
-          title: "Express já pago",
-          description: "O pagamento Express já foi confirmado e não pode ser desativado.",
-          variant: "destructive",
-        });
-        return;
-      }
-      setExpressUpgrade(false);
-    }
-  };
+  const statusCfgBase = displayOrder ? (STATUS_CONFIG[displayOrder.status] ?? null) : null;
+  const statusCfg = statusCfgBase && displayOrder?.status_label
+    ? { ...statusCfgBase, label: displayOrder.status_label }
+    : statusCfgBase;
 
   const commentsQuery = useQuery({
     queryKey: ["order-comments", order?.id],
@@ -329,53 +263,11 @@ export function EditOrderDialog({
                   {statusCfg.label}
                 </Badge>
               )}
-              {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
-                <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
-                  <Zap className="h-3.5 w-3.5" />
-                  Express — pagamento pendente
-                </Badge>
-              )}
-              {displayOrder?.express_upgrade && displayOrder?.deadline_at && (
-                <Badge variant="outline" className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/30 dark:text-amber-200">
-                  <Zap className="h-3.5 w-3.5" />
-                  Express — entrega em 24h
-                </Badge>
-              )}
             </div>
           </div>
         </DialogHeader>
 
         <Separator />
-
-        {/* ── Banner CTA Express pendente (topo) ── */}
-        {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
-          <div className="flex flex-col gap-3 rounded-lg border-2 border-amber-400 bg-amber-50 p-4 dark:bg-amber-950/20">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-amber-400 p-2 text-white">
-                <Zap className="h-4 w-4" />
-              </div>
-              <div>
-                <p className="font-semibold text-amber-900 dark:text-amber-100">
-                  Pagamento Express pendente
-                </p>
-                <p className="text-sm text-amber-800 dark:text-amber-200">
-                  Finalize o checkout de <strong>R$ 40,00</strong> para garantir entrega em até 24 horas.
-                </p>
-              </div>
-            </div>
-            <Button
-              type="button"
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white"
-              onClick={() => {
-                onOpenChange(false);
-                navigate(`/checkout?service=servico_peticao&service_order_id=${displayOrder.id}&express_upgrade=true`);
-              }}
-            >
-              <Zap className="mr-2 h-4 w-4" />
-              Finalizar pagamento Express — R$ 40,00
-            </Button>
-          </div>
-        )}
 
         <div className="space-y-8 pt-2">
 
@@ -397,59 +289,6 @@ export function EditOrderDialog({
               />
             </div>
           </section>
-
-          {/* ── Toggle Express ── */}
-          {order && order.status === "pendente" && (
-            <>
-              <Separator />
-              <section className="space-y-3">
-                <div
-                  className={cn(
-                    "flex flex-col gap-3 rounded-lg border-2 p-4 transition-colors",
-                    expressUpgrade
-                      ? "border-amber-400 bg-amber-50 dark:bg-amber-950/20"
-                      : "border-border bg-muted/20",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={cn(
-                          "mt-0.5 rounded-full p-1.5",
-                          expressUpgrade ? "bg-amber-400 text-white" : "bg-muted text-muted-foreground",
-                        )}
-                      >
-                        <Zap className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-foreground">
-                          Desejo entrega Express{" "}
-                          <span className="font-normal text-muted-foreground text-sm">
-                            (até 24 horas)
-                          </span>
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-0.5">
-                          Seu pedido terá prioridade máxima e será entregue em até 24 horas.
-                          Taxa: R$ 40,00 (pago no checkout).
-                        </p>
-                      </div>
-                    </div>
-                    <Switch
-                      checked={expressUpgrade}
-                      onCheckedChange={handleToggleExpress}
-                      aria-label="Ativar entrega Express"
-                    />
-                  </div>
-
-                  {expressUpgrade && (
-                    <div className="rounded-md border border-amber-300 bg-amber-100/60 px-3 py-2 text-sm text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                      <strong>Atenção:</strong> ao ativar, você será redirecionado ao checkout para pagar a taxa de entrega Express.
-                    </div>
-                  )}
-                </div>
-              </section>
-            </>
-          )}
 
           {/* ── Dados da petição ── */}
           {petition && (
@@ -678,19 +517,6 @@ export function EditOrderDialog({
           {/* ── Ações ── */}
           <Separator />
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            {displayOrder?.express_upgrade && !displayOrder?.deadline_at && (
-              <Button
-                type="button"
-                className="w-full sm:w-auto bg-amber-500 hover:bg-amber-600 text-white"
-                onClick={() => {
-                  onOpenChange(false);
-                  navigate(`/checkout?service=servico_peticao&service_order_id=${displayOrder.id}&express_upgrade=true`);
-                }}
-              >
-                <Zap className="mr-2 h-4 w-4" />
-                Finalizar pagamento Express — R$ 40,00
-              </Button>
-            )}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               <X className="mr-2 h-4 w-4" />
               Fechar

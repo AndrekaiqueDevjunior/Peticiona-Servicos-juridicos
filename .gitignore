@@ -45,3 +45,7 @@ uploads/
 backups/
 migrations/
 .env
+.env.vps
+# Credenciais locais (senha root VPS / contas) — nunca versionar
+*naosubirnogit*
+conta_teste*.txt

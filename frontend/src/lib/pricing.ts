@@ -266,25 +266,25 @@ import { useAuth } from "@/lib/auth";
 export const useUserPricingProfile = () => {
   usePricingCatalog({ includeCatalog: true });
   const { user } = useAuth();
-  const planoCode = resolvePlanFromUser(user?.active_plan_id ?? null);
+  const planoCode = resolvePlanFromUser(user?.active_plan_id ?? null, user?.active_plan_code);
   const profile: UserPricingProfile = {
     plano: planoCode,
   };
   return { data: profile } as { data: UserPricingProfile };
 };
 
-/** Mapeia o id do plano (que é mero foreign key) para o bucket usado pelo
- *  cálculo de preço. Como a tabela de planos canônicos hoje usa códigos
- *  estáveis (plano_essencial / plano_profissional / plano_estrategico),
- *  o backend retorna o id; aqui só falamos "tem plano" / "sem plano" e
- *  caímos em "essencial" por default quando há plano (preço Express usa
- *  esse bucket apenas como referência de UI). */
+/** Mapeia o código do plano ativo para o bucket usado no cálculo de prazo/preço. */
 const resolvePlanFromUser = (
   activePlanId: number | null,
+  activePlanCode: string | null | undefined,
 ): UserPricingProfile["plano"] => {
   if (activePlanId == null) return null;
-  // Sem informação detalhada do plano, assumimos "essencial" como base
-  // segura — o preço final é sempre confirmado pelo backend no preview.
+  if (activePlanCode) {
+    const normalized = activePlanCode.toLowerCase().replace(/[^a-z]/g, "");
+    if (normalized.includes("estrategico") || normalized.includes("premium") || normalized.includes("enterprise")) return "estrategico";
+    if (normalized.includes("profissional") || normalized.includes("pro") || normalized.includes("intermediario")) return "profissional";
+    if (normalized.includes("essencial") || normalized.includes("starter")) return "essencial";
+  }
   return "essencial";
 };
 

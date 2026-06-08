@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarClock, FileText, Inbox, Loader2, Search, Zap } from "lucide-react";
+import { CalendarClock, Download, FileText, Inbox, Loader2, Paperclip, Search, Send, UploadCloud, UserRound, Zap } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,8 +27,10 @@ import {
   api,
   isStaffOrderStatus,
   type AdminOrderStatus,
+  type OrderComment,
   type StaffOrder,
   type StaffOrderStatus,
+  type UploadedDocument,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -200,6 +202,9 @@ function StaffOrderRow({ order, onOpen }: { order: StaffOrder; onOpen: () => voi
 
 function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [comentario, setComentario] = useState("");
+
   const statusMutation = useMutation({
     mutationFn: (status: StaffOrderStatus) => api.staff.orders.updateStatus(order!.id, status),
     onSuccess: ({ order: updated }) => {
@@ -216,7 +221,43 @@ function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClo
     },
   });
 
+  const { data: commentsData, isLoading: loadingComments } = useQuery({
+    queryKey: ["order-comments", order?.id],
+    queryFn: () => api.admin.orders.listComments(order!.id),
+    enabled: !!order,
+  });
+  const comments = commentsData?.comments ?? [];
+
+  const addCommentMutation = useMutation({
+    mutationFn: (text: string) => api.admin.orders.addComment(order!.id, text),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["order-comments", order?.id] });
+      setComentario("");
+      toast({ title: "Comentário publicado." });
+    },
+    onError: () => toast({ title: "Erro ao publicar comentário.", variant: "destructive" }),
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: (files: File[]) => api.admin.orders.uploadDocuments(order!.id, files),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff-orders"] });
+      toast({ title: "Documentos enviados com sucesso." });
+    },
+    onError: () => toast({ title: "Erro no upload.", variant: "destructive" }),
+  });
+
   if (!order) return null;
+
+  const docs: UploadedDocument[] = order.petition?.documents ?? [];
+
+  const onUpload = (files: FileList | null) => {
+    if (!files?.length) return;
+    uploadMutation.mutate(Array.from(files));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const ROLE_LABEL: Record<string, string> = { admin: "Admin", staff: "Equipe", client: "Cliente" };
 
   return (
     <Dialog open={!!order} onOpenChange={(open) => !open && onClose()}>
@@ -232,6 +273,7 @@ function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClo
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* Status */}
           <Card className="border-accent/30 bg-accent/5">
             <CardContent className="grid gap-4 p-4 sm:grid-cols-2">
               <div className="grid gap-2">
@@ -277,6 +319,7 @@ function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClo
             </CardContent>
           </Card>
 
+          {/* Serviço */}
           <ReadonlySection title="Serviço">
             <ReadonlyField label="Referência" value={order.reference} />
             <ReadonlyField label="Tipo" value={order.service_type} />
@@ -285,18 +328,170 @@ function StaffPedidoDialog({ order, onClose }: { order: StaffOrder | null; onClo
             <ReadonlyField label="Concluído em" value={formatDT(order.completed_at, "—")} />
           </ReadonlySection>
 
+          {/* Dados completos da petição */}
           {order.petition && (
             <>
               <ReadonlySection title="Dados da solicitação">
                 <ReadonlyField label="Área do Direito" value={order.petition.area_direito} />
                 <ReadonlyField label="Tipo de petição" value={order.petition.tipo_peticao || "—"} />
                 <ReadonlyField label="Número do processo" value={order.petition.numero_processo || "—"} />
+                <ReadonlyField label="Data da publicação" value={order.petition.data_publicacao ? format(parseISO(order.petition.data_publicacao), "dd/MM/yyyy", { locale: ptBR }) : "—"} />
+                <ReadonlyField label="Competência" value={(order.petition as any).competencia || "—"} />
+                <ReadonlyField label="Comarca" value={(order.petition as any).comarca_uf || "—"} />
+                <ReadonlyField label="Justiça gratuita" value={order.petition.justica_gratuita ? "Sim" : "Não"} />
+                <ReadonlyField label="Tutela de urgência" value={order.petition.tutela_urgencia ? "Sim" : "Não"} />
                 <ReadonlyField label="Advogado subscritor" value={order.petition.advogado_subscritor || "—"} />
               </ReadonlySection>
+
               <ReadonlyText title="Resumo do caso" value={order.petition.resumo_caso || "Sem resumo informado."} />
-              <ReadonlyText title="Detalhes adicionais" value={order.petition.detalhes || "Sem detalhes adicionais."} />
+              <ReadonlyText title="Tópicos imprescindíveis" value={order.petition.detalhes || "Sem detalhes adicionais."} />
+
+              {/* Partes */}
+              {order.petition.partes?.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">Partes do processo</h3>
+                  <ul className="grid gap-2">
+                    {order.petition.partes.map((parte, i) => (
+                      <li key={i} className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2">
+                        <UserRound className="h-4 w-4 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{parte.nome}</p>
+                          <p className="text-xs text-muted-foreground">{parte.tipo}</p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </>
           )}
+
+          {/* Documentos */}
+          <section className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-foreground">Documentos</h3>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadMutation.isPending}
+              >
+                {uploadMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <UploadCloud className="mr-2 h-4 w-4" />
+                )}
+                Adicionar anexo
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => onUpload(e.target.files)}
+              />
+            </div>
+
+            {docs.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+                Nenhum documento enviado.
+              </p>
+            ) : (
+              <ul className="space-y-1.5">
+                {docs.map((d) => (
+                  <li key={d.id} className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+                    <Paperclip className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="flex-1 truncate font-medium text-foreground">{d.file_name}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{d.size_label}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="ml-1 h-8 shrink-0 gap-1.5 px-2 text-xs"
+                      onClick={async () => {
+                        try {
+                          await api.documents.download(d);
+                        } catch (err) {
+                          toast({ title: "Erro ao baixar documento.", variant: "destructive" });
+                        }
+                      }}
+                    >
+                      <Download className="h-3 w-3" />
+                      Baixar
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Comentários */}
+          <section className="space-y-3 border-t border-border pt-6">
+            <h3 className="text-sm font-semibold text-foreground">Comentários</h3>
+
+            {loadingComments ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando...
+              </div>
+            ) : comments.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border bg-muted/20 p-4 text-center text-sm text-muted-foreground">
+                Nenhum comentário ainda.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {comments.map((c: OrderComment) => {
+                  const roleColor: Record<string, string> = {
+                    admin: "border-accent/40 bg-accent/10",
+                    staff: "border-primary/20 bg-primary/5",
+                    client: "border-border bg-muted/30",
+                  };
+                  return (
+                    <li key={c.id} className={cn("rounded-md border p-3 text-sm", roleColor[c.author_role] ?? "border-border bg-muted/20")}>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {c.author_name}
+                          <span className="ml-2 rounded-sm bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                            {ROLE_LABEL[c.author_role] ?? c.author_role}
+                          </span>
+                        </span>
+                        <span>{formatDT(c.created_at)}</span>
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-foreground">{c.text}</p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className="space-y-2">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">Novo comentário</Label>
+              <textarea
+                value={comentario}
+                onChange={(e) => setComentario(e.target.value)}
+                placeholder="Escreva um comentário..."
+                rows={3}
+                disabled={addCommentMutation.isPending}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => { const t = comentario.trim(); if (t) addCommentMutation.mutate(t); }}
+                  disabled={!comentario.trim() || addCommentMutation.isPending}
+                >
+                  {addCommentMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  Publicar
+                </Button>
+              </div>
+            </div>
+          </section>
         </div>
       </DialogContent>
     </Dialog>

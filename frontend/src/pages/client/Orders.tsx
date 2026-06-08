@@ -67,7 +67,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const EDITABLE_STATUSES = new Set<CheckoutOrderStatus>(["pending", "failed"]);
+const EDITABLE_STATUSES = new Set<CheckoutOrderStatus>(["failed"]);
 const CANCELLABLE_STATUSES = new Set<CheckoutOrderStatus>([
   "pending",
   "failed",

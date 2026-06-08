@@ -45,6 +45,7 @@ def serialize_user(user) -> dict:
         "role": user.role,
         "company_id": user.company_id,
         "active_plan_id": getattr(user, "active_plan_id", None),
+        "active_plan_code": getattr(getattr(user, "active_plan", None), "code", None),
         "is_active": user.is_active,
         "created_at": user.created_at.isoformat(),
         "created_at_label": user.created_at.strftime("%d/%m/%Y"),
