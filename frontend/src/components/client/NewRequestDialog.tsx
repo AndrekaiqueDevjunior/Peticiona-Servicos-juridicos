@@ -4,10 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   calcularPrecoPedido,
   formatBRL,
+  LABEL_PLANO,
   useUserPricingProfile,
 } from "@/lib/pricing";
 import { useBalance, hasCommonCredit } from "@/lib/balance";
-import { calcularPrazo, modalidadeParaPrazo } from "@/lib/prazos";
+import { calcularPrazo } from "@/lib/prazos";
 import { api } from "@/lib/api";
 import {
   AlertCircle,
@@ -243,6 +244,17 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
   const [expressUpgrade, setExpressUpgrade] = useState(false);
 
   const balance = useBalance();
+
+  // Plano ativo do cliente → nome + prazo de entrega corretos no resumo.
+  // Premium/Estratégico = 2 dias úteis; Essencial/Intermediário e avulso = 3.
+  const { data: pricingProfile } = useUserPricingProfile();
+  const planoAtivo = pricingProfile.plano;
+  const nomePlano = planoAtivo ? LABEL_PLANO[planoAtivo] || "Plano" : "Avulso";
+  const prazoDescricao = calcularPrazo(
+    planoAtivo
+      ? { tipo: "plano", plano: planoAtivo }
+      : { tipo: "avulso", grupo: "A" },
+  ).descricao;
 
   const temCreditoComum = hasCommonCredit(balance);
   // Enquanto o saldo ainda está carregando não bloqueamos o botão nem exibimos
@@ -1145,7 +1157,9 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
                       <span className="text-muted-foreground">Modalidade</span>
                       <span className="flex items-center gap-1.5 font-medium text-foreground">
                         {expressUpgrade && <Zap className="h-3.5 w-3.5 text-amber-500" />}
-                        {expressUpgrade ? "Express (24h)" : "Padrão (até 3 dias úteis)"}
+                        {expressUpgrade
+                          ? "Express (24h)"
+                          : `${nomePlano} · ${prazoDescricao}`}
                       </span>
                     </div>
                   </div>

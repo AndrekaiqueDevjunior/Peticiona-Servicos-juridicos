@@ -10,7 +10,17 @@
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { NewRequestDialog } from "@/components/client/NewRequestDialog";
+import { AuthProvider } from "@/lib/auth";
 import { renderWithQueryClient } from "./utils";
+
+// NewRequestDialog usa useUserPricingProfile → useAuth, então precisa do
+// AuthProvider. Sem token no localStorage, o provider não dispara /me.
+const renderDialog = () =>
+  renderWithQueryClient(
+    <AuthProvider>
+      <NewRequestDialog open={true} onOpenChange={() => {}} />
+    </AuthProvider>,
+  );
 
 const mockBalance = (common: number) => ({
   credits_available: common,
@@ -41,7 +51,7 @@ const stubFetch = (common: number) =>
 describe("NewRequestDialog with credit validation", () => {
   it("disables submit button without common credit", async () => {
     stubFetch(0);
-    renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
+    renderDialog();
     await waitFor(() => {
       const buttons = screen.queryAllByRole("button", { name: /finalizar/i });
       expect(buttons.length > 0).toBe(true);
@@ -54,7 +64,7 @@ describe("NewRequestDialog with credit validation", () => {
 
   it("enables submit button with common credit", async () => {
     stubFetch(5);
-    renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
+    renderDialog();
     await waitFor(() => {
       const petitionSelects = screen.queryAllByRole("combobox");
       expect(petitionSelects.length > 0).toBe(true);
@@ -63,19 +73,19 @@ describe("NewRequestDialog with credit validation", () => {
 
   it("shows express toggle (available even without express credit)", async () => {
     stubFetch(1);
-    renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
+    renderDialog();
     expect(await screen.findByText(/qual o tipo de petição/i)).toBeInTheDocument();
   });
 
   it("renders dialog with petition type selector", async () => {
     stubFetch(3);
-    renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
+    renderDialog();
     expect(await screen.findByText(/qual o tipo de petição/i)).toBeInTheDocument();
   });
 
   it("shows order summary section", async () => {
     stubFetch(1);
-    renderWithQueryClient(<NewRequestDialog open={true} onOpenChange={() => {}} />);
+    renderDialog();
     await waitFor(() => {
       expect(screen.queryByText(/resumo/i)).toBeInTheDocument();
     });

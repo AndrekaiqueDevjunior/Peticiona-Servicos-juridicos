@@ -93,10 +93,17 @@ def serialize_petition(petition) -> dict:
 
 
 def _order_status_label(order) -> str:
-    if bool(getattr(order, "express_upgrade", False)) and getattr(order, "status", None) in ("pendente", "em_andamento"):
-        if getattr(order, "deadline_at", None) is not None:
-            return "Express — entrega em 24h"
-        return "Express — aguardando pagamento"
+    # Express AINDA NÃO PAGO (sem prazo definido): mostra que falta pagar a taxa.
+    # Depois de pago, ou se cancelado/concluído, o label reflete o STATUS REAL do
+    # fluxo (Em análise / Aguardando dados / Concluído / Cancelado) — igual ao que
+    # admin e funcionário veem. A modalidade Express continua visível na UI por
+    # badges próprios (não precisamos mascarar o status com ela).
+    if (
+        bool(getattr(order, "express_upgrade", False))
+        and getattr(order, "deadline_at", None) is None
+        and getattr(order, "status", None) in ("pendente", "em_andamento")
+    ):
+        return "Aguardando pagamento Express"
     return STATUS_LABELS.get(order.status, order.status.title())
 
 
