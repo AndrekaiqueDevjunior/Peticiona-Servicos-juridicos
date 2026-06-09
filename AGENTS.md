@@ -212,15 +212,16 @@ route → schema → service → Provider externo (Pagar.me / Resend / Nemotron)
 ## 10. Padrões de segurança
 
 - **Autenticação:** JWT HS256 (`core/jwt.py`), `sub` = `user_id`. Validar expiração e assinatura sempre.
-- **Senhas:** `werkzeug` hash + `PASSWORD_SALT`. Força de senha validada no backend. Nunca logar senha/token.
+- **Senhas:** `werkzeug` hash. Política de força validada em `core/password.py` (min 10 chars, maiúscula + minúscula + número + símbolo + blocklist de 100+ senhas comuns). Aplica-se a registro E reset. Nunca logar senha/token.
 - **Autorização:** role (`admin`/`staff`/`client`) **e** escopo de dados (`scoped_query`). Nunca confiar no frontend para bloquear ação sensível.
-- **Headers:** definidos em `app/__init__.py` (`X-Content-Type-Options`, `X-Frame-Options`,
-  `Referrer-Policy`, `Permissions-Policy`; CSP + HSTS em produção).
+- **Headers de segurança:** definidos em `app/__init__.py` (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`; CSP + HSTS em produção).
 - **CORS:** allowlist via `CORS_ALLOWED_ORIGINS` (sem allowlist em produção → erro de boot).
-- **Rate limit:** login = 10 tentativas por 10 minutos por IP e por conta; cadastro = 5 tentativas por 1 hora por IP. Expor variáveis de ambiente `RATE_LIMIT_LOGIN=10/10m` e `RATE_LIMIT_SIGNUP=5/1h`.
-- **Upload:** allowlist de extensão + bloqueio de extensões perigosas + **validação por magic bytes**
-  + limite de tamanho + `secure_filename` (`core/security.py`). Nunca confiar na extensão do cliente.
-- **Erros:** mensagens seguras, sem stack trace para o cliente; logs estruturados no servidor.
+- **Rate limit:** implementado em `core/rate_limit.py` via sliding window em memória. Chave = `user_id` se autenticado, IP caso contrário. IP extraído de `X-Forwarded-For` → `X-Real-IP` → `remote_addr`. Ativado por `RATE_LIMIT_ENABLED` (default `True`). **Limitação:** bucket em memória local — em múltiplos workers OS (gunicorn `workers > 1`) o limite efetivo é multiplicado pelo número de workers. Para produção com múltiplos workers, migrar para Redis (Flask-Limiter).
+- **Upload:** allowlist de extensão + bloqueio de extensões perigosas + **validação por magic bytes** (PDF `%PDF`, PNG `\x89PNG`, JPEG `\xff\xd8\xff`, DOCX estrutura ZIP) + limite de tamanho (`MAX_UPLOAD_MB`, default 50 MB) + `secure_filename` (`core/security.py`). Nunca confiar na extensão do cliente.
+- **Nginx:** `client_max_body_size 55M` (alinhado com limite real do backend). Passa `X-Forwarded-For` ao backend para rate limit por IP real.
+- **IDOR:** todo acesso a pedido/documento de cliente valida `user_id == actor.id` no service layer. Gatekeeper central: `_get_order()` em `services/order_comment_service.py` e `_scoped_client_order()` em `services/client_area_service.py`.
+- **Webhooks:** assinatura HMAC obrigatória (Pagar.me: `X-Hub-Signature`; Resend: svix HMAC-SHA256). Idempotência por `event_id`. Sem validação de assinatura → rejeição (fail-secure).
+- **Erros:** mensagens seguras, sem stack trace para o cliente; logs estruturados no servidor. Dados de cartão redactados como `***REDACTED***` antes de qualquer log.
 - **Segredos:** apenas em `.env` (nunca commitar). `.env.example` documenta as chaves.
 
 ---

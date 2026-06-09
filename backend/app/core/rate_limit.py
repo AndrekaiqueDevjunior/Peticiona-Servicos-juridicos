@@ -16,7 +16,12 @@ def _actor_key() -> str:
     user = getattr(g, "current_user", None)
     if user is not None:
         return f"uid:{user.id}"
-    ip = (request.headers.get("X-Forwarded-For") or request.remote_addr or "unknown").split(",")[0].strip()
+    ip = (
+        request.headers.get("X-Forwarded-For")
+        or request.headers.get("X-Real-IP")
+        or request.remote_addr
+        or "unknown"
+    ).split(",")[0].strip()
     return f"ip:{ip}"
 
 
@@ -25,7 +30,7 @@ def limit_requests(bucket: str, limit: int | None = None, window: int | None = N
         @wraps(func)
         def wrapper(*args, **kwargs):
             # Verifica se rate limiting está ativado globalmente
-            if not current_app.config.get("RATE_LIMIT_ENABLED", False):
+            if not current_app.config.get("RATE_LIMIT_ENABLED", True):
                 return func(*args, **kwargs)
                 
             _limit = limit if limit is not None else current_app.config["AUTH_RATE_LIMIT"]
