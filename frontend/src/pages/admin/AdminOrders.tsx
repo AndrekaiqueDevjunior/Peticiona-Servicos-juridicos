@@ -74,10 +74,13 @@ const formatDT = (iso: string | null | undefined) =>
 
 const isoToInput = (iso: string | null | undefined) => {
   if (!iso) return "";
-  // Use UTC parts to avoid timezone shift in datetime-local input
+  // Exibe no horário LOCAL do navegador (Brasil = UTC-3). Precisa ser simétrico
+  // com a gravação (`new Date(value).toISOString()`, que interpreta o input
+  // como local). Usar partes UTC aqui causava drift: cada salvamento empurrava
+  // o prazo pelo offset do fuso (17:14 → 20:14 → 23:14...).
   const d = new Date(iso);
   const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 };
 
 // ---------------------------------------------------------------------------

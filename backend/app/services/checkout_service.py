@@ -456,8 +456,18 @@ def _release_order(order: Order) -> None:
         return
 
     kind, units = _credit_release_for_order(order)
+    owner = order.user or db.session.get(User, order.user_id)
+
+    # Compra de um PLANO → ativa esse plano no cliente. Isso define a
+    # modalidade de prazo de entrega (essencial/intermediário = 3 dias úteis;
+    # Premium/estratégico = 2 dias úteis). Sem isso, quem comprava Premium
+    # continuava com o plano default e recebia prazo de 3 dias.
+    if owner is not None:
+        purchased_plan = Plan.query.filter_by(code=order.service_id).first()
+        if purchased_plan is not None and owner.active_plan_id != purchased_plan.id:
+            owner.active_plan_id = purchased_plan.id
+
     if units > 0:
-        owner = order.user or db.session.get(User, order.user_id)
         if owner is None:
             logger.warning("release_order_owner_missing order_id=%s", order.id)
             return
