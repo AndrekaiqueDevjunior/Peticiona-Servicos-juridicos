@@ -218,13 +218,13 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
   const [numeroProcesso, setNumeroProcesso] = useState("");
   const [competencia, setCompetencia] = useState("");
   const [comarca, setComarca] = useState("");
-  const [justicaGratuita, setJusticaGratuita] = useState("nao");
+  const [justicaGratuita, setJusticaGratuita] = useState("");
   const [partes, setPartes] = useState<Parte[]>([
     { id: crypto.randomUUID(), nome: "", tipo: "" },
   ]);
   const [resumoCaso, setResumoCaso] = useState("");
   const [detalhes, setDetalhes] = useState("");
-  const [tutelaUrgencia, setTutelaUrgencia] = useState("nao");
+  const [tutelaUrgencia, setTutelaUrgencia] = useState("");
   const [advogadoSubscritor, setAdvogadoSubscritor] = useState("");
   const [arquivos, setArquivos] = useState<AttachedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -336,11 +336,11 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
     setNumeroProcesso("");
     setCompetencia("");
     setComarca("");
-    setJusticaGratuita("nao");
+    setJusticaGratuita("");
     setPartes([{ id: crypto.randomUUID(), nome: "", tipo: "" }]);
     setResumoCaso("");
     setDetalhes("");
-    setTutelaUrgencia("nao");
+    setTutelaUrgencia("");
     setAdvogadoSubscritor("");
     arquivos.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
     setArquivos([]);
@@ -396,6 +396,14 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
       });
       return;
     }
+    if (!justicaGratuita) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe se será necessário requerer justiça gratuita.",
+        variant: "destructive",
+      });
+      return;
+    }
     const partesValidas = partes.filter((p) => p.nome.trim() && p.tipo);
     if (partesValidas.length === 0) {
       toast({
@@ -417,6 +425,14 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
       toast({
         title: "Campo obrigatório",
         description: "Informe os tópicos imprescindíveis na petição.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!tutelaUrgencia) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Informe se será necessário requerer tutela de urgência.",
         variant: "destructive",
       });
       return;
@@ -670,7 +686,10 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
             </div>
 
             <div className="space-y-2">
-              <Label>Será necessário requerer justiça gratuita?</Label>
+              <Label>
+                Será necessário requerer justiça gratuita?{" "}
+                <span className="text-destructive">*</span>
+              </Label>
               <RadioGroup
                 value={justicaGratuita}
                 onValueChange={setJusticaGratuita}
@@ -819,7 +838,10 @@ export const NewRequestDialog = ({ open, onOpenChange, onOpenBuyCredits }: NewRe
             </div>
 
             <div className="space-y-2">
-              <Label>Será necessário requerer tutela de urgência?</Label>
+              <Label>
+                Será necessário requerer tutela de urgência?{" "}
+                <span className="text-destructive">*</span>
+              </Label>
               <RadioGroup
                 value={tutelaUrgencia}
                 onValueChange={setTutelaUrgencia}
