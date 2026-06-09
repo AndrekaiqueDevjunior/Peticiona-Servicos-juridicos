@@ -95,11 +95,16 @@ export default function Orders() {
   const { data: ordersData, isLoading } = useQuery({
     queryKey: ["client-checkout-orders"],
     queryFn: () => api.clientArea.checkoutOrders(),
+    // Reflete mudanças de status feitas por admin/funcionário sem refresh manual.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const { data: serviceOrdersData, isLoading: isLoadingServiceOrders } = useQuery({
     queryKey: ["client-service-orders"],
     queryFn: () => api.clientArea.orders(),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const orders = useMemo(() => ordersData?.orders ?? [], [ordersData?.orders]);

@@ -91,6 +91,9 @@ export default function AdminOrders() {
   const { data, isLoading } = useQuery({
     queryKey: ["admin-orders"],
     queryFn: () => api.admin.orders.list(),
+    // Reflete mudanças de status feitas por cliente/funcionário sem refresh manual.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const orders = data?.orders ?? [];

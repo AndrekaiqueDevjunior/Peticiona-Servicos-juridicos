@@ -74,6 +74,9 @@ export default function StaffOrders() {
   const { data, isLoading } = useQuery({
     queryKey: ["staff-orders"],
     queryFn: () => api.staff.orders.list(),
+    // Reflete mudanças de status feitas por cliente/admin sem refresh manual.
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
 
   const orders = data?.orders ?? [];
